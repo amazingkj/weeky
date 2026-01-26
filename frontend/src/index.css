@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-neutral-50 text-neutral-900 antialiased text-sm;
+    font-feature-settings: "kern" 1, "liga" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Minimal scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-neutral-200 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-neutral-300;
+  }
+
+  /* Clean focus styles */
+  :focus-visible {
+    @apply outline-none ring-2 ring-neutral-900/10 ring-offset-1;
+  }
+}
+
+@layer components {
+  /* Input base */
+  .input {
+    @apply w-full px-3 py-2 text-sm bg-white border border-neutral-200 rounded-lg
+           text-neutral-900 placeholder:text-neutral-400
+           focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400
+           transition-colors;
+  }
+
+  /* Button base */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg
+           transition-colors focus:outline-none focus:ring-2 focus:ring-neutral-900/10;
+  }
+
+  .btn-primary {
+    @apply btn bg-neutral-900 text-white hover:bg-neutral-800;
+  }
+
+  .btn-secondary {
+    @apply btn bg-white text-neutral-700 border border-neutral-200
+           hover:bg-neutral-50 hover:border-neutral-300;
+  }
+
+  /* Section card */
+  .section-card {
+    @apply bg-white p-5 rounded-xl border border-neutral-200;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* content-visibility for off-screen items in scrollable lists */
+  .cv-auto > * {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 48px;
+  }
+}

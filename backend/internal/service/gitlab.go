@@ -1,0 +1,168 @@
+package service
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"time"
+
+	"github.com/jiin/weeky/internal/model"
+)
+
+type GitLabService struct {
+	client *http.Client
+}
+
+func NewGitLabService() *GitLabService {
+	return &GitLabService{
+		client: &http.Client{Timeout: 30 * time.Second},
+	}
+}
+
+type gitlabCommit struct {
+	ID             string `json:"id"`
+	ShortID        string `json:"short_id"`
+	Title          string `json:"title"`
+	Message        string `json:"message"`
+	CommittedDate  string `json:"committed_date"`
+	WebURL         string `json:"web_url"`
+}
+
+type gitlabMR struct {
+	IID       int       `json:"iid"`
+	Title     string    `json:"title"`
+	WebURL    string    `json:"web_url"`
+	State     string    `json:"state"`
+	CreatedAt time.Time `json:"created_at"`
+	MergedAt  *string   `json:"merged_at"`
+}
+
+func (s *GitLabService) Sync(req model.GitLabSyncRequest) (*model.SyncResult, error) {
+	// Validate base URL to prevent SSRF
+	if err := ValidateExternalURL(req.BaseURL); err != nil {
+		return nil, fmt.Errorf("invalid GitLab URL: %w", err)
+	}
+
+	result := &model.SyncResult{
+		Source:   "gitlab",
+		Items:    []model.SyncItem{},
+		SyncedAt: time.Now(),
+	}
+
+	// Fetch commits
+	commits, err := s.fetchCommits(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch commits: %w", err)
+	}
+	result.Items = append(result.Items, commits...)
+
+	// Fetch MRs (Merge Requests)
+	mrs, err := s.fetchMRs(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch MRs: %w", err)
+	}
+	result.Items = append(result.Items, mrs...)
+
+	return result, nil
+}
+
+func (s *GitLabService) fetchCommits(req model.GitLabSyncRequest) ([]model.SyncItem, error) {
+	// URL encode the project path
+	projectPath := url.PathEscape(fmt.Sprintf("%s/%s", req.Namespace, req.Project))
+
+	apiURL := fmt.Sprintf(
+		"%s/api/v4/projects/%s/repository/commits?since=%sT00:00:00Z&until=%sT23:59:59Z",
+		req.BaseURL, projectPath, req.StartDate, req.EndDate,
+	)
+
+	httpReq, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq.Header.Set("PRIVATE-TOKEN", req.Token)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitLab API returned status %d", resp.StatusCode)
+	}
+
+	var commits []gitlabCommit
+	if err := json.NewDecoder(resp.Body).Decode(&commits); err != nil {
+		return nil, err
+	}
+
+	items := make([]model.SyncItem, 0, len(commits))
+	for _, c := range commits {
+		title := c.Title
+		if len(title) > 80 {
+			title = title[:80] + "..."
+		}
+
+		// Parse date
+		date := c.CommittedDate
+		if len(date) >= 10 {
+			date = date[:10]
+		}
+
+		items = append(items, model.SyncItem{
+			Title: title,
+			Date:  date,
+			URL:   c.WebURL,
+			Type:  "commit",
+		})
+	}
+
+	return items, nil
+}
+
+func (s *GitLabService) fetchMRs(req model.GitLabSyncRequest) ([]model.SyncItem, error) {
+	projectPath := url.PathEscape(fmt.Sprintf("%s/%s", req.Namespace, req.Project))
+
+	apiURL := fmt.Sprintf(
+		"%s/api/v4/projects/%s/merge_requests?state=all&order_by=updated_at&sort=desc&created_after=%sT00:00:00Z&created_before=%sT23:59:59Z",
+		req.BaseURL, projectPath, req.StartDate, req.EndDate,
+	)
+
+	httpReq, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq.Header.Set("PRIVATE-TOKEN", req.Token)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitLab API returned status %d", resp.StatusCode)
+	}
+
+	var mrs []gitlabMR
+	if err := json.NewDecoder(resp.Body).Decode(&mrs); err != nil {
+		return nil, err
+	}
+
+	items := make([]model.SyncItem, 0)
+	for _, mr := range mrs {
+		items = append(items, model.SyncItem{
+			Title: fmt.Sprintf("!%d %s", mr.IID, mr.Title),
+			Date:  mr.CreatedAt.Format("2006-01-02"),
+			URL:   mr.WebURL,
+			Type:  "mr",
+		})
+	}
+
+	return items, nil
+}

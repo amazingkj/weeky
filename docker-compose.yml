@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  weeky:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./templates:/app/templates
+    environment:
+      - PORT=8080
+      - DB_PATH=/app/data/weeky.db
+    restart: unless-stopped

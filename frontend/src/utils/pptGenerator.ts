@@ -1,0 +1,206 @@
+import PptxGenJS from 'pptxgenjs';
+import { Report, TemplateStyle, Task, defaultTemplateStyle } from '../types';
+import { formatDateShort, getWeekRange, getNextWeekRange } from './date';
+
+// Template colors
+const COLORS = {
+  headerBg: 'E6E6E6',
+  white: 'FFFFFF',
+  black: '000000',
+  border: '000000',
+};
+
+// Font settings
+const FONT = {
+  face: '맑은 고딕',
+  size: 10,
+};
+
+// Layout constants (4:3 slide = 10 x 7.5 inch)
+const LAYOUT = {
+  x: 0.3,
+  y: 0.3,
+  w: 9.4,
+  h: 6.9,
+};
+
+const ROW_H = {
+  header: 0.35,
+  section: 0.30,
+  colHeader: 0.40,
+  body: 5.00,
+  issue: 0.40,
+  note: 0.45,
+};
+
+const HEADER_COL_W = [1.3, 2.2, 1.1, 1.5, 1.1, 2.2];
+
+interface TaskSlideConfig {
+  sectionTitle: string;
+  dateRange: string;
+  tasks: Task[];
+  showProgress: boolean;
+  issuesText: string;
+  notesText: string;
+}
+
+export async function generatePPT(report: Report, style: TemplateStyle = defaultTemplateStyle): Promise<void> {
+  const pptx = new PptxGenJS();
+
+  pptx.author = report.author_name;
+  pptx.title = `주간업무보고 - ${report.author_name}`;
+  pptx.subject = '주간업무보고';
+  pptx.layout = 'LAYOUT_4x3';
+
+  createTaskSlide(pptx, report, {
+    sectionTitle: '금주실적',
+    dateRange: getWeekRange(report.report_date),
+    tasks: report.this_week,
+    showProgress: style.showProgressBar,
+    issuesText: '',
+    notesText: report.issues || '',
+  });
+
+  createTaskSlide(pptx, report, {
+    sectionTitle: '차주계획',
+    dateRange: getNextWeekRange(report.report_date),
+    tasks: report.next_week,
+    showProgress: false,
+    issuesText: '',
+    notesText: '',
+  });
+
+  const filename = generateFilename(report);
+  await pptx.writeFile({ fileName: filename });
+}
+
+function createTaskSlide(pptx: PptxGenJS, report: Report, config: TaskSlideConfig): void {
+  const slide = pptx.addSlide();
+  let currentY = LAYOUT.y;
+
+  // Row 1: Header (프로젝트명, 보고일자, 작성자)
+  slide.addTable(
+    [[
+      { text: '프로젝트명', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+      { text: report.team_name, options: { align: 'center' } },
+      { text: '보고일자', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+      { text: formatDateShort(report.report_date), options: { align: 'center' } },
+      { text: '작성자', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+      { text: report.author_name, options: { align: 'center' } },
+    ]],
+    {
+      x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.header,
+      colW: HEADER_COL_W, rowH: [ROW_H.header],
+      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+      fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+    }
+  );
+  currentY += ROW_H.header;
+
+  // Row 2: Section title
+  slide.addTable(
+    [[
+      { text: config.sectionTitle, options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+    ]],
+    {
+      x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.section,
+      colW: [LAYOUT.w], rowH: [ROW_H.section],
+      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+      fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+    }
+  );
+  currentY += ROW_H.section;
+
+  // Row 3-4: Body (column headers + task content)
+  const alignedData = config.tasks.map((t, i) => {
+    const details = t.details || '-';
+    const detailLines = details.split('\n');
+    const lineCount = detailLines.length;
+    const titleLines = [`${i + 1}. ${t.title}`, ...Array(lineCount - 1).fill('')];
+    const dateLines = [t.due_date || '-', ...Array(lineCount - 1).fill('')];
+    const progressLines = [`${t.progress}%`, ...Array(lineCount - 1).fill('')];
+    return { titleLines, detailLines, dateLines, progressLines };
+  });
+
+  const taskTitles = alignedData.map(d => d.titleLines.join('\n')).join('\n\n');
+  const taskDetails = alignedData.map(d => d.detailLines.join('\n')).join('\n\n');
+  const taskDates = alignedData.map(d => d.dateLines.join('\n')).join('\n\n');
+  const taskProgress = alignedData.map(d => d.progressLines.join('\n')).join('\n\n');
+
+  let bodyColW: number[];
+  let bodyHeaderRow: PptxGenJS.TableCell[];
+  let bodyContentRow: PptxGenJS.TableCell[];
+
+  if (config.showProgress) {
+    bodyColW = [2.2, 5.0, 1.0, 1.2];
+    bodyHeaderRow = [
+      { text: `계획업무\n(${config.dateRange})`, options: { fill: { color: COLORS.headerBg }, bold: true, valign: 'middle' } },
+      { text: '진행 사항', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+      { text: '완료일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+      { text: '실적(%)', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+    ];
+    bodyContentRow = [
+      { text: taskTitles, options: { valign: 'top' } },
+      { text: taskDetails, options: { valign: 'top' } },
+      { text: taskDates, options: { valign: 'top', align: 'center' } },
+      { text: taskProgress, options: { valign: 'top', align: 'center' } },
+    ];
+  } else {
+    bodyColW = [2.4, 5.0, 2.0];
+    bodyHeaderRow = [
+      { text: `계획업무\n(${config.dateRange})`, options: { fill: { color: COLORS.headerBg }, bold: true, valign: 'middle' } },
+      { text: config.sectionTitle === '차주계획' ? '' : '진행 사항', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+      { text: config.sectionTitle === '차주계획' ? '완료\n예정일' : '완료일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+    ];
+    bodyContentRow = [
+      { text: taskTitles, options: { valign: 'top' } },
+      { text: taskDetails, options: { valign: 'top' } },
+      { text: taskDates, options: { valign: 'top', align: 'center' } },
+    ];
+  }
+
+  slide.addTable(
+    [bodyHeaderRow, bodyContentRow],
+    {
+      x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.colHeader + ROW_H.body,
+      colW: bodyColW, rowH: [ROW_H.colHeader, ROW_H.body],
+      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+      fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+    }
+  );
+  currentY += ROW_H.colHeader + ROW_H.body;
+
+  // Row 5: Issues
+  slide.addTable(
+    [[
+      { text: '이슈/위험 사항', options: { fill: { color: COLORS.headerBg }, bold: true } },
+      { text: config.issuesText },
+    ]],
+    {
+      x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.issue,
+      colW: [2.0, 7.4], rowH: [ROW_H.issue],
+      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+      fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+    }
+  );
+  currentY += ROW_H.issue;
+
+  // Row 6: Notes
+  slide.addTable(
+    [[
+      { text: '특이 사항', options: { fill: { color: COLORS.headerBg }, bold: true } },
+      { text: config.notesText },
+    ]],
+    {
+      x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.note,
+      colW: [2.0, 7.4], rowH: [ROW_H.note],
+      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+      fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+    }
+  );
+}
+
+function generateFilename(report: Report): string {
+  const date = report.report_date.replace(/-/g, '');
+  return `${report.team_name}_${report.author_name}_주간보고_${date}.pptx`;
+}

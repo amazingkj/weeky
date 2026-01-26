@@ -1,0 +1,118 @@
+package handler
+
+import (
+	"strconv"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/jiin/weeky/internal/model"
+	"github.com/jiin/weeky/internal/repository"
+	"github.com/jiin/weeky/internal/service"
+)
+
+type Handler struct {
+	repo     repository.IRepository
+	services *service.Services
+}
+
+func New(repo repository.IRepository) *Handler {
+	return &Handler{repo: repo, services: service.DefaultServices()}
+}
+
+// NewWithServices creates a Handler with custom services (for testing)
+func NewWithServices(repo repository.IRepository, svc *service.Services) *Handler {
+	return &Handler{repo: repo, services: svc}
+}
+
+// Template handlers
+func (h *Handler) GetTemplates(c *fiber.Ctx) error {
+	templates, err := h.repo.GetTemplates()
+	if err != nil {
+		return internalError(c, err)
+	}
+	if templates == nil {
+		templates = []model.Template{}
+	}
+	return c.JSON(templates)
+}
+
+func (h *Handler) CreateTemplate(c *fiber.Ctx) error {
+	var req model.CreateTemplateRequest
+	if err := c.BodyParser(&req); err != nil {
+		return badRequest(c, "Invalid request body")
+	}
+
+	if req.Name == "" {
+		return badRequest(c, "Name is required")
+	}
+
+	template, err := h.repo.CreateTemplate(req.Name, req.Style)
+	if err != nil {
+		return internalError(c, err)
+	}
+
+	return c.Status(201).JSON(template)
+}
+
+func (h *Handler) UpdateTemplate(c *fiber.Ctx) error {
+	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "Invalid ID")
+	}
+
+	var req model.CreateTemplateRequest
+	if err := c.BodyParser(&req); err != nil {
+		return badRequest(c, "Invalid request body")
+	}
+
+	if req.Name == "" {
+		return badRequest(c, "Name is required")
+	}
+
+	if err := h.repo.UpdateTemplate(id, req.Name, req.Style); err != nil {
+		return internalError(c, err)
+	}
+
+	return c.SendStatus(204)
+}
+
+func (h *Handler) DeleteTemplate(c *fiber.Ctx) error {
+	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "Invalid ID")
+	}
+
+	if err := h.repo.DeleteTemplate(id); err != nil {
+		return internalError(c, err)
+	}
+
+	return c.SendStatus(204)
+}
+
+// Report handlers
+func (h *Handler) GetReport(c *fiber.Ctx) error {
+	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "Invalid ID")
+	}
+
+	report, err := h.repo.GetReport(id)
+	if err != nil {
+		return notFound(c, "Report not found")
+	}
+
+	return c.JSON(report)
+}
+
+func (h *Handler) CreateReport(c *fiber.Ctx) error {
+	var req model.CreateReportRequest
+	if err := c.BodyParser(&req); err != nil {
+		return badRequest(c, "Invalid request body")
+	}
+
+	report, err := h.repo.CreateReport(req)
+	if err != nil {
+		return internalError(c, err)
+	}
+
+	return c.Status(201).JSON(report)
+}

@@ -1,0 +1,60 @@
+  문제 상황
+  - 현재 pptxgenjs로 생성된 테이블이 슬라이드 밖으로 튀어나오거나 잘림
+  - 원인: auto width/height 또는 colW 합계 > 테이블 width
+    
+    요구사항
+  - 모든 테이블은 "자동 크기 금지"
+  - 반드시 절대 좌표(inch) 기준 고정 배치
+  - colW 합 = table width
+  - rowH 합 = table height
+  - autoPage, autoFit, shrinkText 같은 옵션 사용 금지
+    
+    공통 레이아웃
+  - layout: 4:3
+  - slide size: 10 x 7.5 inch
+  - 여백 0.3 inch
+  - 실제 테이블 영역:
+    x: 0.3
+    y: 0.3
+    w: 9.4
+    h: 6.9
+
+    테이블 규칙
+  - slide.addTable(rows, {
+    x: 0.3,
+    y: 0.3,
+    w: 9.4,
+    h: 6.9,
+    colW: 반드시 합이 9.4가 되도록,
+    rowH: 반드시 합이 6.9가 되도록,
+    autoPage: false
+  })
+    
+    중요
+  - 퍼센트/ratio 사용 금지
+  - colW/rowH 자동 계산 금지
+  - px 단위 금지
+  - inch 고정값만 사용
+    
+    텍스트는 줄바꿈(\n) 유지
+  wrap: true 필수
+  pptxgenjs는
+  table.w != sum(colW)
+  table.h != sum(rowH)
+  이면
+  
+  자동 리사이즈 → overflow → 슬라이드 밖으로 삐져나옴
+
+따라서 반드시:
+  sum(colW) === w
+  sum(rowH) === h
+  
+  
+  
+  큰 테이블 1개 대신
+- 상단 메타 정보 테이블 1개 (프로젝트명/작성자)
+- 본문 테이블 1개 (업무 내용)
+- 하단 이슈/특이사항 테이블 1개
+  
+  총 3개로 분리해서 배치
+  각 테이블은 독립 w/h 사용

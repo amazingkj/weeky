@@ -1,0 +1,8 @@
+node_modules
+*.db
+.git
+.idea
+.claude
+*.log
+dist
+backend/dist
