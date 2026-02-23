@@ -100,3 +100,39 @@ export interface HiworksSyncRequest {
 export interface ConfigMap {
   [key: string]: string;
 }
+
+// Auth types
+export interface User {
+  id: number;
+  email: string;
+  name: string;
+  is_admin: boolean;
+  created_at: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  refresh_token: string;
+  user: User;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  name: string;
+  invite_code: string;
+}
+
+export interface InviteCode {
+  id: number;
+  code: string;
+  created_by: number;
+  used_by?: number;
+  created_at: string;
+  used_at?: string;
+}

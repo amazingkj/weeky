@@ -6,13 +6,15 @@ import (
 	"github.com/jiin/weeky/internal/model"
 )
 
+const testUserID int64 = 1
+
 func TestMockConfigCRUD(t *testing.T) {
 	repo := NewMock()
 	defer repo.Close()
 
 	// Test SetConfig
 	t.Run("SetConfig", func(t *testing.T) {
-		err := repo.SetConfig("test_key", "test_value")
+		err := repo.SetConfig("test_key", "test_value", testUserID)
 		if err != nil {
 			t.Errorf("SetConfig failed: %v", err)
 		}
@@ -20,7 +22,7 @@ func TestMockConfigCRUD(t *testing.T) {
 
 	// Test GetConfig
 	t.Run("GetConfig", func(t *testing.T) {
-		cfg, err := repo.GetConfig("test_key")
+		cfg, err := repo.GetConfig("test_key", testUserID)
 		if err != nil {
 			t.Errorf("GetConfig failed: %v", err)
 		}
@@ -31,7 +33,7 @@ func TestMockConfigCRUD(t *testing.T) {
 
 	// Test GetConfig for non-existent key
 	t.Run("GetConfig_NotFound", func(t *testing.T) {
-		_, err := repo.GetConfig("non_existent_key")
+		_, err := repo.GetConfig("non_existent_key", testUserID)
 		if err == nil {
 			t.Error("Expected error for non-existent key")
 		}
@@ -39,12 +41,12 @@ func TestMockConfigCRUD(t *testing.T) {
 
 	// Test SetConfig update
 	t.Run("SetConfig_Update", func(t *testing.T) {
-		err := repo.SetConfig("test_key", "updated_value")
+		err := repo.SetConfig("test_key", "updated_value", testUserID)
 		if err != nil {
 			t.Errorf("SetConfig update failed: %v", err)
 		}
 
-		cfg, err := repo.GetConfig("test_key")
+		cfg, err := repo.GetConfig("test_key", testUserID)
 		if err != nil {
 			t.Errorf("GetConfig after update failed: %v", err)
 		}
@@ -55,10 +57,10 @@ func TestMockConfigCRUD(t *testing.T) {
 
 	// Test GetConfigs
 	t.Run("GetConfigs", func(t *testing.T) {
-		repo.SetConfig("key1", "value1")
-		repo.SetConfig("key2", "value2")
+		repo.SetConfig("key1", "value1", testUserID)
+		repo.SetConfig("key2", "value2", testUserID)
 
-		configs, err := repo.GetConfigs()
+		configs, err := repo.GetConfigs(testUserID)
 		if err != nil {
 			t.Errorf("GetConfigs failed: %v", err)
 		}
@@ -69,12 +71,12 @@ func TestMockConfigCRUD(t *testing.T) {
 
 	// Test DeleteConfig
 	t.Run("DeleteConfig", func(t *testing.T) {
-		err := repo.DeleteConfig("test_key")
+		err := repo.DeleteConfig("test_key", testUserID)
 		if err != nil {
 			t.Errorf("DeleteConfig failed: %v", err)
 		}
 
-		_, err = repo.GetConfig("test_key")
+		_, err = repo.GetConfig("test_key", testUserID)
 		if err == nil {
 			t.Error("Expected error after delete")
 		}
@@ -140,7 +142,7 @@ func TestMockReportCRUD(t *testing.T) {
 			TemplateID: 0,
 		}
 
-		report, err := repo.CreateReport(req)
+		report, err := repo.CreateReport(req, testUserID)
 		if err != nil {
 			t.Errorf("CreateReport failed: %v", err)
 		}
@@ -163,9 +165,9 @@ func TestMockReportCRUD(t *testing.T) {
 			Issues:     "",
 			TemplateID: 0,
 		}
-		created, _ := repo.CreateReport(req)
+		created, _ := repo.CreateReport(req, testUserID)
 
-		report, err := repo.GetReport(created.ID)
+		report, err := repo.GetReport(created.ID, testUserID)
 		if err != nil {
 			t.Errorf("GetReport failed: %v", err)
 		}
@@ -176,7 +178,7 @@ func TestMockReportCRUD(t *testing.T) {
 
 	// Test GetReport not found
 	t.Run("GetReport_NotFound", func(t *testing.T) {
-		_, err := repo.GetReport(99999)
+		_, err := repo.GetReport(99999, testUserID)
 		if err == nil {
 			t.Error("Expected error for non-existent report")
 		}

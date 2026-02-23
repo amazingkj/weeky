@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/subtle"
 	"log"
 	"log/slog"
 	"os"
@@ -12,9 +11,11 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/jiin/weeky/internal/auth"
 	"github.com/jiin/weeky/internal/config"
 	"github.com/jiin/weeky/internal/crypto"
 	"github.com/jiin/weeky/internal/handler"
+	"github.com/jiin/weeky/internal/middleware"
 	"github.com/jiin/weeky/internal/repository"
 )
 
@@ -27,6 +28,11 @@ func main() {
 	// Validate encryption key
 	if err := crypto.InitDefault(); err != nil {
 		log.Fatalf("ENCRYPTION_KEY is required: %v", err)
+	}
+
+	// Initialize JWT secret from env (if set)
+	if secret := os.Getenv("JWT_SECRET"); secret != "" {
+		auth.SetSecret(secret)
 	}
 
 	// Database path
@@ -58,7 +64,7 @@ func main() {
 	if corsOrigins == "" {
 		corsOrigins = "http://localhost:3000,http://localhost:3004,http://localhost:5173"
 	}
-	allowHeaders := "Origin, Content-Type, Accept, X-API-Key"
+	allowHeaders := "Origin, Content-Type, Accept, Authorization"
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: corsOrigins,
 		AllowHeaders: allowHeaders,
@@ -70,37 +76,61 @@ func main() {
 		Expiration: 1 * time.Minute,
 	}))
 
-	// API Key authentication middleware (only active when API_KEY env is set)
-	apiKey := os.Getenv("API_KEY")
-	if apiKey != "" {
-		app.Use(apiKeyAuth(apiKey))
-	}
+	// Health check (public)
+	app.Get("/health", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"status": "ok"})
+	})
 
 	// API routes
 	api := app.Group("/api/v1")
 
+	// Auth rate limiter - stricter for login/register (10 per minute)
+	authLimiter := limiter.New(limiter.Config{
+		Max:        10,
+		Expiration: 1 * time.Minute,
+	})
+
+	// Public auth routes (no authentication required)
+	authRoutes := api.Group("/auth")
+	authRoutes.Get("/setup", h.CheckSetup)
+	authRoutes.Post("/register", authLimiter, h.Register)
+	authRoutes.Post("/login", authLimiter, h.Login)
+	authRoutes.Post("/refresh", h.RefreshToken)
+
+	// Protected routes (authentication required)
+	protected := api.Group("", middleware.RequireAuth())
+
+	// Auth - current user
+	protected.Get("/auth/me", h.GetMe)
+
+	// Admin routes
+	admin := protected.Group("/admin", middleware.RequireAdmin())
+	admin.Post("/invite-codes", h.CreateInviteCode)
+	admin.Get("/invite-codes", h.GetInviteCodes)
+
 	// Template routes
-	api.Get("/templates", h.GetTemplates)
-	api.Post("/templates", h.CreateTemplate)
-	api.Put("/templates/:id", h.UpdateTemplate)
-	api.Delete("/templates/:id", h.DeleteTemplate)
+	protected.Get("/templates", h.GetTemplates)
+	protected.Post("/templates", h.CreateTemplate)
+	protected.Put("/templates/:id", h.UpdateTemplate)
+	protected.Delete("/templates/:id", h.DeleteTemplate)
 
 	// Report routes
-	api.Get("/reports/:id", h.GetReport)
-	api.Post("/reports", h.CreateReport)
+	protected.Get("/reports", h.GetReports)
+	protected.Get("/reports/:id", h.GetReport)
+	protected.Post("/reports", h.CreateReport)
 
 	// Config routes
-	api.Get("/config", h.GetConfig)
-	api.Put("/config", h.UpdateConfig)
+	protected.Get("/config", h.GetConfig)
+	protected.Put("/config", h.UpdateConfig)
 
 	// Sync routes
-	api.Post("/sync/github", h.SyncGitHub)
-	api.Post("/sync/gitlab", h.SyncGitLab)
-	api.Post("/sync/jira", h.SyncJira)
-	api.Post("/sync/hiworks", h.SyncHiworks)
+	protected.Post("/sync/github", h.SyncGitHub)
+	protected.Post("/sync/gitlab", h.SyncGitLab)
+	protected.Post("/sync/jira", h.SyncJira)
+	protected.Post("/sync/hiworks", h.SyncHiworks)
 
 	// AI routes
-	api.Post("/ai/generate", h.GenerateAIReport)
+	protected.Post("/ai/generate", h.GenerateAIReport)
 
 	// Backward-compatible /api routes (redirect to /api/v1)
 	app.Use("/api", func(c *fiber.Ctx) error {
@@ -112,13 +142,13 @@ func main() {
 		return c.Next()
 	})
 
-	// Health check
-	app.Get("/health", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"status": "ok"})
-	})
-
 	// Static files (for production)
 	app.Static("/", "./dist")
+
+	// SPA catch-all: serve index.html for all non-API/non-static routes
+	app.Get("/*", func(c *fiber.Ctx) error {
+		return c.SendFile("./dist/index.html")
+	})
 
 	// Start server
 	port := os.Getenv("PORT")
@@ -128,26 +158,4 @@ func main() {
 
 	slog.Info("Server starting", "port", port)
 	log.Fatal(app.Listen(":" + port))
-}
-
-// apiKeyAuth returns a middleware that validates the X-API-Key header
-func apiKeyAuth(expectedKey string) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		// Skip auth for health check
-		if c.Path() == "/health" {
-			return c.Next()
-		}
-		// Skip auth for static files
-		if !strings.HasPrefix(c.Path(), "/api") {
-			return c.Next()
-		}
-
-		key := c.Get("X-API-Key")
-		if subtle.ConstantTimeCompare([]byte(key), []byte(expectedKey)) != 1 {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid or missing API key",
-			})
-		}
-		return c.Next()
-	}
 }

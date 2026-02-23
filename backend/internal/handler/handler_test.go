@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/jiin/weeky/internal/auth"
 	"github.com/jiin/weeky/internal/crypto"
 	"github.com/jiin/weeky/internal/model"
 	"github.com/jiin/weeky/internal/repository"
@@ -17,15 +18,48 @@ import (
 func TestMain(m *testing.M) {
 	os.Setenv("ENCRYPTION_KEY", "test-encryption-key-for-testing!!")
 	crypto.InitDefault()
+	auth.SetSecret("test-jwt-secret-for-testing!!")
 	os.Exit(m.Run())
 }
 
-func setupTestHandler(t *testing.T) (*Handler, *fiber.App, func()) {
+// createTestUser creates a user and returns a valid JWT token
+func createTestUser(t *testing.T, repo *repository.MockRepository) (int64, string) {
+	t.Helper()
+	hash, _ := auth.HashPassword("testpass123")
+	user, err := repo.CreateUser("test@test.com", hash, "Test User", false)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+	token, err := auth.GenerateToken(user.ID, user.Email, user.IsAdmin)
+	if err != nil {
+		t.Fatalf("Failed to generate token: %v", err)
+	}
+	return user.ID, token
+}
+
+func setupTestHandler(t *testing.T) (*Handler, *fiber.App, *repository.MockRepository, string, func()) {
 	t.Helper()
 
 	repo := repository.NewMock()
 	h := New(repo)
 	app := fiber.New()
+
+	_, token := createTestUser(t, repo)
+
+	// Middleware to inject userID from token for tests
+	app.Use(func(c *fiber.Ctx) error {
+		authHeader := c.Get("Authorization")
+		if authHeader != "" {
+			tokenStr := authHeader[len("Bearer "):]
+			claims, err := auth.ValidateToken(tokenStr)
+			if err == nil {
+				c.Locals("userID", claims.UserID)
+				c.Locals("email", claims.Email)
+				c.Locals("isAdmin", claims.IsAdmin)
+			}
+		}
+		return c.Next()
+	})
 
 	// Setup routes
 	api := app.Group("/api")
@@ -41,16 +75,17 @@ func setupTestHandler(t *testing.T) (*Handler, *fiber.App, func()) {
 		repo.Close()
 	}
 
-	return h, app, cleanup
+	return h, app, repo, token, cleanup
 }
 
 func TestTemplateHandlers(t *testing.T) {
-	_, app, cleanup := setupTestHandler(t)
+	_, app, _, token, cleanup := setupTestHandler(t)
 	defer cleanup()
 
 	// Test GetTemplates (empty)
 	t.Run("GetTemplates_Empty", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/templates", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
@@ -72,6 +107,7 @@ func TestTemplateHandlers(t *testing.T) {
 		payload := `{"name": "Test Template", "style": "{\"color\": \"red\"}"}`
 		req := httptest.NewRequest("POST", "/api/templates", bytes.NewBufferString(payload))
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
 
 		resp, err := app.Test(req)
 		if err != nil {
@@ -94,6 +130,7 @@ func TestTemplateHandlers(t *testing.T) {
 		payload := `{"style": "{}"}`
 		req := httptest.NewRequest("POST", "/api/templates", bytes.NewBufferString(payload))
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
 
 		resp, err := app.Test(req)
 		if err != nil {
@@ -107,6 +144,7 @@ func TestTemplateHandlers(t *testing.T) {
 	// Test GetTemplates (with data)
 	t.Run("GetTemplates_WithData", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/templates", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
@@ -122,7 +160,7 @@ func TestTemplateHandlers(t *testing.T) {
 }
 
 func TestReportHandlers(t *testing.T) {
-	_, app, cleanup := setupTestHandler(t)
+	_, app, _, token, cleanup := setupTestHandler(t)
 	defer cleanup()
 
 	// Test CreateReport
@@ -138,6 +176,7 @@ func TestReportHandlers(t *testing.T) {
 		}`
 		req := httptest.NewRequest("POST", "/api/reports", bytes.NewBufferString(payload))
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
 
 		resp, err := app.Test(req)
 		if err != nil {
@@ -159,6 +198,7 @@ func TestReportHandlers(t *testing.T) {
 	// Test GetReport
 	t.Run("GetReport", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/reports/1", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
@@ -171,6 +211,7 @@ func TestReportHandlers(t *testing.T) {
 	// Test GetReport not found
 	t.Run("GetReport_NotFound", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/reports/99999", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
@@ -182,12 +223,13 @@ func TestReportHandlers(t *testing.T) {
 }
 
 func TestConfigHandlers(t *testing.T) {
-	_, app, cleanup := setupTestHandler(t)
+	_, app, _, token, cleanup := setupTestHandler(t)
 	defer cleanup()
 
 	// Test GetConfig (empty)
 	t.Run("GetConfig_Empty", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/config", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
@@ -202,6 +244,7 @@ func TestConfigHandlers(t *testing.T) {
 		payload := `{"configs": {"github_token": "test_token", "jira_email": "test@test.com"}}`
 		req := httptest.NewRequest("PUT", "/api/config", bytes.NewBufferString(payload))
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
 
 		resp, err := app.Test(req)
 		if err != nil {
@@ -216,6 +259,7 @@ func TestConfigHandlers(t *testing.T) {
 	// Test GetConfig (with data - should be masked)
 	t.Run("GetConfig_Masked", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/config", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)

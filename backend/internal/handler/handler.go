@@ -95,7 +95,8 @@ func (h *Handler) GetReport(c *fiber.Ctx) error {
 		return badRequest(c, "Invalid ID")
 	}
 
-	report, err := h.repo.GetReport(id)
+	userID := getUserID(c)
+	report, err := h.repo.GetReport(id, userID)
 	if err != nil {
 		return notFound(c, "Report not found")
 	}
@@ -109,10 +110,23 @@ func (h *Handler) CreateReport(c *fiber.Ctx) error {
 		return badRequest(c, "Invalid request body")
 	}
 
-	report, err := h.repo.CreateReport(req)
+	userID := getUserID(c)
+	report, err := h.repo.CreateReport(req, userID)
 	if err != nil {
 		return internalError(c, err)
 	}
 
 	return c.Status(201).JSON(report)
+}
+
+func (h *Handler) GetReports(c *fiber.Ctx) error {
+	userID := getUserID(c)
+	reports, err := h.repo.GetReportsByUser(userID)
+	if err != nil {
+		return internalError(c, err)
+	}
+	if reports == nil {
+		reports = []model.Report{}
+	}
+	return c.JSON(reports)
 }

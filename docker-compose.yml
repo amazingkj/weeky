@@ -1,14 +1,16 @@
-version: '3.8'
-
 services:
   weeky:
-    build: .
+    image: jiin724/weeky:latest
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/app/data
-      - ./templates:/app/templates
+      - weeky-data:/app/data
     environment:
       - PORT=8080
       - DB_PATH=/app/data/weeky.db
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - JWT_SECRET=${JWT_SECRET}
     restart: unless-stopped
+
+volumes:
+  weeky-data:

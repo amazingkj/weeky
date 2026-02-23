@@ -24,9 +24,11 @@ func (h *Handler) SyncGitHub(c *fiber.Ctx) error {
 		return badRequest(c, "조회 기간을 설정해주세요.")
 	}
 
+	userID := getUserID(c)
+
 	// Use token from request or try to get from config
 	if req.Token == "" {
-		token, err := h.GetConfigValue("github_token")
+		token, err := h.GetConfigValue("github_token", userID)
 		if err != nil || token == "" {
 			return badRequest(c, "GitHub 토큰이 설정되지 않았습니다. 연동 설정에서 토큰을 입력해주세요.")
 		}
@@ -57,9 +59,11 @@ func (h *Handler) SyncJira(c *fiber.Ctx) error {
 		return badRequest(c, "조회 기간을 설정해주세요.")
 	}
 
+	userID := getUserID(c)
+
 	// Use credentials from request or try to get from config
 	if req.Email == "" {
-		email, err := h.GetConfigValue("jira_email")
+		email, err := h.GetConfigValue("jira_email", userID)
 		if err != nil || email == "" {
 			return badRequest(c, "Jira 이메일이 설정되지 않았습니다. 연동 설정에서 이메일을 입력해주세요.")
 		}
@@ -67,7 +71,7 @@ func (h *Handler) SyncJira(c *fiber.Ctx) error {
 	}
 
 	if req.Token == "" {
-		token, err := h.GetConfigValue("jira_token")
+		token, err := h.GetConfigValue("jira_token", userID)
 		if err != nil || token == "" {
 			return badRequest(c, "Jira API 토큰이 설정되지 않았습니다. 연동 설정에서 토큰을 입력해주세요.")
 		}
@@ -103,9 +107,11 @@ func (h *Handler) SyncGitLab(c *fiber.Ctx) error {
 		req.BaseURL = "https://gitlab.com"
 	}
 
+	userID := getUserID(c)
+
 	// Use token from request or try to get from config
 	if req.Token == "" {
-		token, err := h.GetConfigValue("gitlab_token")
+		token, err := h.GetConfigValue("gitlab_token", userID)
 		if err != nil || token == "" {
 			return badRequest(c, "GitLab 토큰이 설정되지 않았습니다. 연동 설정에서 토큰을 입력해주세요.")
 		}
@@ -131,23 +137,25 @@ func (h *Handler) SyncHiworks(c *fiber.Ctx) error {
 		return badRequest(c, "조회 기간을 설정해주세요.")
 	}
 
+	userID := getUserID(c)
+
 	// Get credentials from request or config
 	if req.OfficeID == "" {
-		officeID, err := h.GetConfigValue("hiworks_office_id")
+		officeID, err := h.GetConfigValue("hiworks_office_id", userID)
 		if err != nil {
 			slog.Error("Failed to decrypt hiworks_office_id", "error", err)
 		}
 		req.OfficeID = officeID
 	}
 	if req.UserID == "" {
-		userID, err := h.GetConfigValue("hiworks_user_id")
+		hwUserID, err := h.GetConfigValue("hiworks_user_id", userID)
 		if err != nil {
 			slog.Error("Failed to decrypt hiworks_user_id", "error", err)
 		}
-		req.UserID = userID
+		req.UserID = hwUserID
 	}
 	if req.Password == "" {
-		password, err := h.GetConfigValue("hiworks_password")
+		password, err := h.GetConfigValue("hiworks_password", userID)
 		if err != nil {
 			slog.Error("Failed to decrypt hiworks_password", "error", err)
 		}
@@ -181,8 +189,10 @@ func (h *Handler) GenerateAIReport(c *fiber.Ctx) error {
 		return badRequest(c, "날짜 범위가 필요합니다")
 	}
 
+	userID := getUserID(c)
+
 	// Get Claude API key from config
-	apiKey, err := h.GetConfigValue("claude_api_key")
+	apiKey, err := h.GetConfigValue("claude_api_key", userID)
 	if err != nil || apiKey == "" {
 		return badRequest(c, "Claude API 키가 설정되지 않았습니다. 연동 설정에서 API 키를 입력해주세요.")
 	}

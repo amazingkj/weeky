@@ -1,9 +1,14 @@
 import { useState, useCallback, Suspense, lazy } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from './contexts/AuthContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import Loading from './components/ui/Loading';
 
 const ReportForm = lazy(() => import('./components/ReportForm'));
 const ConfigPanel = lazy(() => import('./components/ConfigPanel'));
+const InviteCodeManager = lazy(() => import('./components/InviteCodeManager'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 
 type Tab = 'report' | 'config';
 
@@ -32,6 +37,28 @@ const TABS: TabConfig[] = [
 ];
 
 function App() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
+        <Loading text="로딩 중..." size="lg" />
+      </div>
+    );
+  }
+
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-neutral-50 flex items-center justify-center"><Loading text="로딩 중..." size="lg" /></div>}>
+      <Routes>
+        <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
+        <Route path="/register" element={isAuthenticated ? <Navigate to="/" replace /> : <RegisterPage />} />
+        <Route path="/*" element={isAuthenticated ? <AuthenticatedApp /> : <Navigate to="/login" replace />} />
+      </Routes>
+    </Suspense>
+  );
+}
+
+function AuthenticatedApp() {
   const [activeTab, setActiveTab] = useState<Tab>('report');
 
   const handleTabChange = useCallback((tab: Tab) => {
@@ -45,7 +72,7 @@ function App() {
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
         <ErrorBoundary>
           <Suspense fallback={<LoadingFallback />}>
-            {activeTab === 'report' ? <ReportForm /> : <ConfigPanel />}
+            {activeTab === 'report' ? <ReportForm /> : <ConfigWithInvite />}
           </Suspense>
         </ErrorBoundary>
       </main>
@@ -53,7 +80,23 @@ function App() {
   );
 }
 
+function ConfigWithInvite() {
+  const { user } = useAuth();
+  return (
+    <div className="space-y-8">
+      <ConfigPanel />
+      {user?.is_admin && (
+        <div className="bg-white rounded-xl border border-neutral-200 p-5">
+          <InviteCodeManager />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Header() {
+  const { user, logout } = useAuth();
+
   return (
     <header className="border-b border-neutral-200 bg-white">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4">
@@ -65,8 +108,26 @@ function Header() {
               </svg>
             </div>
             <h1 className="text-base font-semibold text-neutral-900 tracking-tight">weeky</h1>
+            <span className="text-[10px] text-neutral-400 font-medium">v0.3</span>
           </div>
-          <span className="text-xs text-neutral-400 font-mono">v0.2</span>
+          <div className="flex items-center gap-3">
+            {user && (
+              <span className="text-xs text-neutral-500">
+                {user.name}
+                {user.is_admin && (
+                  <span className="ml-1 px-1.5 py-0.5 bg-neutral-100 text-neutral-600 rounded text-[10px] font-medium">
+                    관리자
+                  </span>
+                )}
+              </span>
+            )}
+            <button
+              onClick={logout}
+              className="text-xs text-neutral-400 hover:text-neutral-700 transition-colors"
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
       </div>
     </header>

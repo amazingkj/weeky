@@ -10,12 +10,12 @@ import (
 
 // sensitiveKeys are encrypted and masked in API responses
 var sensitiveKeys = map[string]bool{
-	"gitlab_token":      true,
-	"jira_email":        true,
-	"jira_token":        true,
-	"hiworks_user_id":   true,
-	"hiworks_password":  true,
-	"claude_api_key":    true,
+	"gitlab_token":     true,
+	"jira_email":       true,
+	"jira_token":       true,
+	"hiworks_user_id":  true,
+	"hiworks_password": true,
+	"claude_api_key":   true,
 }
 
 func isSensitiveKey(key string) bool {
@@ -29,7 +29,8 @@ func isSensitiveKey(key string) bool {
 // GetConfig returns all config key-value pairs
 // Sensitive values are masked, non-sensitive values are returned as-is
 func (h *Handler) GetConfig(c *fiber.Ctx) error {
-	configs, err := h.repo.GetConfigs()
+	userID := getUserID(c)
+	configs, err := h.repo.GetConfigs(userID)
 	if err != nil {
 		return internalError(c, err)
 	}
@@ -59,6 +60,7 @@ func (h *Handler) GetConfig(c *fiber.Ctx) error {
 // UpdateConfig updates config values
 // Sensitive values are encrypted, non-sensitive values are stored as plaintext
 func (h *Handler) UpdateConfig(c *fiber.Ctx) error {
+	userID := getUserID(c)
 	var req model.ConfigUpdateRequest
 	if err := c.BodyParser(&req); err != nil {
 		return badRequest(c, "Invalid request body")
@@ -78,7 +80,7 @@ func (h *Handler) UpdateConfig(c *fiber.Ctx) error {
 			storeValue = encrypted
 		}
 
-		if err := h.repo.SetConfig(key, storeValue); err != nil {
+		if err := h.repo.SetConfig(key, storeValue, userID); err != nil {
 			return internalError(c, err)
 		}
 	}
@@ -87,8 +89,8 @@ func (h *Handler) UpdateConfig(c *fiber.Ctx) error {
 }
 
 // GetConfigValue retrieves a config value (decrypts if sensitive)
-func (h *Handler) GetConfigValue(key string) (string, error) {
-	cfg, err := h.repo.GetConfig(key)
+func (h *Handler) GetConfigValue(key string, userID int64) (string, error) {
+	cfg, err := h.repo.GetConfig(key, userID)
 	if err != nil {
 		return "", err
 	}

@@ -16,6 +16,8 @@ global.fetch = mockFetch;
 describe('API Service', () => {
   beforeEach(() => {
     mockFetch.mockClear();
+    // Clear token for tests
+    localStorage.removeItem('token');
   });
 
   describe('getTemplates', () => {
@@ -30,11 +32,14 @@ describe('API Service', () => {
 
       const result = await getTemplates();
       expect(result).toEqual(mockTemplates);
-      expect(mockFetch).toHaveBeenCalledWith('/api/v1/templates');
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v1/templates',
+        expect.objectContaining({ headers: expect.any(Object) }),
+      );
     });
 
     it('should throw error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false });
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
 
       await expect(getTemplates()).rejects.toThrow('Failed to fetch templates');
     });
@@ -50,11 +55,13 @@ describe('API Service', () => {
 
       const result = await createTemplate('New Template', '{}');
       expect(result).toEqual(mockTemplate);
-      expect(mockFetch).toHaveBeenCalledWith('/api/v1/templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'New Template', style: '{}' }),
-      });
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v1/templates',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ name: 'New Template', style: '{}' }),
+        }),
+      );
     });
   });
 
@@ -63,7 +70,10 @@ describe('API Service', () => {
       mockFetch.mockResolvedValueOnce({ ok: true });
 
       await expect(deleteTemplate(1)).resolves.not.toThrow();
-      expect(mockFetch).toHaveBeenCalledWith('/api/v1/templates/1', { method: 'DELETE' });
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v1/templates/1',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
     });
   });
 
@@ -85,11 +95,13 @@ describe('API Service', () => {
       mockFetch.mockResolvedValueOnce({ ok: true });
 
       await expect(updateConfig({ gitlab_token: 'new_token' })).resolves.not.toThrow();
-      expect(mockFetch).toHaveBeenCalledWith('/api/v1/config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ configs: { gitlab_token: 'new_token' } }),
-      });
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v1/config',
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({ configs: { gitlab_token: 'new_token' } }),
+        }),
+      );
     });
   });
 
@@ -118,6 +130,7 @@ describe('API Service', () => {
     it('should throw error with message on failure', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
+        status: 400,
         json: () => Promise.resolve({ error: 'API rate limit exceeded' }),
       });
 

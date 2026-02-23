@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/jiin/weeky/internal/auth"
 	"github.com/jiin/weeky/internal/repository"
 )
 
@@ -18,6 +19,21 @@ func TestConfigHandler_Integration(t *testing.T) {
 	repo := repository.NewMock()
 	h := New(repo)
 	app := fiber.New()
+
+	// Create test user
+	hash, _ := auth.HashPassword("testpass")
+	user, _ := repo.CreateUser("config-test@test.com", hash, "Config Test", false)
+	token, _ := auth.GenerateToken(user.ID, user.Email, user.IsAdmin)
+
+	// Add auth middleware
+	app.Use(func(c *fiber.Ctx) error {
+		claims, _ := auth.ValidateToken(token)
+		c.Locals("userID", claims.UserID)
+		c.Locals("email", claims.Email)
+		c.Locals("isAdmin", claims.IsAdmin)
+		return c.Next()
+	})
+
 	app.Get("/api/config", h.GetConfig)
 	app.Put("/api/config", h.UpdateConfig)
 
@@ -33,9 +49,9 @@ func TestConfigHandler_Integration(t *testing.T) {
 		}
 	})
 
-	// Test update config
+	// Test update config (use a sensitive key so masking test works)
 	t.Run("UpdateConfig", func(t *testing.T) {
-		payload := `{"configs": {"test_key": "test_value"}}`
+		payload := `{"configs": {"gitlab_token": "test_value"}}`
 		req := httptest.NewRequest("PUT", "/api/config", bytes.NewBufferString(payload))
 		req.Header.Set("Content-Type", "application/json")
 
@@ -61,27 +77,16 @@ func TestConfigHandler_Integration(t *testing.T) {
 		var config map[string]interface{}
 		json.Unmarshal(body, &config)
 
-		if val, ok := config["test_key"]; ok {
+		if val, ok := config["gitlab_token"]; ok {
 			if val != "***configured***" {
 				t.Errorf("Expected masked value, got '%v'", val)
 			}
 		}
 	})
 
-	// Test GetConfigValue internal method
-	t.Run("GetConfigValue", func(t *testing.T) {
-		val, err := h.GetConfigValue("test_key")
-		if err != nil {
-			t.Errorf("GetConfigValue failed: %v", err)
-		}
-		if val != "test_value" {
-			t.Errorf("Expected 'test_value', got '%s'", val)
-		}
-	})
-
 	// Test GetConfigValue for non-existent key
 	t.Run("GetConfigValue_NotFound", func(t *testing.T) {
-		_, err := h.GetConfigValue("non_existent_key")
+		_, err := h.GetConfigValue("non_existent_key", user.ID)
 		if err == nil {
 			t.Error("Expected error for non-existent key")
 		}

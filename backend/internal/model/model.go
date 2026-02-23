@@ -2,6 +2,45 @@ package model
 
 import "time"
 
+// User represents an authenticated user
+type User struct {
+	ID           int64     `json:"id"`
+	Email        string    `json:"email"`
+	PasswordHash string    `json:"-"`
+	Name         string    `json:"name"`
+	IsAdmin      bool      `json:"is_admin"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+// InviteCode represents an invitation code for new user registration
+type InviteCode struct {
+	ID        int64      `json:"id"`
+	Code      string     `json:"code"`
+	CreatedBy int64      `json:"created_by"`
+	UsedBy    *int64     `json:"used_by,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UsedAt    *time.Time `json:"used_at,omitempty"`
+}
+
+// Auth request/response types
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type RegisterRequest struct {
+	Email      string `json:"email"`
+	Password   string `json:"password"`
+	Name       string `json:"name"`
+	InviteCode string `json:"invite_code"`
+}
+
+type AuthResponse struct {
+	Token        string `json:"token"`
+	RefreshToken string `json:"refresh_token"`
+	User         User   `json:"user"`
+}
+
 type Task struct {
 	Title    string `json:"title"`
 	Details  string `json:"details,omitempty"`

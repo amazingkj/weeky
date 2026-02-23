@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/jiin/weeky/internal/auth"
 	"github.com/jiin/weeky/internal/repository"
 )
 
@@ -17,6 +18,20 @@ func setupSyncTestHandler(t *testing.T) (*Handler, *fiber.App, func()) {
 	repo := repository.NewMock()
 	h := New(repo)
 	app := fiber.New()
+
+	// Create test user
+	hash, _ := auth.HashPassword("testpass")
+	user, _ := repo.CreateUser("sync-test@test.com", hash, "Sync Test", false)
+	token, _ := auth.GenerateToken(user.ID, user.Email, user.IsAdmin)
+
+	// Add auth middleware
+	app.Use(func(c *fiber.Ctx) error {
+		claims, _ := auth.ValidateToken(token)
+		c.Locals("userID", claims.UserID)
+		c.Locals("email", claims.Email)
+		c.Locals("isAdmin", claims.IsAdmin)
+		return c.Next()
+	})
 
 	api := app.Group("/api")
 	api.Post("/sync/github", h.SyncGitHub)
