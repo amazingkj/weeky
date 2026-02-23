@@ -47,6 +47,9 @@ export interface Report {
   this_week: Task[];
   next_week: Task[];
   issues: string;
+  notes: string;
+  next_issues: string;
+  next_notes: string;
   template_id: number;
 }
 

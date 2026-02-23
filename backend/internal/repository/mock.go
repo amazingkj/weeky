@@ -279,6 +279,9 @@ func (m *MockRepository) CreateReport(req model.CreateReportRequest, userID int6
 		ThisWeek:   req.ThisWeek,
 		NextWeek:   req.NextWeek,
 		Issues:     req.Issues,
+		Notes:      req.Notes,
+		NextIssues: req.NextIssues,
+		NextNotes:  req.NextNotes,
 		TemplateID: req.TemplateID,
 		CreatedAt:  time.Now(),
 	}

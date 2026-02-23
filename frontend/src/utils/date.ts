@@ -14,7 +14,7 @@ export function getWeekRange(dateStr: string): string {
   const friday = new Date(monday);
   friday.setDate(monday.getDate() + 4);
 
-  const fmt = (d: Date) => `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`;
+  const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
   return `${fmt(monday)}~${fmt(friday)}`;
 }
 
@@ -27,6 +27,6 @@ export function getNextWeekRange(dateStr: string): string {
   const nextFriday = new Date(nextMonday);
   nextFriday.setDate(nextMonday.getDate() + 4);
 
-  const fmt = (d: Date) => `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`;
+  const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
   return `${fmt(nextMonday)}~${fmt(nextFriday)}`;
 }

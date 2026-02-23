@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Report, Task, defaultTemplateStyle } from '../types';
 import { generatePPT } from '../utils/pptGenerator';
+import { getConfig } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import TaskList from './TaskList';
 import SyncPanel from './SyncPanel';
 import PptPreview from './PptPreview';
@@ -38,17 +40,40 @@ const initialReport: Report = {
   this_week: [],
   next_week: [],
   issues: '',
+  notes: '',
+  next_issues: '',
+  next_notes: '',
   template_id: 0,
 };
 
-export default function ReportForm() {
-  const [report, setReport] = useState<Report>(initialReport);
+interface ReportFormProps {
+  onNavigateToConfig?: () => void;
+}
+
+const TEAM_NAME = 'CruzAPIM팀';
+
+export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
+  const { user } = useAuth();
+  const [report, setReport] = useState<Report>(() => ({
+    ...initialReport,
+    author_name: getCachedValue(STORAGE_KEYS.authorName) || user?.name || '',
+  }));
   const [isGenerating, setIsGenerating] = useState(false);
-  const [showSyncPanel, setShowSyncPanel] = useState(false);
+  const [showAIPanel, setShowAIPanel] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [hasConfiguredServices, setHasConfiguredServices] = useState<boolean | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    getConfig().then((config) => {
+      const hasAny = ['gitlab_token', 'jira_token', 'hiworks_password'].some(
+        (key) => config[key] === '***configured***'
+      );
+      setHasConfiguredServices(hasAny);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -79,7 +104,7 @@ export default function ReportForm() {
       this_week: [...prev.this_week, ...thisWeek],
       next_week: [...prev.next_week, ...nextWeek],
     }));
-    setShowSyncPanel(false);
+    setShowAIPanel(false);
     const parts: string[] = [];
     if (thisWeek.length > 0) parts.push(`금주실적 ${thisWeek.length}건`);
     if (nextWeek.length > 0) parts.push(`차주계획 ${nextWeek.length}건`);
@@ -127,7 +152,7 @@ export default function ReportForm() {
       ) : null}
 
       {/* Quick Stats */}
-      {totalTasks > 0 ? (
+      {(totalTasks > 0 || report.next_week.length > 0) ? (
         <div className="flex gap-6 text-sm">
           <Stat label="금주 업무" value={totalTasks} />
           <Stat label="완료" value={completedTasks} />
@@ -136,19 +161,39 @@ export default function ReportForm() {
         </div>
       ) : null}
 
+      {/* Setup Guide Banner */}
+      {hasConfiguredServices === false && (
+        <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+          <div className="flex items-center gap-2">
+            {infoIcon}
+            <span className="text-sm text-blue-800">
+              연동 서비스가 설정되지 않았습니다. 설정 탭에서 토큰을 먼저 등록해주세요.
+            </span>
+          </div>
+          {onNavigateToConfig && (
+            <button
+              onClick={onNavigateToConfig}
+              className="shrink-0 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              설정으로 이동
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Action Buttons */}
       <div className="flex gap-2">
         <button
           type="button"
-          onClick={() => setShowSyncPanel((p) => !p)}
+          onClick={() => setShowAIPanel((p) => !p)}
           className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
-            showSyncPanel
+            showAIPanel
               ? 'bg-neutral-900 text-white border-neutral-900'
               : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
           }`}
         >
-          {syncIcon}
-          데이터 연동
+          {aiIcon}
+          AI 자동 생성
         </button>
         <button
           type="button"
@@ -164,13 +209,13 @@ export default function ReportForm() {
         </button>
       </div>
 
-      {/* Sync Panel */}
-      {showSyncPanel ? (
+      {/* AI Generate Panel */}
+      {showAIPanel ? (
         <div className="bg-white p-5 rounded-xl border border-neutral-200 animate-fadeIn">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-neutral-900">외부 서비스 연동</h3>
+            <h3 className="text-sm font-semibold text-neutral-900">AI 자동 생성</h3>
             <button
-              onClick={() => setShowSyncPanel(false)}
+              onClick={() => setShowAIPanel(false)}
               className="p-1 text-neutral-400 hover:text-neutral-600 transition-colors"
             >
               {closeIcon}
@@ -188,13 +233,26 @@ export default function ReportForm() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-neutral-500 mb-1.5">팀명</label>
-              <input
-                type="text"
-                value={report.team_name}
-                onChange={(e) => updateField('team_name', e.target.value)}
-                placeholder="개발팀"
-                className="input"
-              />
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => updateField('team_name', report.team_name === TEAM_NAME ? '' : TEAM_NAME)}
+                  className={`shrink-0 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                    report.team_name === TEAM_NAME
+                      ? 'bg-neutral-900 text-white border-neutral-900'
+                      : 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-300'
+                  }`}
+                >
+                  {TEAM_NAME}
+                </button>
+                <input
+                  type="text"
+                  value={report.team_name}
+                  onChange={(e) => updateField('team_name', e.target.value)}
+                  placeholder="직접 입력"
+                  className="input"
+                />
+              </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-neutral-500 mb-1.5">이름</label>
@@ -218,41 +276,64 @@ export default function ReportForm() {
           </div>
         </section>
 
-        {/* This Week */}
-        <section className="bg-white p-5 rounded-xl border border-neutral-200">
-          <TaskList
-            title="금주실적"
-            description="이번 주에 수행한 업무를 입력하세요"
-            tasks={report.this_week}
-            onChange={(tasks) => updateField('this_week', tasks)}
-            showProgress={true}
-            emptyIcon={emptyTaskIcon}
-          />
-        </section>
+        {/* 금주(left) + 차주(right): 각 컬럼에 업무 + 이슈 + 특이사항 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* 금주 컬럼 */}
+          <div className="space-y-5">
+            <section className="bg-white p-5 rounded-xl border border-neutral-200">
+              <TaskList
+                title="금주실적"
+                description="이번 주에 수행한 업무를 입력하세요"
+                tasks={report.this_week}
+                onChange={(tasks) => updateField('this_week', tasks)}
+                showProgress={true}
+                emptyIcon={emptyTaskIcon}
+              />
+            </section>
+            <TextSection
+              title="금주 이슈"
+              icon={issueIcon}
+              value={report.issues}
+              onChange={(v) => updateField('issues', v)}
+              placeholder="이번 주 발생한 이슈가 있다면 입력하세요..."
+            />
+            <TextSection
+              title="금주 특이사항"
+              icon={noteIcon}
+              value={report.notes}
+              onChange={(v) => updateField('notes', v)}
+              placeholder="이번 주 특이사항이 있다면 입력하세요..."
+            />
+          </div>
 
-        {/* Next Week */}
-        <section className="bg-white p-5 rounded-xl border border-neutral-200">
-          <TaskList
-            title="차주계획"
-            description="다음 주에 예정된 업무를 입력하세요"
-            tasks={report.next_week}
-            onChange={(tasks) => updateField('next_week', tasks)}
-            showProgress={false}
-            emptyIcon={emptyPlanIcon}
-          />
-        </section>
-
-        {/* Issues */}
-        <section className="bg-white p-5 rounded-xl border border-neutral-200">
-          <SectionHeader title="이슈/특이사항" optional />
-          <textarea
-            value={report.issues}
-            onChange={(e) => updateField('issues', e.target.value)}
-            placeholder="이슈나 특이사항이 있다면 입력하세요..."
-            rows={3}
-            className="input resize-none"
-          />
-        </section>
+          {/* 차주 컬럼 */}
+          <div className="space-y-5">
+            <section className="bg-white p-5 rounded-xl border border-neutral-200">
+              <TaskList
+                title="차주계획"
+                description="다음 주에 예정된 업무를 입력하세요"
+                tasks={report.next_week}
+                onChange={(tasks) => updateField('next_week', tasks)}
+                showProgress={false}
+                emptyIcon={emptyPlanIcon}
+              />
+            </section>
+            <TextSection
+              title="차주 이슈"
+              icon={issueIcon}
+              value={report.next_issues}
+              onChange={(v) => updateField('next_issues', v)}
+              placeholder="다음 주 예상 이슈가 있다면 입력하세요..."
+            />
+            <TextSection
+              title="차주 특이사항"
+              icon={noteIcon}
+              value={report.next_notes}
+              onChange={(v) => updateField('next_notes', v)}
+              placeholder="다음 주 특이사항이 있다면 입력하세요..."
+            />
+          </div>
+        </div>
 
         {/* Download Button */}
         <div className="flex justify-end pt-2">
@@ -314,6 +395,37 @@ function SectionHeader({ title, optional }: { title: string; optional?: boolean 
   );
 }
 
+function TextSection({
+  title,
+  icon,
+  value,
+  onChange,
+  placeholder,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <section className="bg-white p-5 rounded-xl border border-neutral-200">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-neutral-400">{icon}</span>
+        <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
+        <span className="text-xs text-neutral-400">(선택)</span>
+      </div>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={3}
+        className="input resize-none"
+      />
+    </section>
+  );
+}
+
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center gap-1.5">
@@ -324,9 +436,15 @@ function Stat({ label, value }: { label: string; value: number }) {
 }
 
 // Hoisted static SVG icons
-const syncIcon = (
+const infoIcon = (
+  <svg className="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+const aiIcon = (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
   </svg>
 );
 
@@ -358,5 +476,17 @@ const emptyTaskIcon = (
 const emptyPlanIcon = (
   <svg className="w-12 h-12 text-neutral-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+  </svg>
+);
+
+const issueIcon = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+  </svg>
+);
+
+const noteIcon = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
   </svg>
 );

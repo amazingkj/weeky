@@ -63,6 +63,9 @@ type Report struct {
 	ThisWeek   []Task    `json:"this_week"`
 	NextWeek   []Task    `json:"next_week"`
 	Issues     string    `json:"issues"`
+	Notes      string    `json:"notes"`
+	NextIssues string    `json:"next_issues"`
+	NextNotes  string    `json:"next_notes"`
 	TemplateID int64     `json:"template_id"`
 	CreatedAt  time.Time `json:"created_at"`
 }
@@ -79,6 +82,9 @@ type CreateReportRequest struct {
 	ThisWeek   []Task `json:"this_week"`
 	NextWeek   []Task `json:"next_week"`
 	Issues     string `json:"issues"`
+	Notes      string `json:"notes"`
+	NextIssues string `json:"next_issues"`
+	NextNotes  string `json:"next_notes"`
 	TemplateID int64  `json:"template_id"`
 }
 

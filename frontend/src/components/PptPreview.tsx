@@ -84,7 +84,7 @@ function SectionTitle({ title }: { title: string }) {
 function FooterTables({ issues, notes }: { issues?: string; notes?: string }) {
   return (
     <>
-      <table className="w-full border-collapse text-xs">
+      <table className="w-full border-collapse text-xs -mt-px">
         <tbody>
           <tr>
             <Cell header className="w-[22%]">이슈/위험 사항</Cell>
@@ -92,7 +92,7 @@ function FooterTables({ issues, notes }: { issues?: string; notes?: string }) {
           </tr>
         </tbody>
       </table>
-      <table className="w-full border-collapse text-xs">
+      <table className="w-full border-collapse text-xs -mt-px">
         <tbody>
           <tr>
             <Cell header className="w-[22%]">특이 사항</Cell>
@@ -104,6 +104,12 @@ function FooterTables({ issues, notes }: { issues?: string; notes?: string }) {
   );
 }
 
+function getPreviewTextSize(taskCount: number): string {
+  if (taskCount <= 5) return 'text-xs';
+  if (taskCount <= 8) return 'text-[11px]';
+  return 'text-[10px]';
+}
+
 function TaskRows({ tasks, maxItems, dateRange, showProgress }: {
   tasks: Report['this_week'];
   maxItems: number;
@@ -111,10 +117,11 @@ function TaskRows({ tasks, maxItems, dateRange, showProgress }: {
   showProgress?: boolean;
 }) {
   const visible = tasks.slice(0, maxItems);
+  const textSize = getPreviewTextSize(tasks.length);
   return (
-    <table className="w-full border-collapse text-xs flex-1">
+    <table className={`w-full border-collapse ${textSize} flex-1`}>
       <tbody>
-        <tr className="h-4">
+        <tr className="h-7">
           <Cell header compact className={showProgress ? 'w-[23%]' : 'w-[26%]'}>계획업무 ({dateRange})</Cell>
           <Cell header compact align="center" className="w-[53%]">{showProgress ? '진행 사항' : ''}</Cell>
           <Cell header compact align="center" className={showProgress ? 'w-[11%]' : 'w-[21%]'}>{showProgress ? '완료일' : '완료예정일'}</Cell>
@@ -122,7 +129,7 @@ function TaskRows({ tasks, maxItems, dateRange, showProgress }: {
             <Cell header compact align="center" className="w-[13%]">실적(%)</Cell>
           )}
         </tr>
-        <tr className="h-24">
+        <tr>
           <Cell valign="top" className="whitespace-pre-line">
             {visible.map((t, i) => {
               const detailLines = (t.details || '-').split('\n');
@@ -185,30 +192,30 @@ export default function PptPreview({ report, style = defaultTemplateStyle }: Ppt
     const showProgress = style.showProgressBar;
 
     // Slide 1: 금주실적
-    if (report.this_week.length > 0 || report.issues) {
+    if (report.this_week.length > 0 || report.issues || report.notes) {
       slideList.push({
         title: '금주실적',
         content: (
           <div className="h-full p-1 flex flex-col gap-0">
             <SlideHeader report={report} />
             <SectionTitle title="금주실적" />
-            <TaskRows tasks={report.this_week} maxItems={5} dateRange={dateRange} showProgress={showProgress} />
-            <FooterTables issues="" notes={report.issues} />
+            <TaskRows tasks={report.this_week} maxItems={8} dateRange={dateRange} showProgress={showProgress} />
+            <FooterTables issues={report.issues} notes={report.notes} />
           </div>
         ),
       });
     }
 
     // Slide 2: 차주계획
-    if (report.next_week.length > 0) {
+    if (report.next_week.length > 0 || report.next_issues || report.next_notes) {
       slideList.push({
         title: '차주계획',
         content: (
           <div className="h-full p-1 flex flex-col gap-0">
             <SlideHeader report={report} />
             <SectionTitle title="차주계획" />
-            <TaskRows tasks={report.next_week} maxItems={6} dateRange={dateRange} />
-            <FooterTables />
+            <TaskRows tasks={report.next_week} maxItems={8} dateRange={dateRange} />
+            <FooterTables issues={report.next_issues} notes={report.next_notes} />
           </div>
         ),
       });

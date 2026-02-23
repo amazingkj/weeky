@@ -92,7 +92,7 @@ export default function SyncPanel({ onAIGenerate }: SyncPanelProps) {
     }
 
     if (promises.length === 0) {
-      setError('설정된 연동 서비스가 없습니다. 연동 설정 탭에서 서비스를 먼저 등록해주세요.');
+      setError('설정된 연동 서비스가 없습니다. 설정 탭에서 서비스를 먼저 등록해주세요.');
       setIsLoading(false);
       return;
     }
@@ -157,7 +157,7 @@ export default function SyncPanel({ onAIGenerate }: SyncPanelProps) {
               </span>
             ))
           ) : (
-            <span className="text-xs text-neutral-400">연동 설정 탭에서 서비스를 등록해주세요.</span>
+            <span className="text-xs text-neutral-400">설정 탭에서 서비스를 등록해주세요.</span>
           )}
         </div>
       ) : null}

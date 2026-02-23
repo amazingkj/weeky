@@ -39,6 +39,9 @@ describe('Type Definitions', () => {
         this_week: [],
         next_week: [],
         issues: '',
+        notes: '',
+        next_issues: '',
+        next_notes: '',
         template_id: 0,
       };
 
@@ -55,6 +58,9 @@ describe('Type Definitions', () => {
         this_week: [],
         next_week: [],
         issues: '',
+        notes: '',
+        next_issues: '',
+        next_notes: '',
         template_id: 0,
       };
 

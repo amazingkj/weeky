@@ -11,6 +11,9 @@ describe('PptPreview Component', () => {
     this_week: [],
     next_week: [],
     issues: '',
+    notes: '',
+    next_issues: '',
+    next_notes: '',
     template_id: 0,
   };
 
@@ -26,6 +29,9 @@ describe('PptPreview Component', () => {
       { title: '배포 준비', due_date: '2024-01-22', progress: 0 },
     ],
     issues: '특이사항 없음',
+    notes: '',
+    next_issues: '',
+    next_notes: '',
     template_id: 0,
   };
 

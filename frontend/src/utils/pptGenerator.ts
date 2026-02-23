@@ -35,6 +35,19 @@ const ROW_H = {
 
 const HEADER_COL_W = [1.3, 2.2, 1.1, 1.5, 1.1, 2.2];
 
+// Calculate body font size based on total content lines
+function getBodyFontSize(tasks: Task[]): number {
+  let totalLines = 0;
+  for (const t of tasks) {
+    const detailLines = (t.details || '-').split('\n').length;
+    totalLines += detailLines + 1; // title line + detail lines + spacing
+  }
+  if (totalLines <= 18) return 10;
+  if (totalLines <= 25) return 9;
+  if (totalLines <= 35) return 8;
+  return 7;
+}
+
 interface TaskSlideConfig {
   sectionTitle: string;
   dateRange: string;
@@ -57,8 +70,8 @@ export async function generatePPT(report: Report, style: TemplateStyle = default
     dateRange: getWeekRange(report.report_date),
     tasks: report.this_week,
     showProgress: style.showProgressBar,
-    issuesText: '',
-    notesText: report.issues || '',
+    issuesText: report.issues || '',
+    notesText: report.notes || '',
   });
 
   createTaskSlide(pptx, report, {
@@ -66,8 +79,8 @@ export async function generatePPT(report: Report, style: TemplateStyle = default
     dateRange: getNextWeekRange(report.report_date),
     tasks: report.next_week,
     showProgress: false,
-    issuesText: '',
-    notesText: '',
+    issuesText: report.next_issues || '',
+    notesText: report.next_notes || '',
   });
 
   const filename = generateFilename(report);
@@ -112,6 +125,7 @@ function createTaskSlide(pptx: PptxGenJS, report: Report, config: TaskSlideConfi
   currentY += ROW_H.section;
 
   // Row 3-4: Body (column headers + task content)
+  const bodyFontSize = getBodyFontSize(config.tasks);
   const alignedData = config.tasks.map((t, i) => {
     const details = t.details || '-';
     const detailLines = details.split('\n');
@@ -165,7 +179,7 @@ function createTaskSlide(pptx: PptxGenJS, report: Report, config: TaskSlideConfi
       x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.colHeader + ROW_H.body,
       colW: bodyColW, rowH: [ROW_H.colHeader, ROW_H.body],
       border: { type: 'solid', color: COLORS.border, pt: 0.5 },
-      fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+      fontFace: FONT.face, fontSize: bodyFontSize, valign: 'middle',
     }
   );
   currentY += ROW_H.colHeader + ROW_H.body;

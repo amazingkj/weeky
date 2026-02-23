@@ -93,6 +93,15 @@ var migrations = []migration{
 		);
 		`,
 	},
+	{
+		version: 2,
+		sql:     `ALTER TABLE reports ADD COLUMN notes TEXT DEFAULT '';`,
+	},
+	{
+		version: 3,
+		sql: `ALTER TABLE reports ADD COLUMN next_issues TEXT DEFAULT '';
+ALTER TABLE reports ADD COLUMN next_notes TEXT DEFAULT '';`,
+	},
 }
 
 func runMigrations(db *sql.DB) error {
@@ -472,9 +481,9 @@ func (r *Repository) GetReport(id int64, userID int64) (*model.Report, error) {
 	var thisWeekJSON, nextWeekJSON string
 
 	err := r.db.QueryRow(
-		"SELECT id, team_name, author_name, report_date, this_week, next_week, issues, template_id, created_at FROM reports WHERE id = ? AND user_id = ?",
+		"SELECT id, team_name, author_name, report_date, this_week, next_week, issues, notes, next_issues, next_notes, template_id, created_at FROM reports WHERE id = ? AND user_id = ?",
 		id, userID,
-	).Scan(&report.ID, &report.TeamName, &report.AuthorName, &report.ReportDate, &thisWeekJSON, &nextWeekJSON, &report.Issues, &report.TemplateID, &report.CreatedAt)
+	).Scan(&report.ID, &report.TeamName, &report.AuthorName, &report.ReportDate, &thisWeekJSON, &nextWeekJSON, &report.Issues, &report.Notes, &report.NextIssues, &report.NextNotes, &report.TemplateID, &report.CreatedAt)
 
 	if err != nil {
 		return nil, err
@@ -501,8 +510,8 @@ func (r *Repository) CreateReport(req model.CreateReportRequest, userID int64) (
 	}
 
 	result, err := r.db.Exec(
-		"INSERT INTO reports (user_id, team_name, author_name, report_date, this_week, next_week, issues, template_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		userID, req.TeamName, req.AuthorName, req.ReportDate, string(thisWeekJSON), string(nextWeekJSON), req.Issues, req.TemplateID,
+		"INSERT INTO reports (user_id, team_name, author_name, report_date, this_week, next_week, issues, notes, next_issues, next_notes, template_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		userID, req.TeamName, req.AuthorName, req.ReportDate, string(thisWeekJSON), string(nextWeekJSON), req.Issues, req.Notes, req.NextIssues, req.NextNotes, req.TemplateID,
 	)
 	if err != nil {
 		return nil, err
@@ -520,6 +529,9 @@ func (r *Repository) CreateReport(req model.CreateReportRequest, userID int64) (
 		ThisWeek:   req.ThisWeek,
 		NextWeek:   req.NextWeek,
 		Issues:     req.Issues,
+		Notes:      req.Notes,
+		NextIssues: req.NextIssues,
+		NextNotes:  req.NextNotes,
 		TemplateID: req.TemplateID,
 		CreatedAt:  time.Now(),
 	}, nil
@@ -527,7 +539,7 @@ func (r *Repository) CreateReport(req model.CreateReportRequest, userID int64) (
 
 func (r *Repository) GetReportsByUser(userID int64) ([]model.Report, error) {
 	rows, err := r.db.Query(
-		"SELECT id, team_name, author_name, report_date, this_week, next_week, issues, template_id, created_at FROM reports WHERE user_id = ? ORDER BY created_at DESC",
+		"SELECT id, team_name, author_name, report_date, this_week, next_week, issues, notes, next_issues, next_notes, template_id, created_at FROM reports WHERE user_id = ? ORDER BY created_at DESC",
 		userID,
 	)
 	if err != nil {
@@ -539,7 +551,7 @@ func (r *Repository) GetReportsByUser(userID int64) ([]model.Report, error) {
 	for rows.Next() {
 		var report model.Report
 		var thisWeekJSON, nextWeekJSON string
-		if err := rows.Scan(&report.ID, &report.TeamName, &report.AuthorName, &report.ReportDate, &thisWeekJSON, &nextWeekJSON, &report.Issues, &report.TemplateID, &report.CreatedAt); err != nil {
+		if err := rows.Scan(&report.ID, &report.TeamName, &report.AuthorName, &report.ReportDate, &thisWeekJSON, &nextWeekJSON, &report.Issues, &report.Notes, &report.NextIssues, &report.NextNotes, &report.TemplateID, &report.CreatedAt); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(thisWeekJSON), &report.ThisWeek); err != nil {

@@ -69,10 +69,10 @@ function AuthenticatedApp() {
     <div className="min-h-screen bg-neutral-50">
       <Header />
       <Navigation activeTab={activeTab} onTabChange={handleTabChange} />
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+      <main className={`mx-auto px-4 sm:px-6 py-8 ${activeTab === 'report' ? 'max-w-6xl' : 'max-w-3xl'}`}>
         <ErrorBoundary>
           <Suspense fallback={<LoadingFallback />}>
-            {activeTab === 'report' ? <ReportForm /> : <ConfigWithInvite />}
+            {activeTab === 'report' ? <ReportForm onNavigateToConfig={() => setActiveTab('config')} /> : <ConfigWithInvite />}
           </Suspense>
         </ErrorBoundary>
       </main>
@@ -99,7 +99,7 @@ function Header() {
 
   return (
     <header className="border-b border-neutral-200 bg-white">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-neutral-900 flex items-center justify-center">
@@ -142,7 +142,7 @@ interface NavigationProps {
 function Navigation({ activeTab, onTabChange }: NavigationProps) {
   return (
     <nav className="border-b border-neutral-200 bg-white">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="flex gap-0" role="tablist">
           {TABS.map((tab) => {
             const isActive = activeTab === tab.id;
