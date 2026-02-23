@@ -29,6 +29,16 @@ type gitlabCommit struct {
 	WebURL         string `json:"web_url"`
 }
 
+type gitlabProject struct {
+	ID                int    `json:"id"`
+	Name              string `json:"name"`
+	PathWithNamespace string `json:"path_with_namespace"`
+	WebURL            string `json:"web_url"`
+	Namespace         struct {
+		FullPath string `json:"full_path"`
+	} `json:"namespace"`
+}
+
 type gitlabMR struct {
 	IID       int       `json:"iid"`
 	Title     string    `json:"title"`
@@ -36,6 +46,85 @@ type gitlabMR struct {
 	State     string    `json:"state"`
 	CreatedAt time.Time `json:"created_at"`
 	MergedAt  *string   `json:"merged_at"`
+}
+
+// ListProjects fetches all projects accessible by the token
+func (s *GitLabService) ListProjects(baseURL, token string) ([]model.GitLabProject, error) {
+	if err := ValidateExternalURL(baseURL); err != nil {
+		return nil, fmt.Errorf("invalid GitLab URL: %w", err)
+	}
+
+	var allProjects []model.GitLabProject
+	page := 1
+	perPage := 100
+
+	for {
+		apiURL := fmt.Sprintf("%s/api/v4/projects?membership=true&simple=true&per_page=%d&page=%d&order_by=last_activity_at",
+			baseURL, perPage, page)
+
+		httpReq, err := http.NewRequest("GET", apiURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		httpReq.Header.Set("PRIVATE-TOKEN", token)
+
+		resp, err := s.client.Do(httpReq)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("GitLab API returned status %d", resp.StatusCode)
+		}
+
+		var projects []gitlabProject
+		if err := json.NewDecoder(resp.Body).Decode(&projects); err != nil {
+			return nil, err
+		}
+
+		for _, p := range projects {
+			// Split path_with_namespace into namespace and project
+			namespace := p.Namespace.FullPath
+			projectName := p.Name
+			parts := splitLast(p.PathWithNamespace, "/")
+			if len(parts) == 2 {
+				namespace = parts[0]
+				projectName = parts[1]
+			}
+
+			allProjects = append(allProjects, model.GitLabProject{
+				ID:        p.ID,
+				Name:      p.Name,
+				FullPath:  p.PathWithNamespace,
+				Namespace: namespace,
+				Project:   projectName,
+				WebURL:    p.WebURL,
+			})
+		}
+
+		if len(projects) < perPage {
+			break
+		}
+		page++
+	}
+
+	return allProjects, nil
+}
+
+// splitLast splits string by last occurrence of separator
+func splitLast(s, sep string) []string {
+	idx := -1
+	for i := len(s) - 1; i >= 0; i-- {
+		if string(s[i]) == sep {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return []string{s}
+	}
+	return []string{s[:idx], s[idx+1:]}
 }
 
 func (s *GitLabService) Sync(req model.GitLabSyncRequest) (*model.SyncResult, error) {

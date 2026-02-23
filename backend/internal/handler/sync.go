@@ -102,9 +102,9 @@ func (h *Handler) SyncGitLab(c *fiber.Ctx) error {
 		return badRequest(c, "조회 기간을 설정해주세요.")
 	}
 
-	// Default to gitlab.com if no base URL provided
+	// Default to self-hosted GitLab if no base URL provided
 	if req.BaseURL == "" {
-		req.BaseURL = "https://gitlab.com"
+		req.BaseURL = "https://gitlab.direa.synology.me"
 	}
 
 	userID := getUserID(c)
@@ -172,6 +172,29 @@ func (h *Handler) SyncHiworks(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(result)
+}
+
+// ListGitLabProjects fetches available GitLab projects using stored token
+func (h *Handler) ListGitLabProjects(c *fiber.Ctx) error {
+	userID := getUserID(c)
+
+	token, err := h.GetConfigValue("gitlab_token", userID)
+	if err != nil || token == "" {
+		return badRequest(c, "GitLab 토큰이 설정되지 않았습니다. 먼저 Personal Access Token을 저장해주세요.")
+	}
+
+	baseURL := "https://gitlab.direa.synology.me"
+	// Check if user has a custom base URL
+	if customURL, err := h.GetConfigValue("gitlab_base_url", userID); err == nil && customURL != "" {
+		baseURL = customURL
+	}
+
+	projects, err := h.services.GitLab.ListProjects(baseURL, token)
+	if err != nil {
+		return internalError(c, err)
+	}
+
+	return c.JSON(projects)
 }
 
 // GenerateAIReport uses Claude to generate a report from synced items

@@ -48,6 +48,7 @@ type GenerateReportRequest struct {
 	Items     []model.SyncItem `json:"items"`
 	StartDate string           `json:"start_date"`
 	EndDate   string           `json:"end_date"`
+	Style     string           `json:"style"` // "concise" or "detailed"
 }
 
 type GenerateReportResponse struct {
@@ -62,12 +63,20 @@ func (s *ClaudeService) GenerateReport(req GenerateReportRequest) (*GenerateRepo
 	}
 
 	// Build prompt with synced items
-	prompt := buildPrompt(req.Items, req.StartDate, req.EndDate)
+	style := req.Style
+	if style == "" {
+		style = "concise"
+	}
+	prompt := buildPrompt(req.Items, req.StartDate, req.EndDate, style)
 
 	// Call Claude API
+	maxTokens := 2000
+	if style == "detailed" {
+		maxTokens = 4000
+	}
 	claudeReq := claudeRequest{
 		Model:     "claude-sonnet-4-20250514",
-		MaxTokens: 2000,
+		MaxTokens: maxTokens,
 		Messages: []claudeMessage{
 			{Role: "user", Content: prompt},
 		},
@@ -116,7 +125,7 @@ func (s *ClaudeService) GenerateReport(req GenerateReportRequest) (*GenerateRepo
 	return parseClaudeResponse(claudeResp.Content[0].Text)
 }
 
-func buildPrompt(items []model.SyncItem, startDate, endDate string) string {
+func buildPrompt(items []model.SyncItem, startDate, endDate, style string) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, `당신은 주간 업무 보고서 작성을 돕는 어시스턴트입니다.
@@ -186,19 +195,37 @@ func buildPrompt(items []model.SyncItem, startDate, endDate string) string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(`위 활동들을 분석하여 주간 업무 보고서를 작성해주세요.
+	b.WriteString("위 활동들을 분석하여 주간 업무 보고서를 작성해주세요.\n\n")
 
-요구사항:
+	if style == "detailed" {
+		b.WriteString(`요구사항:
 1. 프로젝트/고객사별로 업무를 그룹화
 2. title: 짧은 프로젝트명 또는 고객사명 (예: "삼성카드", "Mesh", "기술검토")
-3. details: 해당 프로젝트에서 수행한 구체적인 진행사항
+3. details: 해당 프로젝트에서 수행한 구체적인 진행사항을 **상세하게** 작성
+   - 여러 줄로 작성하되, 줄바꿈(\n)을 사용
+   - 각 세부 작업을 "- " 접두사로 나열
+   - 예시: "- APIM imanager 프로젝트 API 설계 및 구현\n- 인증 모듈 JWT 토큰 검증 로직 추가\n- QA 환경 배포 및 테스트 수행"
+   - 예시: "- Backend 아키텍처 설계 문서 작성\n- DB 스키마 리뷰 및 인덱스 최적화"
+4. due_date: YYYY-MM-DD 형식
+5. 메일 제목/내용, 커밋 메시지, Jira 이슈를 분석해서 프로젝트를 식별
+6. "this_week" (금주실적): 커밋, MR, 완료된 Jira 이슈, 메일 기반으로 해당 기간의 모든 업무를 포함. progress는 100
+7. "next_week" (차주계획): 미완료 Jira 이슈 기반. progress는 0
+`)
+	} else {
+		b.WriteString(`요구사항:
+1. 프로젝트/고객사별로 업무를 그룹화
+2. title: 짧은 프로젝트명 또는 고객사명 (예: "삼성카드", "Mesh", "기술검토")
+3. details: 해당 프로젝트에서 수행한 진행사항을 **한 줄로 간결하게** 작성
    - 예시: "모니모 APIM imanager 프로젝트 진행"
    - 예시: "Backend 아키텍처 설계 및 문서화"
 4. due_date: YYYY-MM-DD 형식
 5. 메일 제목/내용, 커밋 메시지, Jira 이슈를 분석해서 프로젝트를 식별
-6. "this_week" (금주실적): 커밋, MR, 완료된 Jira 이슈, 메일 기반. 최대 5개. progress는 100
-7. "next_week" (차주계획): 미완료 Jira 이슈 기반. 최대 5개. progress는 0
+6. "this_week" (금주실적): 커밋, MR, 완료된 Jira 이슈, 메일 기반으로 해당 기간의 모든 업무를 포함. progress는 100
+7. "next_week" (차주계획): 미완료 Jira 이슈 기반. progress는 0
+`)
+	}
 
+	b.WriteString(`
 다음 JSON 형식으로 응답해주세요:
 {
   "this_week": [

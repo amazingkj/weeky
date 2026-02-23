@@ -184,30 +184,35 @@ function createTaskSlide(pptx: PptxGenJS, report: Report, config: TaskSlideConfi
   );
   currentY += ROW_H.colHeader + ROW_H.body;
 
-  // Row 5: Issues
+  // Row 5: Issues (use same colW as body for aligned borders)
+  const footerCols = config.showProgress ? 4 : 3;
+  const issueRow: PptxGenJS.TableCell[] = [
+    { text: '이슈/위험 사항', options: { fill: { color: COLORS.headerBg }, bold: true } },
+    { text: config.issuesText, options: { colspan: footerCols - 1 } },
+  ];
+
   slide.addTable(
-    [[
-      { text: '이슈/위험 사항', options: { fill: { color: COLORS.headerBg }, bold: true } },
-      { text: config.issuesText },
-    ]],
+    [issueRow],
     {
       x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.issue,
-      colW: [2.0, 7.4], rowH: [ROW_H.issue],
+      colW: bodyColW, rowH: [ROW_H.issue],
       border: { type: 'solid', color: COLORS.border, pt: 0.5 },
       fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
     }
   );
   currentY += ROW_H.issue;
 
-  // Row 6: Notes
+  // Row 6: Notes (use same colW as body for aligned borders)
+  const noteRow: PptxGenJS.TableCell[] = [
+    { text: '특이 사항', options: { fill: { color: COLORS.headerBg }, bold: true } },
+    { text: config.notesText, options: { colspan: footerCols - 1 } },
+  ];
+
   slide.addTable(
-    [[
-      { text: '특이 사항', options: { fill: { color: COLORS.headerBg }, bold: true } },
-      { text: config.notesText },
-    ]],
+    [noteRow],
     {
       x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.note,
-      colW: [2.0, 7.4], rowH: [ROW_H.note],
+      colW: bodyColW, rowH: [ROW_H.note],
       border: { type: 'solid', color: COLORS.border, pt: 0.5 },
       fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
     }

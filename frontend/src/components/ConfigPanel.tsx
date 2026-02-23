@@ -2,13 +2,11 @@ import { useState, useCallback, useEffect } from 'react';
 import { useConfig } from '../hooks';
 import Loading from './ui/Loading';
 import Alert from './ui/Alert';
-import { ConfigMap } from '../types';
+import { ConfigMap, GitLabProject } from '../types';
+import { listGitLabProjects } from '../services/api';
 
 interface FormData {
   gitlab_token: string;
-  gitlab_base_url: string;
-  gitlab_namespace: string;
-  gitlab_project: string;
   jira_base_url: string;
   jira_email: string;
   jira_token: string;
@@ -19,7 +17,7 @@ interface FormData {
 }
 
 const initialFormData: FormData = {
-  gitlab_token: '', gitlab_base_url: '', gitlab_namespace: '', gitlab_project: '',
+  gitlab_token: '',
   jira_base_url: '', jira_email: '', jira_token: '',
   hiworks_office_id: '', hiworks_user_id: '', hiworks_password: '',
   claude_api_key: '',
@@ -31,6 +29,12 @@ export default function ConfigPanel() {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['gitlab']));
+
+  // GitLab project discovery
+  const [gitlabProjects, setGitlabProjects] = useState<GitLabProject[]>([]);
+  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [projectError, setProjectError] = useState<string | null>(null);
 
   // Pre-fill form with saved non-sensitive values (sensitive ones return '***configured***')
   useEffect(() => {
@@ -45,6 +49,15 @@ export default function ConfigPanel() {
       }
       return updated;
     });
+
+    // Load saved project selections
+    const savedProjects = config.gitlab_projects;
+    if (savedProjects) {
+      try {
+        const parsed: { namespace: string; project: string }[] = JSON.parse(savedProjects);
+        setSelectedProjects(new Set(parsed.map(p => `${p.namespace}/${p.project}`)));
+      } catch { /* ignore */ }
+    }
   }, [config]);
 
   const handleFieldChange = useCallback((field: keyof FormData, value: string) => {
@@ -59,6 +72,30 @@ export default function ConfigPanel() {
     });
   }, []);
 
+  const handleLoadProjects = useCallback(async () => {
+    setIsLoadingProjects(true);
+    setProjectError(null);
+    try {
+      const projects = await listGitLabProjects();
+      setGitlabProjects(projects || []);
+      if (!projects || projects.length === 0) {
+        setProjectError('접근 가능한 프로젝트가 없습니다.');
+      }
+    } catch (err) {
+      setProjectError(err instanceof Error ? err.message : '프로젝트 목록 조회에 실패했습니다.');
+    } finally {
+      setIsLoadingProjects(false);
+    }
+  }, []);
+
+  const toggleProject = useCallback((fullPath: string) => {
+    setSelectedProjects(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(fullPath)) { newSet.delete(fullPath); } else { newSet.add(fullPath); }
+      return newSet;
+    });
+  }, []);
+
   const handleSave = async () => {
     setIsSaving(true);
     setMessage(null);
@@ -67,6 +104,18 @@ export default function ConfigPanel() {
       Object.entries(formData).forEach(([key, value]) => {
         if (value.trim()) configs[key] = value.trim();
       });
+
+      // Save selected GitLab projects as JSON
+      if (selectedProjects.size > 0) {
+        const projectList = Array.from(selectedProjects).map(fp => {
+          const parts = fp.split('/');
+          const project = parts.pop()!;
+          const namespace = parts.join('/');
+          return { namespace, project };
+        });
+        configs.gitlab_projects = JSON.stringify(projectList);
+      }
+
       if (Object.keys(configs).length === 0) {
         setMessage({ type: 'error', text: '저장할 설정이 없습니다.' });
         return;
@@ -101,6 +150,8 @@ export default function ConfigPanel() {
   if (isLoading) return <div className="py-16"><Loading text="설정을 불러오는 중..." size="lg" /></div>;
   if (error) return <Alert type="error">{error}</Alert>;
 
+  const hasGitLabToken = isConfigured('gitlab_token');
+
   return (
     <div className="space-y-4">
       {message ? (
@@ -110,25 +161,86 @@ export default function ConfigPanel() {
       <ConfigSection
         title="GitLab" description="커밋, MR 정보를 가져옵니다"
         expanded={expandedSections.has('gitlab')} onToggle={() => toggleSection('gitlab')}
-        configuredCount={getConfiguredCount(['gitlab_token', 'gitlab_base_url', 'gitlab_namespace', 'gitlab_project'])}
-        totalCount={4}
+        configuredCount={hasGitLabToken && selectedProjects.size > 0 ? 2 : hasGitLabToken ? 1 : 0}
+        totalCount={2}
       >
         <ConfigInput label="Personal Access Token" type="password"
           value={formData.gitlab_token} onChange={(v) => handleFieldChange('gitlab_token', v)}
-          placeholder={isConfigured('gitlab_token') ? '새 토큰으로 변경하려면 입력' : 'glpat-xxxxx...'}
-          configured={isConfigured('gitlab_token')}
+          placeholder={hasGitLabToken ? '새 토큰으로 변경하려면 입력' : 'glpat-xxxxx...'}
+          configured={hasGitLabToken}
           helpText="User Settings > Access Tokens에서 발급 (read_api 권한)" />
-        <ConfigInput label="GitLab URL" type="url"
-          value={formData.gitlab_base_url} onChange={(v) => handleFieldChange('gitlab_base_url', v)}
-          placeholder="https://gitlab.com"
-          configured={isConfigured('gitlab_base_url')} />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <ConfigInput label="Namespace" value={formData.gitlab_namespace}
-            onChange={(v) => handleFieldChange('gitlab_namespace', v)}
-            placeholder="group 또는 username" configured={isConfigured('gitlab_namespace')} />
-          <ConfigInput label="Project" value={formData.gitlab_project}
-            onChange={(v) => handleFieldChange('gitlab_project', v)}
-            placeholder="project-name" configured={isConfigured('gitlab_project')} />
+        <div className="flex items-center gap-2 text-xs text-neutral-400">
+          <span className="font-medium text-neutral-500">GitLab URL</span>
+          <span>https://gitlab.direa.synology.me</span>
+        </div>
+
+        {/* Project Discovery */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-medium text-neutral-500">프로젝트 선택</label>
+            <button
+              type="button"
+              onClick={handleLoadProjects}
+              disabled={!hasGitLabToken || isLoadingProjects}
+              className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-md border
+                         border-neutral-200 text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50
+                         disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {isLoadingProjects ? spinner : refreshIcon}
+              {isLoadingProjects ? '불러오는 중...' : '프로젝트 불러오기'}
+            </button>
+          </div>
+
+          {!hasGitLabToken && (
+            <p className="text-[10px] text-neutral-400">토큰을 먼저 저장하면 프로젝트 목록을 불러올 수 있습니다.</p>
+          )}
+
+          {projectError && (
+            <p className="text-[11px] text-red-500 mb-2">{projectError}</p>
+          )}
+
+          {/* Selected projects summary */}
+          {selectedProjects.size > 0 && gitlabProjects.length === 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {Array.from(selectedProjects).map(fp => (
+                <span key={fp} className="inline-flex items-center gap-1 px-2 py-1 bg-neutral-100 text-neutral-700 text-[11px] rounded-md">
+                  {fp}
+                  <button type="button" onClick={() => toggleProject(fp)}
+                    className="text-neutral-400 hover:text-red-500 transition-colors">
+                    {closeIconSmall}
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Project list */}
+          {gitlabProjects.length > 0 && (
+            <div className="max-h-48 overflow-y-auto border border-neutral-200 rounded-lg divide-y divide-neutral-100">
+              {gitlabProjects.map(p => {
+                const isSelected = selectedProjects.has(p.full_path);
+                return (
+                  <label key={p.id}
+                    className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-neutral-50 transition-colors ${
+                      isSelected ? 'bg-neutral-50' : ''
+                    }`}
+                  >
+                    <input type="checkbox" checked={isSelected}
+                      onChange={() => toggleProject(p.full_path)}
+                      className="rounded border-neutral-300 text-neutral-900 focus:ring-neutral-500 w-3.5 h-3.5" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-medium text-neutral-800 truncate">{p.name}</div>
+                      <div className="text-[10px] text-neutral-400 truncate">{p.full_path}</div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+
+          {selectedProjects.size > 0 && (
+            <p className="text-[10px] text-neutral-500 mt-1.5">{selectedProjects.size}개 프로젝트 선택됨</p>
+          )}
         </div>
       </ConfigSection>
 
@@ -292,6 +404,16 @@ function ConfigInput({ label, type = 'text', value, onChange, placeholder, confi
 }
 
 // Icons
+const refreshIcon = (
+  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+  </svg>
+);
+const closeIconSmall = (
+  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
 const checkIcon = (
   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />

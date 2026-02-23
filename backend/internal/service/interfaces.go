@@ -10,6 +10,7 @@ type GitHubSyncer interface {
 // GitLabSyncer syncs data from GitLab
 type GitLabSyncer interface {
 	Sync(req model.GitLabSyncRequest) (*model.SyncResult, error)
+	ListProjects(baseURL, token string) ([]model.GitLabProject, error)
 }
 
 // JiraSyncer syncs data from Jira

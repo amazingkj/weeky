@@ -22,8 +22,11 @@ const getWeekRange = () => {
   };
 };
 
+type ReportStyle = 'concise' | 'detailed';
+
 export default function SyncPanel({ onAIGenerate }: SyncPanelProps) {
   const [dateRange, setDateRange] = useState(() => getWeekRange());
+  const [reportStyle, setReportStyle] = useState<ReportStyle>('concise');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<Record<string, string>>({});
@@ -58,13 +61,30 @@ export default function SyncPanel({ onAIGenerate }: SyncPanelProps) {
     const promises: Promise<SyncResult | null>[] = [];
 
     if (config.gitlab_token === '***configured***') {
-      const baseUrl = config.gitlab_base_url || 'https://gitlab.com';
-      const namespace = config.gitlab_namespace || '';
-      const project = config.gitlab_project || '';
-      if (namespace && project) {
+      const baseUrl = config.gitlab_base_url || 'https://gitlab.direa.synology.me';
+
+      // Multi-project support: check gitlab_projects first, fallback to single project
+      let projectList: { namespace: string; project: string }[] = [];
+      try {
+        const stored = config.gitlab_projects;
+        if (stored) {
+          projectList = JSON.parse(stored);
+        }
+      } catch { /* ignore parse errors */ }
+
+      // Fallback to legacy single project config
+      if (projectList.length === 0) {
+        const namespace = config.gitlab_namespace || '';
+        const project = config.gitlab_project || '';
+        if (namespace && project) {
+          projectList = [{ namespace, project }];
+        }
+      }
+
+      for (const p of projectList) {
         promises.push(
           syncGitLab({
-            base_url: baseUrl, namespace, project,
+            base_url: baseUrl, namespace: p.namespace, project: p.project,
             start_date: dateRange.start, end_date: dateRange.end,
           }).catch(() => null)
         );
@@ -111,6 +131,7 @@ export default function SyncPanel({ onAIGenerate }: SyncPanelProps) {
         items: allItems,
         start_date: dateRange.start,
         end_date: dateRange.end,
+        style: reportStyle,
       });
       onAIGenerate?.(response.this_week, response.next_week || []);
     } catch (err) {
@@ -118,7 +139,7 @@ export default function SyncPanel({ onAIGenerate }: SyncPanelProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [config, dateRange, onAIGenerate]);
+  }, [config, dateRange, reportStyle, onAIGenerate]);
 
   const services = configuredServices();
 
@@ -142,6 +163,38 @@ export default function SyncPanel({ onAIGenerate }: SyncPanelProps) {
             className="input !w-auto !py-1.5"
           />
         </div>
+      </div>
+
+      {/* Report Style */}
+      <div className="flex items-center gap-3 pb-4 border-b border-neutral-100">
+        <span className="text-xs font-medium text-neutral-500">보고서 스타일</span>
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => setReportStyle('concise')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+              reportStyle === 'concise'
+                ? 'bg-neutral-900 text-white border-neutral-900'
+                : 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-300'
+            }`}
+          >
+            간단하게
+          </button>
+          <button
+            type="button"
+            onClick={() => setReportStyle('detailed')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+              reportStyle === 'detailed'
+                ? 'bg-neutral-900 text-white border-neutral-900'
+                : 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-300'
+            }`}
+          >
+            상세하게
+          </button>
+        </div>
+        <span className="text-[10px] text-neutral-400">
+          {reportStyle === 'concise' ? '한 줄 요약 스타일' : '세부 항목 포함 상세 스타일'}
+        </span>
       </div>
 
       {/* Configured Services Info */}

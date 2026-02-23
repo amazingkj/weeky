@@ -149,6 +149,16 @@ type HiworksSyncRequest struct {
 	EndDate   string `json:"end_date"`
 }
 
+// GitLabProject represents a GitLab project for multi-project selection
+type GitLabProject struct {
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	FullPath  string `json:"full_path"`
+	Namespace string `json:"namespace"`
+	Project   string `json:"project"`
+	WebURL    string `json:"web_url"`
+}
+
 // ConfigUpdateRequest for updating config
 type ConfigUpdateRequest struct {
 	Configs map[string]string `json:"configs"`

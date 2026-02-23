@@ -129,6 +129,9 @@ func main() {
 	protected.Post("/sync/jira", h.SyncJira)
 	protected.Post("/sync/hiworks", h.SyncHiworks)
 
+	// GitLab project discovery
+	protected.Get("/gitlab/projects", h.ListGitLabProjects)
+
 	// AI routes
 	protected.Post("/ai/generate", h.GenerateAIReport)
 

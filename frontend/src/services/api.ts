@@ -1,10 +1,11 @@
-import { Template, Report, SyncResult, SyncItem, Task, GitHubSyncRequest, GitLabSyncRequest, JiraSyncRequest, HiworksSyncRequest, ConfigMap, AuthResponse, LoginRequest, RegisterRequest, User, InviteCode } from '../types';
+import { Template, Report, SyncResult, SyncItem, Task, GitHubSyncRequest, GitLabSyncRequest, JiraSyncRequest, HiworksSyncRequest, ConfigMap, AuthResponse, LoginRequest, RegisterRequest, User, InviteCode, GitLabProject } from '../types';
 
 // AI Generate types
 export interface GenerateReportRequest {
   items: SyncItem[];
   start_date: string;
   end_date: string;
+  style?: 'concise' | 'detailed';
 }
 
 export interface GenerateReportResponse {
@@ -293,6 +294,17 @@ export async function syncHiworks(request: HiworksSyncRequest): Promise<SyncResu
   if (!res.ok) {
     const error = await res.json();
     throw new Error(error.error || 'Failed to sync Hiworks');
+  }
+  return res.json();
+}
+
+// ============ GitLab Projects API ============
+
+export async function listGitLabProjects(): Promise<GitLabProject[]> {
+  const res = await apiFetch(`${API_BASE}/gitlab/projects`);
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || 'GitLab 프로젝트 목록 조회에 실패했습니다');
   }
   return res.json();
 }

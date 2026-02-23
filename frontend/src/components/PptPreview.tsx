@@ -81,22 +81,23 @@ function SectionTitle({ title }: { title: string }) {
   );
 }
 
-function FooterTables({ issues, notes }: { issues?: string; notes?: string }) {
+function FooterTables({ issues, notes, showProgress }: { issues?: string; notes?: string; showProgress?: boolean }) {
+  const headerW = showProgress ? 'w-[23%]' : 'w-[26%]';
   return (
     <>
       <table className="w-full border-collapse text-xs -mt-px">
         <tbody>
           <tr>
-            <Cell header className="w-[22%]">이슈/위험 사항</Cell>
-            <Cell className="w-[78%]">{issues}</Cell>
+            <Cell header className={headerW}>이슈/위험 사항</Cell>
+            <Cell colSpan={showProgress ? 3 : 2} className="whitespace-pre-line">{issues}</Cell>
           </tr>
         </tbody>
       </table>
       <table className="w-full border-collapse text-xs -mt-px">
         <tbody>
           <tr>
-            <Cell header className="w-[22%]">특이 사항</Cell>
-            <Cell className="w-[78%] whitespace-pre-line">{notes}</Cell>
+            <Cell header className={headerW}>특이 사항</Cell>
+            <Cell colSpan={showProgress ? 3 : 2} className="whitespace-pre-line">{notes}</Cell>
           </tr>
         </tbody>
       </table>
@@ -200,7 +201,7 @@ export default function PptPreview({ report, style = defaultTemplateStyle }: Ppt
             <SlideHeader report={report} />
             <SectionTitle title="금주실적" />
             <TaskRows tasks={report.this_week} maxItems={8} dateRange={dateRange} showProgress={showProgress} />
-            <FooterTables issues={report.issues} notes={report.notes} />
+            <FooterTables issues={report.issues} notes={report.notes} showProgress={showProgress} />
           </div>
         ),
       });
@@ -215,7 +216,7 @@ export default function PptPreview({ report, style = defaultTemplateStyle }: Ppt
             <SlideHeader report={report} />
             <SectionTitle title="차주계획" />
             <TaskRows tasks={report.next_week} maxItems={8} dateRange={dateRange} />
-            <FooterTables issues={report.next_issues} notes={report.next_notes} />
+            <FooterTables issues={report.next_issues} notes={report.next_notes} showProgress={false} />
           </div>
         ),
       });

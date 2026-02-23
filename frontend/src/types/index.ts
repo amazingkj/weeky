@@ -104,6 +104,15 @@ export interface ConfigMap {
   [key: string]: string;
 }
 
+export interface GitLabProject {
+  id: number;
+  name: string;
+  full_path: string;
+  namespace: string;
+  project: string;
+  web_url: string;
+}
+
 // Auth types
 export interface User {
   id: number;
