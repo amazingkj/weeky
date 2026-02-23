@@ -73,6 +73,8 @@ func (s *ClaudeService) GenerateReport(req GenerateReportRequest) (*GenerateRepo
 	maxTokens := 2000
 	if style == "detailed" {
 		maxTokens = 4000
+	} else if style == "very_detailed" {
+		maxTokens = 6000
 	}
 	claudeReq := claudeRequest{
 		Model:     "claude-sonnet-4-20250514",
@@ -134,15 +136,37 @@ func buildPrompt(items []model.SyncItem, startDate, endDate, style string) strin
 
 `, startDate, endDate)
 
-	// Group items by type
-	var commits, mrs, issuesDone, issuesTodo, emails []model.SyncItem
+	// Group items by type, then by source project
+	type sourceGroup struct {
+		commits []model.SyncItem
+		mrs     []model.SyncItem
+	}
+	gitlabByProject := make(map[string]*sourceGroup) // key: project source
+	var projectOrder []string                          // preserve insertion order
+	var issuesDone, issuesTodo, emails []model.SyncItem
 
 	for _, item := range items {
 		switch item.Type {
 		case "commit":
-			commits = append(commits, item)
+			key := item.Source
+			if key == "" {
+				key = "기타"
+			}
+			if _, ok := gitlabByProject[key]; !ok {
+				gitlabByProject[key] = &sourceGroup{}
+				projectOrder = append(projectOrder, key)
+			}
+			gitlabByProject[key].commits = append(gitlabByProject[key].commits, item)
 		case "mr", "pr":
-			mrs = append(mrs, item)
+			key := item.Source
+			if key == "" {
+				key = "기타"
+			}
+			if _, ok := gitlabByProject[key]; !ok {
+				gitlabByProject[key] = &sourceGroup{}
+				projectOrder = append(projectOrder, key)
+			}
+			gitlabByProject[key].mrs = append(gitlabByProject[key].mrs, item)
 		case "issue_done", "issue":
 			issuesDone = append(issuesDone, item)
 		case "issue_todo":
@@ -152,18 +176,20 @@ func buildPrompt(items []model.SyncItem, startDate, endDate, style string) strin
 		}
 	}
 
-	if len(commits) > 0 {
-		b.WriteString("## GitLab 커밋:\n")
-		for _, c := range commits {
-			fmt.Fprintf(&b, "- [%s] %s\n", c.Date, c.Title)
+	for _, proj := range projectOrder {
+		sg := gitlabByProject[proj]
+		fmt.Fprintf(&b, "## GitLab 프로젝트: %s\n", proj)
+		if len(sg.commits) > 0 {
+			b.WriteString("### 커밋:\n")
+			for _, c := range sg.commits {
+				fmt.Fprintf(&b, "- [%s] %s\n", c.Date, c.Title)
+			}
 		}
-		b.WriteString("\n")
-	}
-
-	if len(mrs) > 0 {
-		b.WriteString("## Merge Requests:\n")
-		for _, m := range mrs {
-			fmt.Fprintf(&b, "- [%s] %s\n", m.Date, m.Title)
+		if len(sg.mrs) > 0 {
+			b.WriteString("### Merge Requests:\n")
+			for _, m := range sg.mrs {
+				fmt.Fprintf(&b, "- [%s] %s\n", m.Date, m.Title)
+			}
 		}
 		b.WriteString("\n")
 	}
@@ -197,7 +223,26 @@ func buildPrompt(items []model.SyncItem, startDate, endDate, style string) strin
 
 	b.WriteString("위 활동들을 분석하여 주간 업무 보고서를 작성해주세요.\n\n")
 
-	if style == "detailed" {
+	if style == "very_detailed" {
+		b.WriteString(`요구사항:
+1. 프로젝트/고객사별로 업무를 그룹화
+2. title: 짧은 프로젝트명 또는 고객사명 (예: "삼성카드", "Mesh", "기술검토")
+3. details: 해당 프로젝트에서 수행한 진행사항을 2~3줄로 구체적으로 작성
+   - 예시: "모니모 APIM imanager 프로젝트 API 설계 및 구현, 인증 모듈 개발, QA 환경 배포"
+4. description: 진행사항 **완전 상세내용**. 모든 세부 작업을 빠짐없이 "- " 접두사로 나열
+   - 줄바꿈(\n)을 사용하여 각 항목 구분
+   - 커밋 메시지, MR, Jira 이슈의 내용을 최대한 반영하여 구체적으로 기술
+   - 각 항목을 기술적으로 상세하게 작성 (어떤 모듈, 어떤 기능, 어떤 환경 등)
+   - 예시: "- API Gateway 라우팅 설정 및 인증 미들웨어 구현\n- JWT 토큰 검증 로직 추가 (RS256 알고리즘)\n- 사용자 권한 체계 설계 (RBAC) 및 DB 스키마 반영\n- QA 환경 배포 및 통합 테스트 수행\n- API 문서 (Swagger) 업데이트"
+5. due_date: YYYY-MM-DD 형식
+6. 메일 제목/내용, 커밋 메시지, Jira 이슈를 분석해서 프로젝트를 식별
+7. "this_week" (금주실적): 커밋, MR, 완료된 Jira 이슈, 메일 기반으로 해당 기간의 모든 업무를 빠짐없이 포함. progress는 100
+8. "next_week" (차주계획): 미완료 Jira 이슈 기반으로 구체적 계획 작성. progress는 0
+9. 하나의 프로젝트에 대해 세부 업무가 많으면 title이 같은 Task를 여러 개 생성하여 카테고리별로 분리
+   - 예: title "삼성카드"로 "API 개발" Task와 "테스트/배포" Task를 분리
+10. summary: 금주 전체 업무를 3~5줄로 요약 (주요 성과, 진행 현황, 특이사항 포함)
+`)
+	} else if style == "detailed" {
 		b.WriteString(`요구사항:
 1. 프로젝트/고객사별로 업무를 그룹화
 2. title: 짧은 프로젝트명 또는 고객사명 (예: "삼성카드", "Mesh", "기술검토")
@@ -250,7 +295,8 @@ func buildPrompt(items []model.SyncItem, startDate, endDate, style string) strin
   "summary": ""
 }
 
-description은 상세 스타일일 때만 채워주고, 간결 스타일이면 빈 문자열로 두세요.
+description은 상세/완전상세 스타일일 때만 채워주고, 간결 스타일이면 빈 문자열로 두세요.
+summary는 완전상세 스타일일 때만 채워주세요.
 JSON만 응답하고 다른 텍스트는 포함하지 마세요.`)
 
 	return b.String()

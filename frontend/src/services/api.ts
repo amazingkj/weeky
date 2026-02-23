@@ -5,7 +5,7 @@ export interface GenerateReportRequest {
   items: SyncItem[];
   start_date: string;
   end_date: string;
-  style?: 'concise' | 'detailed';
+  style?: 'concise' | 'detailed' | 'very_detailed';
 }
 
 export interface GenerateReportResponse {

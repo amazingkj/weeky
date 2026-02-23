@@ -60,6 +60,7 @@ export interface SyncItem {
   date: string;
   url: string;
   type: 'commit' | 'pr' | 'mr' | 'issue' | 'issue_done' | 'issue_todo' | 'email';
+  source?: string; // 출처 프로젝트명 (e.g., "group/project")
 }
 
 export interface SyncResult {

@@ -188,6 +188,8 @@ func (s *GitLabService) fetchCommits(req model.GitLabSyncRequest) ([]model.SyncI
 		return nil, err
 	}
 
+	projectLabel := fmt.Sprintf("%s/%s", req.Namespace, req.Project)
+
 	items := make([]model.SyncItem, 0, len(commits))
 	for _, c := range commits {
 		title := c.Title
@@ -202,10 +204,11 @@ func (s *GitLabService) fetchCommits(req model.GitLabSyncRequest) ([]model.SyncI
 		}
 
 		items = append(items, model.SyncItem{
-			Title: title,
-			Date:  date,
-			URL:   c.WebURL,
-			Type:  "commit",
+			Title:  title,
+			Date:   date,
+			URL:    c.WebURL,
+			Type:   "commit",
+			Source: projectLabel,
 		})
 	}
 
@@ -243,13 +246,16 @@ func (s *GitLabService) fetchMRs(req model.GitLabSyncRequest) ([]model.SyncItem,
 		return nil, err
 	}
 
+	projectLabel := fmt.Sprintf("%s/%s", req.Namespace, req.Project)
+
 	items := make([]model.SyncItem, 0)
 	for _, mr := range mrs {
 		items = append(items, model.SyncItem{
-			Title: fmt.Sprintf("!%d %s", mr.IID, mr.Title),
-			Date:  mr.CreatedAt.Format("2006-01-02"),
-			URL:   mr.WebURL,
-			Type:  "mr",
+			Title:  fmt.Sprintf("!%d %s", mr.IID, mr.Title),
+			Date:   mr.CreatedAt.Format("2006-01-02"),
+			URL:    mr.WebURL,
+			Type:   "mr",
+			Source: projectLabel,
 		})
 	}
 
