@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Report, TemplateStyle, defaultTemplateStyle } from '../types';
+import { Report, Task, TemplateStyle, defaultTemplateStyle } from '../types';
 import { formatDateShort, getWeekRange } from '../utils/date';
 
 interface PptPreviewProps {
@@ -117,14 +117,35 @@ function getFullDetails(t: { details?: string; description?: string }): string {
   return text;
 }
 
+// Group tasks by title (preserving order of first appearance)
+interface GroupedTask {
+  title: string;
+  items: Task[];
+}
+
+function groupTasksByTitle(tasks: Task[]): GroupedTask[] {
+  const groups: GroupedTask[] = [];
+  const indexMap = new Map<string, number>();
+  for (const task of tasks) {
+    const key = task.title.trim();
+    if (indexMap.has(key)) {
+      groups[indexMap.get(key)!].items.push(task);
+    } else {
+      indexMap.set(key, groups.length);
+      groups.push({ title: key, items: [task] });
+    }
+  }
+  return groups;
+}
+
 function TaskRows({ tasks, maxItems, dateRange, showProgress }: {
   tasks: Report['this_week'];
   maxItems: number;
   dateRange: string;
   showProgress?: boolean;
 }) {
-  const visible = tasks.slice(0, maxItems);
-  const textSize = getPreviewTextSize(tasks.length);
+  const groups = groupTasksByTitle(tasks);
+  const textSize = getPreviewTextSize(groups.length);
   return (
     <table className={`w-full border-collapse ${textSize} flex-1`}>
       <tbody>
@@ -137,53 +158,71 @@ function TaskRows({ tasks, maxItems, dateRange, showProgress }: {
           )}
         </tr>
         <tr>
+          {/* Title column */}
           <Cell valign="top" className="whitespace-pre-line">
-            {visible.map((t, i) => {
-              const fullLines = getFullDetails(t).split('\n');
-              return (
-                <div key={i} className="mb-2">
-                  <div>{i + 1}. {t.title}</div>
-                  {fullLines.slice(1).map((_, idx) => (
-                    <div key={idx}>&nbsp;</div>
-                  ))}
-                </div>
-              );
-            })}
-            {tasks.length > maxItems && (
-              <div className="text-gray-500">+{tasks.length - maxItems}개 더</div>
+            {groups.slice(0, maxItems).map((g, gi) => (
+              <div key={gi} className="mb-2">
+                <div>{gi + 1}. {g.title}</div>
+                {/* Spacer lines for all sub-items' detail lines (except first line of first item) */}
+                {g.items.map((t, ii) => {
+                  const lines = getFullDetails(t).split('\n');
+                  const spacers = ii === 0 ? lines.length - 1 : lines.length;
+                  return Array.from({ length: spacers }, (_, idx) => (
+                    <div key={`${ii}-${idx}`}>&nbsp;</div>
+                  ));
+                })}
+              </div>
+            ))}
+            {groups.length > maxItems && (
+              <div className="text-gray-500">+{groups.length - maxItems}개 더</div>
             )}
           </Cell>
+          {/* Details column */}
           <Cell valign="top" className="whitespace-pre-line">
-            {visible.map((t, i) => (
-              <div key={i} className="mb-2 whitespace-pre-line">{getFullDetails(t)}</div>
+            {groups.slice(0, maxItems).map((g, gi) => (
+              <div key={gi} className="mb-2">
+                {g.items.map((t, ii) => (
+                  <div key={ii} className="whitespace-pre-line">{getFullDetails(t)}</div>
+                ))}
+              </div>
             ))}
           </Cell>
+          {/* Date column */}
           <Cell valign="top" align="center">
-            {visible.map((t, i) => {
-              const fullLines = getFullDetails(t).split('\n');
-              return (
-                <div key={i} className="mb-2">
-                  <div>{t.due_date || '-'}</div>
-                  {fullLines.slice(1).map((_, idx) => (
-                    <div key={idx}>&nbsp;</div>
-                  ))}
-                </div>
-              );
-            })}
+            {groups.slice(0, maxItems).map((g, gi) => (
+              <div key={gi} className="mb-2">
+                {g.items.map((t, ii) => {
+                  const lines = getFullDetails(t).split('\n');
+                  return (
+                    <div key={ii}>
+                      <div>{t.due_date || '-'}</div>
+                      {lines.slice(1).map((_, idx) => (
+                        <div key={idx}>&nbsp;</div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </Cell>
+          {/* Progress column */}
           {showProgress && (
             <Cell valign="top" align="center">
-              {visible.map((t, i) => {
-                const fullLines = getFullDetails(t).split('\n');
-                return (
-                  <div key={i} className="mb-2">
-                    <div>{t.progress}%</div>
-                    {fullLines.slice(1).map((_, idx) => (
-                      <div key={idx}>&nbsp;</div>
-                    ))}
-                  </div>
-                );
-              })}
+              {groups.slice(0, maxItems).map((g, gi) => (
+                <div key={gi} className="mb-2">
+                  {g.items.map((t, ii) => {
+                    const lines = getFullDetails(t).split('\n');
+                    return (
+                      <div key={ii}>
+                        <div>{t.progress}%</div>
+                        {lines.slice(1).map((_, idx) => (
+                          <div key={idx}>&nbsp;</div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </Cell>
           )}
         </tr>

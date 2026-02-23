@@ -35,14 +35,44 @@ const ROW_H = {
 
 const HEADER_COL_W = [1.3, 2.2, 1.1, 1.5, 1.1, 2.2];
 
+// Group tasks by title (preserving order of first appearance)
+interface GroupedTask {
+  title: string;
+  items: Task[];
+}
+
+function groupTasksByTitle(tasks: Task[]): GroupedTask[] {
+  const groups: GroupedTask[] = [];
+  const indexMap = new Map<string, number>();
+
+  for (const task of tasks) {
+    const key = task.title.trim();
+    if (indexMap.has(key)) {
+      groups[indexMap.get(key)!].items.push(task);
+    } else {
+      indexMap.set(key, groups.length);
+      groups.push({ title: key, items: [task] });
+    }
+  }
+  return groups;
+}
+
+// Get full detail text for a single task (details + description)
+function getTaskDetailText(t: Task): string {
+  let text = t.details || '-';
+  if (t.description) text += '\n' + t.description;
+  return text;
+}
+
 // Calculate body font size based on total content lines
 function getBodyFontSize(tasks: Task[]): number {
+  const groups = groupTasksByTitle(tasks);
   let totalLines = 0;
-  for (const t of tasks) {
-    let text = t.details || '-';
-    if (t.description) text += '\n' + t.description;
-    const detailLines = text.split('\n').length;
-    totalLines += detailLines + 1; // title line + detail lines + spacing
+  for (const g of groups) {
+    for (const t of g.items) {
+      totalLines += getTaskDetailText(t).split('\n').length;
+    }
+    totalLines += 1; // spacing between groups
   }
   if (totalLines <= 18) return 10;
   if (totalLines <= 25) return 9;
@@ -126,26 +156,51 @@ function createTaskSlide(pptx: PptxGenJS, report: Report, config: TaskSlideConfi
   );
   currentY += ROW_H.section;
 
-  // Row 3-4: Body (column headers + task content)
+  // Row 3-4: Body (column headers + task content) — grouped by title
   const bodyFontSize = getBodyFontSize(config.tasks);
-  const alignedData = config.tasks.map((t, i) => {
-    // Combine details + description into the "진행 사항" column
-    let detailText = t.details || '-';
-    if (t.description) {
-      detailText += '\n' + t.description;
-    }
-    const detailLines = detailText.split('\n');
-    const lineCount = detailLines.length;
-    const titleLines = [`${i + 1}. ${t.title}`, ...Array(lineCount - 1).fill('')];
-    const dateLines = [t.due_date || '-', ...Array(lineCount - 1).fill('')];
-    const progressLines = [`${t.progress}%`, ...Array(lineCount - 1).fill('')];
-    return { titleLines, detailLines, dateLines, progressLines };
+  const groups = groupTasksByTitle(config.tasks);
+
+  const groupData = groups.map((g, gi) => {
+    const titleParts: string[] = [];
+    const detailParts: string[] = [];
+    const dateParts: string[] = [];
+    const progressParts: string[] = [];
+
+    g.items.forEach((t, ii) => {
+      const detailText = getTaskDetailText(t);
+      const detailLines = detailText.split('\n');
+      const lineCount = detailLines.length;
+
+      // Title only on the first line of the first item in the group
+      if (ii === 0) {
+        titleParts.push(`${gi + 1}. ${g.title}`);
+      } else {
+        titleParts.push('');
+      }
+      // Pad remaining lines for this item
+      for (let l = 1; l < lineCount; l++) titleParts.push('');
+
+      detailParts.push(...detailLines);
+
+      dateParts.push(t.due_date || '-');
+      for (let l = 1; l < lineCount; l++) dateParts.push('');
+
+      progressParts.push(`${t.progress}%`);
+      for (let l = 1; l < lineCount; l++) progressParts.push('');
+    });
+
+    return {
+      titleLines: titleParts,
+      detailLines: detailParts,
+      dateLines: dateParts,
+      progressLines: progressParts,
+    };
   });
 
-  const taskTitles = alignedData.map(d => d.titleLines.join('\n')).join('\n\n');
-  const taskDetails = alignedData.map(d => d.detailLines.join('\n')).join('\n\n');
-  const taskDates = alignedData.map(d => d.dateLines.join('\n')).join('\n\n');
-  const taskProgress = alignedData.map(d => d.progressLines.join('\n')).join('\n\n');
+  const taskTitles = groupData.map(d => d.titleLines.join('\n')).join('\n\n');
+  const taskDetails = groupData.map(d => d.detailLines.join('\n')).join('\n\n');
+  const taskDates = groupData.map(d => d.dateLines.join('\n')).join('\n\n');
+  const taskProgress = groupData.map(d => d.progressLines.join('\n')).join('\n\n');
 
   let bodyColW: number[];
   let bodyHeaderRow: PptxGenJS.TableCell[];
