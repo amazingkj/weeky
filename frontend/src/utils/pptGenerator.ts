@@ -39,7 +39,9 @@ const HEADER_COL_W = [1.3, 2.2, 1.1, 1.5, 1.1, 2.2];
 function getBodyFontSize(tasks: Task[]): number {
   let totalLines = 0;
   for (const t of tasks) {
-    const detailLines = (t.details || '-').split('\n').length;
+    let text = t.details || '-';
+    if (t.description) text += '\n' + t.description;
+    const detailLines = text.split('\n').length;
     totalLines += detailLines + 1; // title line + detail lines + spacing
   }
   if (totalLines <= 18) return 10;
@@ -127,8 +129,12 @@ function createTaskSlide(pptx: PptxGenJS, report: Report, config: TaskSlideConfi
   // Row 3-4: Body (column headers + task content)
   const bodyFontSize = getBodyFontSize(config.tasks);
   const alignedData = config.tasks.map((t, i) => {
-    const details = t.details || '-';
-    const detailLines = details.split('\n');
+    // Combine details + description into the "진행 사항" column
+    let detailText = t.details || '-';
+    if (t.description) {
+      detailText += '\n' + t.description;
+    }
+    const detailLines = detailText.split('\n');
     const lineCount = detailLines.length;
     const titleLines = [`${i + 1}. ${t.title}`, ...Array(lineCount - 1).fill('')];
     const dateLines = [t.due_date || '-', ...Array(lineCount - 1).fill('')];

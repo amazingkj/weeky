@@ -1,4 +1,4 @@
-import { useCallback, useRef, memo } from 'react';
+import { useState, useCallback, useRef, memo } from 'react';
 import { Task } from '../types';
 
 interface TaskListProps {
@@ -140,6 +140,8 @@ const TaskItem = memo(function TaskItem({
   onMoveUp,
   onMoveDown
 }: TaskItemProps) {
+  const [showDescription, setShowDescription] = useState(() => !!task.description);
+
   const progressColor = task.progress === 100
     ? 'bg-neutral-900'
     : task.progress >= 50
@@ -195,14 +197,41 @@ const TaskItem = memo(function TaskItem({
 
       {/* Details */}
       <textarea
-        placeholder={showProgress ? "진행 사항 상세 내용" : "계획 세부 내용"}
+        placeholder={showProgress ? "진행 사항" : "계획 세부 내용"}
         value={task.details || ''}
         onChange={(e) => onUpdate('details', e.target.value)}
-        rows={2}
+        rows={1}
         className="w-full mt-1.5 px-2.5 py-1.5 bg-white border border-neutral-200 rounded-md
                    focus:outline-none focus:ring-1 focus:ring-neutral-400 focus:border-neutral-400
                    text-neutral-700 text-xs placeholder:text-neutral-300 transition-colors resize-none"
       />
+
+      {/* Description toggle + textarea */}
+      <div className="mt-1.5">
+        <button
+          type="button"
+          onClick={() => setShowDescription(!showDescription)}
+          className="flex items-center gap-1 text-[11px] text-neutral-400 hover:text-neutral-600 transition-colors"
+        >
+          <svg className={`w-3 h-3 transition-transform ${showDescription ? 'rotate-90' : ''}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+          상세내용
+          {task.description ? <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full" /> : null}
+        </button>
+        {showDescription && (
+          <textarea
+            placeholder="- 세부 작업 항목을 입력하세요&#10;- 여러 줄로 작성 가능합니다"
+            value={task.description || ''}
+            onChange={(e) => onUpdate('description', e.target.value)}
+            rows={3}
+            className="w-full mt-1 px-2.5 py-1.5 bg-white border border-neutral-200 rounded-md
+                       focus:outline-none focus:ring-1 focus:ring-neutral-400 focus:border-neutral-400
+                       text-neutral-700 text-xs placeholder:text-neutral-300 transition-colors resize-y"
+          />
+        )}
+      </div>
 
       {/* Bottom Row */}
       <div className="flex flex-wrap items-center gap-4 mt-2.5">

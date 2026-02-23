@@ -111,6 +111,12 @@ function getPreviewTextSize(taskCount: number): string {
   return 'text-[10px]';
 }
 
+function getFullDetails(t: { details?: string; description?: string }): string {
+  let text = t.details || '-';
+  if (t.description) text += '\n' + t.description;
+  return text;
+}
+
 function TaskRows({ tasks, maxItems, dateRange, showProgress }: {
   tasks: Report['this_week'];
   maxItems: number;
@@ -133,11 +139,11 @@ function TaskRows({ tasks, maxItems, dateRange, showProgress }: {
         <tr>
           <Cell valign="top" className="whitespace-pre-line">
             {visible.map((t, i) => {
-              const detailLines = (t.details || '-').split('\n');
+              const fullLines = getFullDetails(t).split('\n');
               return (
                 <div key={i} className="mb-2">
                   <div>{i + 1}. {t.title}</div>
-                  {detailLines.slice(1).map((_, idx) => (
+                  {fullLines.slice(1).map((_, idx) => (
                     <div key={idx}>&nbsp;</div>
                   ))}
                 </div>
@@ -149,16 +155,16 @@ function TaskRows({ tasks, maxItems, dateRange, showProgress }: {
           </Cell>
           <Cell valign="top" className="whitespace-pre-line">
             {visible.map((t, i) => (
-              <div key={i} className="mb-2 whitespace-pre-line">{t.details || '-'}</div>
+              <div key={i} className="mb-2 whitespace-pre-line">{getFullDetails(t)}</div>
             ))}
           </Cell>
           <Cell valign="top" align="center">
             {visible.map((t, i) => {
-              const detailLines = (t.details || '-').split('\n');
+              const fullLines = getFullDetails(t).split('\n');
               return (
                 <div key={i} className="mb-2">
                   <div>{t.due_date || '-'}</div>
-                  {detailLines.slice(1).map((_, idx) => (
+                  {fullLines.slice(1).map((_, idx) => (
                     <div key={idx}>&nbsp;</div>
                   ))}
                 </div>
@@ -168,11 +174,11 @@ function TaskRows({ tasks, maxItems, dateRange, showProgress }: {
           {showProgress && (
             <Cell valign="top" align="center">
               {visible.map((t, i) => {
-                const detailLines = (t.details || '-').split('\n');
+                const fullLines = getFullDetails(t).split('\n');
                 return (
                   <div key={i} className="mb-2">
                     <div>{t.progress}%</div>
-                    {detailLines.slice(1).map((_, idx) => (
+                    {fullLines.slice(1).map((_, idx) => (
                       <div key={idx}>&nbsp;</div>
                     ))}
                   </div>

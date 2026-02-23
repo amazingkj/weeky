@@ -42,10 +42,11 @@ type AuthResponse struct {
 }
 
 type Task struct {
-	Title    string `json:"title"`
-	Details  string `json:"details,omitempty"`
-	DueDate  string `json:"due_date"`
-	Progress int    `json:"progress"` // 0-100
+	Title       string `json:"title"`
+	Details     string `json:"details,omitempty"`
+	Description string `json:"description,omitempty"` // 진행사항 상세내용
+	DueDate     string `json:"due_date"`
+	Progress    int    `json:"progress"` // 0-100
 }
 
 type Template struct {

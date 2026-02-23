@@ -1,6 +1,7 @@
 export interface Task {
   title: string;
-  details?: string; // 진행 사항 상세 내용
+  details?: string; // 진행 사항
+  description?: string; // 진행사항 상세내용
   due_date: string;
   progress: number; // 0-100
 }
