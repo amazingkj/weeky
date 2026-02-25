@@ -70,9 +70,9 @@ func main() {
 		AllowHeaders: allowHeaders,
 	}))
 
-	// Rate limiting - 60 requests per minute per IP
+	// Rate limiting - 300 requests per minute per IP
 	app.Use(limiter.New(limiter.Config{
-		Max:        60,
+		Max:        300,
 		Expiration: 1 * time.Minute,
 	}))
 
@@ -114,10 +114,15 @@ func main() {
 	protected.Put("/templates/:id", h.UpdateTemplate)
 	protected.Delete("/templates/:id", h.DeleteTemplate)
 
+	// User list (for team member selection)
+	protected.Get("/users", h.GetUsers)
+
 	// Report routes
 	protected.Get("/reports", h.GetReports)
 	protected.Get("/reports/:id", h.GetReport)
 	protected.Post("/reports", h.CreateReport)
+	protected.Put("/reports/:id", h.UpdateReport)
+	protected.Post("/reports/save", h.SaveReport)
 
 	// Config routes
 	protected.Get("/config", h.GetConfig)
@@ -134,6 +139,31 @@ func main() {
 
 	// AI routes
 	protected.Post("/ai/generate", h.GenerateAIReport)
+
+	// Team routes
+	protected.Post("/teams", h.CreateTeam)
+	protected.Get("/teams", h.GetMyTeams)
+	protected.Get("/teams/:id", h.GetTeam)
+	protected.Put("/teams/:id", h.UpdateTeam)
+	protected.Delete("/teams/:id", h.DeleteTeam)
+
+	// Team member routes
+	protected.Post("/teams/:id/members", h.AddTeamMember)
+	protected.Get("/teams/:id/members", h.GetTeamMembers)
+	protected.Put("/teams/:id/members/:memberId", h.UpdateTeamMember)
+	protected.Delete("/teams/:id/members/:memberId", h.RemoveTeamMember)
+
+	// Team submission routes
+	protected.Post("/teams/:id/submit", h.SubmitReport)
+	protected.Delete("/teams/:id/submit/:reportId", h.UnsubmitReport)
+	protected.Get("/teams/:id/submissions", h.GetTeamSubmissions)
+	protected.Get("/teams/:id/my-submission", h.GetMySubmission)
+
+	// Team report routes (leader/group_leader)
+	protected.Get("/teams/:id/reports/:reportId", h.GetTeamMemberReport)
+	protected.Put("/teams/:id/reports/:reportId", h.UpdateTeamMemberReport)
+	protected.Get("/teams/:id/consolidated", h.GetConsolidatedReport)
+	protected.Post("/teams/:id/ai/summarize", h.SummarizeConsolidatedReport)
 
 	// Backward-compatible /api routes (redirect to /api/v1)
 	app.Use("/api", func(c *fiber.Ctx) error {

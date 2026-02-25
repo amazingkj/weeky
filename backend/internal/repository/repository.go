@@ -29,16 +29,45 @@ type IRepository interface {
 	UpdateTemplate(id int64, name, style string) error
 	DeleteTemplate(id int64) error
 
+	// User list
+	GetAllUsers() ([]model.User, error)
+
 	// Report methods
 	GetReport(id int64, userID int64) (*model.Report, error)
 	CreateReport(req model.CreateReportRequest, userID int64) (*model.Report, error)
+	UpdateReport(id int64, req model.CreateReportRequest, userID int64) error
 	GetReportsByUser(userID int64) ([]model.Report, error)
+	GetReportByDateAndUser(reportDate string, userID int64) (*model.Report, error)
 
 	// Config methods
 	GetConfigs(userID int64) ([]model.Config, error)
 	GetConfig(key string, userID int64) (*model.Config, error)
 	SetConfig(key, value string, userID int64) error
 	DeleteConfig(key string, userID int64) error
+
+	// Team methods
+	CreateTeam(name, description string, createdBy int64) (*model.Team, error)
+	GetTeam(id int64) (*model.Team, error)
+	GetTeamsByUser(userID int64) ([]model.Team, error)
+	UpdateTeam(id int64, name, description string) error
+	DeleteTeam(id int64) error
+
+	// Team member methods
+	AddTeamMember(teamID, userID int64, role model.TeamRole, roleCode model.RoleCode) (*model.TeamMember, error)
+	GetTeamMembers(teamID int64) ([]model.TeamMember, error)
+	GetTeamMember(teamID, userID int64) (*model.TeamMember, error)
+	UpdateTeamMember(id int64, role model.TeamRole, roleCode model.RoleCode) error
+	RemoveTeamMember(id int64) error
+
+	// Report submission methods
+	SubmitReport(reportID, teamID, userID int64) (*model.ReportSubmission, error)
+	UnsubmitReport(reportID, teamID int64) error
+	GetSubmissions(teamID int64, reportDate string) ([]model.ReportSubmission, error)
+	GetSubmissionByUser(teamID, userID int64, reportDate string) (*model.ReportSubmission, error)
+
+	// Consolidated report
+	GetReportByID(id int64) (*model.Report, error)
+	UpdateReportByID(id int64, req model.CreateReportRequest) error
 }
 
 // Ensure Repository implements IRepository

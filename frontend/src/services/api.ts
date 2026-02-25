@@ -1,4 +1,4 @@
-import { Template, Report, SyncResult, SyncItem, Task, GitHubSyncRequest, GitLabSyncRequest, JiraSyncRequest, HiworksSyncRequest, ConfigMap, AuthResponse, LoginRequest, RegisterRequest, User, InviteCode, GitLabProject } from '../types';
+import { Template, Report, SyncResult, SyncItem, Task, GitHubSyncRequest, GitLabSyncRequest, JiraSyncRequest, HiworksSyncRequest, ConfigMap, AuthResponse, LoginRequest, RegisterRequest, User, InviteCode, GitLabProject, Team, TeamMember, TeamRole, RoleCode, ReportSubmission, TeamMemberWithSubmission, ConsolidatedReport } from '../types';
 
 // AI Generate types
 export interface GenerateReportRequest {
@@ -218,12 +218,30 @@ export async function getReport(id: number): Promise<Report> {
 }
 
 export async function saveReport(report: Omit<Report, 'id'>): Promise<Report> {
-  const res = await apiFetch(`${API_BASE}/reports`, {
+  const res = await apiFetch(`${API_BASE}/reports/save`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(report),
   });
   if (!res.ok) throw new Error('Failed to save report');
+  return res.json();
+}
+
+export async function getReports(): Promise<Report[]> {
+  const res = await apiFetch(`${API_BASE}/reports`);
+  if (!res.ok) throw new Error('Failed to fetch reports');
+  return res.json();
+}
+
+export async function getUsers(): Promise<User[]> {
+  const res = await apiFetch(`${API_BASE}/users`);
+  if (!res.ok) throw new Error('Failed to fetch users');
+  return res.json();
+}
+
+export async function getMySubmission(teamId: number, reportDate: string): Promise<{ submitted: boolean; submission?: ReportSubmission }> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/my-submission?report_date=${reportDate}`);
+  if (!res.ok) return { submitted: false };
   return res.json();
 }
 
@@ -320,6 +338,137 @@ export async function generateAIReport(request: GenerateReportRequest): Promise<
   if (!res.ok) {
     const error = await res.json();
     throw new Error(error.error || 'AI 보고서 생성에 실패했습니다');
+  }
+  return res.json();
+}
+
+// ============ Team API ============
+
+export async function createTeam(name: string, description: string = ''): Promise<Team> {
+  const res = await apiFetch(`${API_BASE}/teams`, {
+    method: 'POST',
+    body: JSON.stringify({ name, description }),
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || '팀 생성에 실패했습니다');
+  }
+  return res.json();
+}
+
+export async function getMyTeams(): Promise<Team[]> {
+  const res = await apiFetch(`${API_BASE}/teams`);
+  if (!res.ok) throw new Error('팀 목록 조회에 실패했습니다');
+  return res.json();
+}
+
+export async function getTeam(id: number): Promise<Team> {
+  const res = await apiFetch(`${API_BASE}/teams/${id}`);
+  if (!res.ok) throw new Error('팀 조회에 실패했습니다');
+  return res.json();
+}
+
+export async function updateTeam(id: number, name: string, description: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/teams/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name, description }),
+  });
+  if (!res.ok) throw new Error('팀 수정에 실패했습니다');
+}
+
+export async function deleteTeam(id: number): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/teams/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('팀 삭제에 실패했습니다');
+}
+
+// ============ Team Member API ============
+
+export async function addTeamMember(teamId: number, email: string, role: TeamRole = 'member', roleCode: RoleCode = 'S'): Promise<TeamMember> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ email, role, role_code: roleCode }),
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || '멤버 추가에 실패했습니다');
+  }
+  return res.json();
+}
+
+export async function getTeamMembers(teamId: number): Promise<TeamMember[]> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/members`);
+  if (!res.ok) throw new Error('멤버 목록 조회에 실패했습니다');
+  return res.json();
+}
+
+export async function updateTeamMember(teamId: number, memberId: number, role: TeamRole, roleCode: RoleCode): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/members/${memberId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ role, role_code: roleCode }),
+  });
+  if (!res.ok) throw new Error('멤버 수정에 실패했습니다');
+}
+
+export async function removeTeamMember(teamId: number, memberId: number): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/members/${memberId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('멤버 제거에 실패했습니다');
+}
+
+// ============ Submission API ============
+
+export async function submitReport(teamId: number, reportId: number): Promise<ReportSubmission> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/submit`, {
+    method: 'POST',
+    body: JSON.stringify({ report_id: reportId }),
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || '보고서 제출에 실패했습니다');
+  }
+  return res.json();
+}
+
+export async function unsubmitReport(teamId: number, reportId: number): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/submit/${reportId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('제출 취소에 실패했습니다');
+}
+
+// ============ Team Submissions / Consolidated API ============
+
+export async function getTeamSubmissions(teamId: number, reportDate: string): Promise<TeamMemberWithSubmission[]> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/submissions?report_date=${reportDate}`);
+  if (!res.ok) throw new Error('제출 현황 조회에 실패했습니다');
+  return res.json();
+}
+
+export async function getTeamMemberReport(teamId: number, reportId: number): Promise<Report> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/reports/${reportId}`);
+  if (!res.ok) throw new Error('보고서 조회에 실패했습니다');
+  return res.json();
+}
+
+export async function updateTeamMemberReport(teamId: number, reportId: number, report: Omit<Report, 'id'>): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/reports/${reportId}`, {
+    method: 'PUT',
+    body: JSON.stringify(report),
+  });
+  if (!res.ok) throw new Error('보고서 수정에 실패했습니다');
+}
+
+export async function getConsolidatedReport(teamId: number, reportDate: string): Promise<ConsolidatedReport> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/consolidated?report_date=${reportDate}`);
+  if (!res.ok) throw new Error('취합 데이터 조회에 실패했습니다');
+  return res.json();
+}
+
+export async function summarizeConsolidatedReport(teamId: number, reportDate: string): Promise<{ this_week: Task[]; next_week: Task[]; summary: string }> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/ai/summarize`, {
+    method: 'POST',
+    body: JSON.stringify({ report_date: reportDate }),
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || 'AI 요약 생성에 실패했습니다');
   }
   return res.json();
 }

@@ -1,5 +1,5 @@
 import PptxGenJS from 'pptxgenjs';
-import { Report, TemplateStyle, Task, defaultTemplateStyle } from '../types';
+import { Report, TemplateStyle, Task, ConsolidatedReport, MemberReportData, defaultTemplateStyle } from '../types';
 import { formatDateShort, getWeekRange, getNextWeekRange } from './date';
 
 // Template colors
@@ -283,4 +283,285 @@ function createTaskSlide(pptx: PptxGenJS, report: Report, config: TaskSlideConfi
 function generateFilename(report: Report): string {
   const date = report.report_date.replace(/-/g, '');
   return `${report.team_name}_${report.author_name}_주간보고_${date}.pptx`;
+}
+
+// ============ Consolidated PPT (Team) ============
+
+interface ConsolidatedTaskItem {
+  task: Task;
+  memberName: string;
+  roleCode: string;
+}
+
+interface ConsolidatedGroup {
+  title: string;
+  items: ConsolidatedTaskItem[];
+}
+
+function groupConsolidatedTasks(
+  members: MemberReportData[],
+  section: 'this_week' | 'next_week'
+): ConsolidatedGroup[] {
+  const groups: ConsolidatedGroup[] = [];
+  const indexMap = new Map<string, number>();
+
+  for (const m of members) {
+    if (!m.report) continue;
+    const tasks = section === 'this_week' ? m.report.this_week : m.report.next_week;
+    for (const t of tasks) {
+      const key = t.title.trim();
+      const item: ConsolidatedTaskItem = {
+        task: t,
+        memberName: m.user_name,
+        roleCode: m.role_code,
+      };
+      if (indexMap.has(key)) {
+        groups[indexMap.get(key)!].items.push(item);
+      } else {
+        indexMap.set(key, groups.length);
+        groups.push({ title: key, items: [item] });
+      }
+    }
+  }
+  return groups;
+}
+
+function mergeIssuesNotes(
+  members: MemberReportData[],
+  field: 'issues' | 'notes' | 'next_issues' | 'next_notes'
+): string {
+  return members
+    .filter(m => m.report && m.report[field])
+    .map(m => `[${m.user_name}] ${m.report![field]}`)
+    .join('\n');
+}
+
+function getConsolidatedFontSize(groups: ConsolidatedGroup[]): number {
+  let totalLines = 0;
+  for (const g of groups) {
+    totalLines += 1; // group title
+    for (const item of g.items) {
+      const detail = item.task.details || '-';
+      totalLines += detail.split('\n').length;
+      if (item.task.description) totalLines += item.task.description.split('\n').length;
+    }
+  }
+  if (totalLines <= 15) return 9;
+  if (totalLines <= 22) return 8;
+  if (totalLines <= 30) return 7;
+  return 6;
+}
+
+function buildConsolidatedColumnText(groups: ConsolidatedGroup[]) {
+  const titleParts: string[] = [];
+  const detailParts: string[] = [];
+  const dateParts: string[] = [];
+  const progressParts: string[] = [];
+
+  groups.forEach((g, gi) => {
+    const itemTexts = g.items.map(item => {
+      const memberTag = `(${item.memberName} ${item.roleCode})`;
+      let detail = `${memberTag} ${item.task.details || '-'}`;
+      if (item.task.description) detail += '\n' + item.task.description;
+      return { detail, date: item.task.due_date || '-', progress: `${item.task.progress}%` };
+    });
+
+    // Title only for first line
+    titleParts.push(`${gi + 1}. ${g.title}`);
+    detailParts.push(itemTexts[0]?.detail || '-');
+    dateParts.push(itemTexts[0]?.date || '-');
+    progressParts.push(itemTexts[0]?.progress || '0%');
+
+    // Rest of items in group
+    for (let i = 1; i < itemTexts.length; i++) {
+      titleParts.push('');
+      detailParts.push(itemTexts[i].detail);
+      dateParts.push(itemTexts[i].date);
+      progressParts.push(itemTexts[i].progress);
+    }
+
+    // Spacing between groups
+    if (gi < groups.length - 1) {
+      titleParts.push('');
+      detailParts.push('');
+      dateParts.push('');
+      progressParts.push('');
+    }
+  });
+
+  return {
+    titles: titleParts.join('\n'),
+    details: detailParts.join('\n'),
+    dates: dateParts.join('\n'),
+    progress: progressParts.join('\n'),
+  };
+}
+
+export async function generateConsolidatedPPT(
+  data: ConsolidatedReport,
+  _style: TemplateStyle = defaultTemplateStyle,
+  leaderName?: string
+): Promise<void> {
+  const pptx = new PptxGenJS();
+  pptx.author = leaderName || data.team.name;
+  pptx.title = `${data.team.name} 주간업무보고`;
+  pptx.subject = '주간업무보고';
+  pptx.layout = 'LAYOUT_4x3';
+
+  const thisWeekGroups = groupConsolidatedTasks(data.members, 'this_week');
+  const nextWeekGroups = groupConsolidatedTasks(data.members, 'next_week');
+
+  const issues = mergeIssuesNotes(data.members, 'issues') || mergeIssuesNotes(data.members, 'next_issues');
+  const notes = mergeIssuesNotes(data.members, 'notes') || mergeIssuesNotes(data.members, 'next_notes');
+
+  const dateRange = getWeekRange(data.report_date);
+  const nextDateRange = getNextWeekRange(data.report_date);
+
+  const displayAuthor = leaderName || data.team.name;
+
+  // Determine body font size based on total content
+  const allGroups = [...thisWeekGroups, ...nextWeekGroups];
+  const bodyFontSize = getConsolidatedFontSize(allGroups);
+
+  const slide = pptx.addSlide();
+  let currentY = LAYOUT.y;
+
+  // Row 1: Header
+  slide.addTable(
+    [[
+      { text: '프로젝트명', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+      { text: data.team.name, options: { align: 'center' } },
+      { text: '보고일자', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+      { text: formatDateShort(data.report_date), options: { align: 'center' } },
+      { text: '작성자', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+      { text: displayAuthor, options: { align: 'center' } },
+    ]],
+    {
+      x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.header,
+      colW: HEADER_COL_W, rowH: [ROW_H.header],
+      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+      fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+    }
+  );
+  currentY += ROW_H.header;
+
+  // Row 2: Two-column section headers (금주실적 | 차주계획)
+  const halfW = LAYOUT.w / 2;
+  slide.addTable(
+    [[
+      { text: '금주실적', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+      { text: '차주계획', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+    ]],
+    {
+      x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.section,
+      colW: [halfW, halfW], rowH: [ROW_H.section],
+      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+      fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+    }
+  );
+  currentY += ROW_H.section;
+
+  // Row 3: Column headers for both sides
+  const leftColHeader: PptxGenJS.TableCell[] = [
+    { text: `계획업무\n(${dateRange})`, options: { fill: { color: COLORS.headerBg }, bold: true, valign: 'middle' } },
+    { text: '완료일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+    { text: '실적(%)', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+  ];
+  const rightColHeader: PptxGenJS.TableCell[] = [
+    { text: `계획업무\n(${nextDateRange})`, options: { fill: { color: COLORS.headerBg }, bold: true, valign: 'middle' } },
+    { text: '완료\n예정일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+  ];
+
+  // Left column headers
+  const leftHeaderW = [2.8, 1.0, 0.9];
+  slide.addTable(
+    [leftColHeader],
+    {
+      x: LAYOUT.x, y: currentY, w: halfW, h: ROW_H.colHeader,
+      colW: leftHeaderW, rowH: [ROW_H.colHeader],
+      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+      fontFace: FONT.face, fontSize: bodyFontSize, valign: 'middle',
+    }
+  );
+
+  // Right column headers
+  const rightHeaderW = [3.2, 1.5];
+  slide.addTable(
+    [rightColHeader],
+    {
+      x: LAYOUT.x + halfW, y: currentY, w: halfW, h: ROW_H.colHeader,
+      colW: rightHeaderW, rowH: [ROW_H.colHeader],
+      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+      fontFace: FONT.face, fontSize: bodyFontSize, valign: 'middle',
+    }
+  );
+  currentY += ROW_H.colHeader;
+
+  // Row 4: Body content (two-column)
+  const leftData = buildConsolidatedColumnText(thisWeekGroups);
+  const rightData = buildConsolidatedColumnText(nextWeekGroups);
+
+  // Left body
+  slide.addTable(
+    [[
+      { text: leftData.titles + '\n' + leftData.details, options: { valign: 'top' } },
+      { text: leftData.dates, options: { valign: 'top', align: 'center' } },
+      { text: leftData.progress, options: { valign: 'top', align: 'center' } },
+    ]],
+    {
+      x: LAYOUT.x, y: currentY, w: halfW, h: ROW_H.body,
+      colW: leftHeaderW, rowH: [ROW_H.body],
+      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+      fontFace: FONT.face, fontSize: bodyFontSize, valign: 'top',
+    }
+  );
+
+  // Right body
+  slide.addTable(
+    [[
+      { text: rightData.titles + '\n' + rightData.details, options: { valign: 'top' } },
+      { text: rightData.dates, options: { valign: 'top', align: 'center' } },
+    ]],
+    {
+      x: LAYOUT.x + halfW, y: currentY, w: halfW, h: ROW_H.body,
+      colW: rightHeaderW, rowH: [ROW_H.body],
+      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+      fontFace: FONT.face, fontSize: bodyFontSize, valign: 'top',
+    }
+  );
+  currentY += ROW_H.body;
+
+  // Row 5: Issues (full width)
+  slide.addTable(
+    [[
+      { text: '이슈/위험사항', options: { fill: { color: COLORS.headerBg }, bold: true } },
+      { text: issues || '-', options: {} },
+    ]],
+    {
+      x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.issue,
+      colW: [1.5, LAYOUT.w - 1.5], rowH: [ROW_H.issue],
+      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+      fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+    }
+  );
+  currentY += ROW_H.issue;
+
+  // Row 6: Notes (full width)
+  slide.addTable(
+    [[
+      { text: '특이사항', options: { fill: { color: COLORS.headerBg }, bold: true } },
+      { text: notes || '-', options: {} },
+    ]],
+    {
+      x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.note,
+      colW: [1.5, LAYOUT.w - 1.5], rowH: [ROW_H.note],
+      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+      fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+    }
+  );
+
+  // Generate filename: {팀이름}_주간보고_{작성자}_{날짜}.pptx
+  const date = data.report_date.replace(/-/g, '');
+  const filename = `${data.team.name}_주간보고_${displayAuthor}_${date}.pptx`;
+  await pptx.writeFile({ fileName: filename });
 }

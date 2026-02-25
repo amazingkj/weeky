@@ -165,3 +165,91 @@ type GitLabProject struct {
 type ConfigUpdateRequest struct {
 	Configs map[string]string `json:"configs"`
 }
+
+// ============ Team types ============
+
+type TeamRole string
+
+const (
+	TeamRoleLeader      TeamRole = "leader"
+	TeamRoleGroupLeader TeamRole = "group_leader"
+	TeamRoleMember      TeamRole = "member"
+)
+
+type RoleCode string
+
+const (
+	RoleCodeS RoleCode = "S" // 선임
+	RoleCodeD RoleCode = "D" // 대리
+	RoleCodeG RoleCode = "G" // 과장
+	RoleCodeC RoleCode = "C" // 차장
+	RoleCodeB RoleCode = "B" // 부장
+)
+
+type Team struct {
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	CreatedBy   int64     `json:"created_by"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type TeamMember struct {
+	ID       int64    `json:"id"`
+	TeamID   int64    `json:"team_id"`
+	UserID   int64    `json:"user_id"`
+	Role     TeamRole `json:"role"`
+	RoleCode RoleCode `json:"role_code"`
+	JoinedAt time.Time `json:"joined_at"`
+	// Joined fields from users table
+	UserName  string `json:"user_name,omitempty"`
+	UserEmail string `json:"user_email,omitempty"`
+}
+
+type ReportSubmission struct {
+	ID          int64      `json:"id"`
+	ReportID    int64      `json:"report_id"`
+	TeamID      int64      `json:"team_id"`
+	UserID      int64      `json:"user_id"`
+	Status      string     `json:"status"`
+	SubmittedAt *time.Time `json:"submitted_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	// Joined fields
+	UserName  string `json:"user_name,omitempty"`
+	UserEmail string `json:"user_email,omitempty"`
+}
+
+// Request types for team operations
+type CreateTeamRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type AddTeamMemberRequest struct {
+	Email    string   `json:"email"`
+	Role     TeamRole `json:"role"`
+	RoleCode RoleCode `json:"role_code"`
+}
+
+type UpdateTeamMemberRequest struct {
+	Role     TeamRole `json:"role"`
+	RoleCode RoleCode `json:"role_code"`
+}
+
+type SubmitReportRequest struct {
+	ReportID int64 `json:"report_id"`
+}
+
+// Consolidated report data for team PPT generation
+type MemberReportData struct {
+	UserID   int64    `json:"user_id"`
+	UserName string   `json:"user_name"`
+	RoleCode RoleCode `json:"role_code"`
+	Report   *Report  `json:"report"`
+}
+
+type ConsolidatedReport struct {
+	Team       Team               `json:"team"`
+	ReportDate string             `json:"report_date"`
+	Members    []MemberReportData `json:"members"`
+}

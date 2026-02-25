@@ -150,3 +150,70 @@ export interface InviteCode {
   created_at: string;
   used_at?: string;
 }
+
+// ============ Team types ============
+
+export type TeamRole = 'leader' | 'group_leader' | 'member';
+export type RoleCode = 'S' | 'D' | 'G' | 'C' | 'B';
+
+export const TEAM_ROLE_LABELS: Record<TeamRole, string> = {
+  leader: '팀장',
+  group_leader: '그룹장',
+  member: '팀원',
+};
+
+export const ROLE_CODE_LABELS: Record<RoleCode, string> = {
+  S: '사원',
+  D: '대리',
+  G: '과장',
+  C: '차장',
+  B: '부장',
+};
+
+export interface Team {
+  id: number;
+  name: string;
+  description: string;
+  created_by: number;
+  created_at: string;
+}
+
+export interface TeamMember {
+  id: number;
+  team_id: number;
+  user_id: number;
+  role: TeamRole;
+  role_code: RoleCode;
+  joined_at: string;
+  user_name?: string;
+  user_email?: string;
+}
+
+export interface ReportSubmission {
+  id: number;
+  report_id: number;
+  team_id: number;
+  user_id: number;
+  status: string;
+  submitted_at?: string;
+  created_at: string;
+  user_name?: string;
+  user_email?: string;
+}
+
+export interface TeamMemberWithSubmission extends TeamMember {
+  submission?: ReportSubmission;
+}
+
+export interface MemberReportData {
+  user_id: number;
+  user_name: string;
+  role_code: RoleCode;
+  report?: Report;
+}
+
+export interface ConsolidatedReport {
+  team: Team;
+  report_date: string;
+  members: MemberReportData[];
+}

@@ -358,5 +358,132 @@ func (m *MockRepository) DeleteConfig(key string, userID int64) error {
 	return nil
 }
 
+// ============ Team methods (stub) ============
+
+func (m *MockRepository) CreateTeam(name, description string, createdBy int64) (*model.Team, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	id := m.nextID
+	m.nextID++
+	return &model.Team{ID: id, Name: name, Description: description, CreatedBy: createdBy, CreatedAt: time.Now()}, nil
+}
+
+func (m *MockRepository) GetTeam(id int64) (*model.Team, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (m *MockRepository) GetTeamsByUser(userID int64) ([]model.Team, error) {
+	return nil, nil
+}
+
+func (m *MockRepository) UpdateTeam(id int64, name, description string) error {
+	return nil
+}
+
+func (m *MockRepository) DeleteTeam(id int64) error {
+	return nil
+}
+
+func (m *MockRepository) AddTeamMember(teamID, userID int64, role model.TeamRole, roleCode model.RoleCode) (*model.TeamMember, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	id := m.nextID
+	m.nextID++
+	return &model.TeamMember{ID: id, TeamID: teamID, UserID: userID, Role: role, RoleCode: roleCode, JoinedAt: time.Now()}, nil
+}
+
+func (m *MockRepository) GetTeamMembers(teamID int64) ([]model.TeamMember, error) {
+	return nil, nil
+}
+
+func (m *MockRepository) GetTeamMember(teamID, userID int64) (*model.TeamMember, error) {
+	return nil, errors.New("not found")
+}
+
+func (m *MockRepository) UpdateTeamMember(id int64, role model.TeamRole, roleCode model.RoleCode) error {
+	return nil
+}
+
+func (m *MockRepository) RemoveTeamMember(id int64) error {
+	return nil
+}
+
+func (m *MockRepository) SubmitReport(reportID, teamID, userID int64) (*model.ReportSubmission, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (m *MockRepository) UnsubmitReport(reportID, teamID int64) error {
+	return nil
+}
+
+func (m *MockRepository) GetSubmissions(teamID int64, reportDate string) ([]model.ReportSubmission, error) {
+	return nil, nil
+}
+
+func (m *MockRepository) GetSubmissionByUser(teamID, userID int64, reportDate string) (*model.ReportSubmission, error) {
+	return nil, errors.New("not found")
+}
+
+func (m *MockRepository) GetReportByID(id int64) (*model.Report, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	r, ok := m.reports[id]
+	if !ok {
+		return nil, errors.New("report not found")
+	}
+	return &r, nil
+}
+
+func (m *MockRepository) UpdateReportByID(id int64, req model.CreateReportRequest) error {
+	return nil
+}
+
+// ============ Additional methods ============
+
+func (m *MockRepository) GetAllUsers() ([]model.User, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	users := make([]model.User, 0, len(m.users))
+	for _, u := range m.users {
+		users = append(users, u)
+	}
+	return users, nil
+}
+
+func (m *MockRepository) UpdateReport(id int64, req model.CreateReportRequest, userID int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.reports[id]
+	if !ok {
+		return errors.New("report not found")
+	}
+	if ownerID, exists := m.reportOwner[id]; exists && ownerID != userID {
+		return errors.New("report not found")
+	}
+	r.TeamName = req.TeamName
+	r.AuthorName = req.AuthorName
+	r.ReportDate = req.ReportDate
+	r.ThisWeek = req.ThisWeek
+	r.NextWeek = req.NextWeek
+	r.Issues = req.Issues
+	r.Notes = req.Notes
+	r.NextIssues = req.NextIssues
+	r.NextNotes = req.NextNotes
+	r.TemplateID = req.TemplateID
+	m.reports[id] = r
+	return nil
+}
+
+func (m *MockRepository) GetReportByDateAndUser(reportDate string, userID int64) (*model.Report, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for id, r := range m.reports {
+		if ownerID, exists := m.reportOwner[id]; exists && ownerID == userID && r.ReportDate == reportDate {
+			return &r, nil
+		}
+	}
+	return nil, errors.New("report not found")
+}
+
 // Ensure MockRepository implements IRepository
 var _ IRepository = (*MockRepository)(nil)

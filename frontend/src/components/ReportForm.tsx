@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Report, Task, defaultTemplateStyle } from '../types';
+import { Report, Task, Team, defaultTemplateStyle } from '../types';
 import { generatePPT } from '../utils/pptGenerator';
-import { getConfig } from '../services/api';
+import { getConfig, saveReport, getMyTeams, getReports, getMySubmission, submitReport as apiSubmitReport, unsubmitReport as apiUnsubmitReport } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import TaskList from './TaskList';
 import SyncPanel from './SyncPanel';
@@ -9,7 +9,6 @@ import PptPreview from './PptPreview';
 import Alert from './ui/Alert';
 
 const STORAGE_KEYS = {
-  teamName: 'weeky_team_name',
   authorName: 'weeky_author_name',
 };
 
@@ -33,30 +32,23 @@ const setCachedValue = (key: string, value: string): void => {
   }
 };
 
-const initialReport: Report = {
-  team_name: getCachedValue(STORAGE_KEYS.teamName),
-  author_name: getCachedValue(STORAGE_KEYS.authorName),
-  report_date: getDefaultDate(),
-  this_week: [],
-  next_week: [],
-  issues: '',
-  notes: '',
-  next_issues: '',
-  next_notes: '',
-  template_id: 0,
-};
-
 interface ReportFormProps {
   onNavigateToConfig?: () => void;
 }
 
-const TEAM_NAME = 'CruzAPIM팀';
-
 export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
   const { user } = useAuth();
   const [report, setReport] = useState<Report>(() => ({
-    ...initialReport,
+    team_name: '',
     author_name: getCachedValue(STORAGE_KEYS.authorName) || user?.name || '',
+    report_date: getDefaultDate(),
+    this_week: [],
+    next_week: [],
+    issues: '',
+    notes: '',
+    next_issues: '',
+    next_notes: '',
+    template_id: 0,
   }));
   const [isGenerating, setIsGenerating] = useState(false);
   const [showAIPanel, setShowAIPanel] = useState(false);
@@ -64,8 +56,15 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [hasConfiguredServices, setHasConfiguredServices] = useState<boolean | null>(null);
+  const [myTeams, setMyTeams] = useState<Team[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittedTeams, setSubmittedTeams] = useState<Map<number, number>>(new Map()); // teamId -> reportId
+  const [isSaving, setIsSaving] = useState(false);
+  const [existingReports, setExistingReports] = useState<Report[]>([]);
   const successTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
+  // Load teams, config, existing reports on mount
   useEffect(() => {
     getConfig().then((config) => {
       const hasAny = ['gitlab_token', 'jira_token', 'hiworks_password'].some(
@@ -73,7 +72,53 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
       );
       setHasConfiguredServices(hasAny);
     }).catch(() => {});
+
+    // Load teams and reports together to avoid race conditions
+    Promise.all([
+      getMyTeams().catch(() => [] as Team[]),
+      getReports().catch(() => [] as Report[]),
+    ]).then(([teams, reports]) => {
+      setMyTeams(teams);
+      setExistingReports(reports);
+
+      const today = getDefaultDate();
+      const existing = reports.find(r => r.report_date === today);
+
+      if (existing) {
+        setReport(existing);
+        // Match team_name to a team
+        const matched = teams.find(t => t.name === existing.team_name);
+        if (matched) {
+          setSelectedTeamId(matched.id);
+        } else if (teams.length === 1) {
+          setSelectedTeamId(teams[0].id);
+        }
+      } else if (teams.length === 1) {
+        setSelectedTeamId(teams[0].id);
+        setReport(prev => ({ ...prev, team_name: teams[0].name }));
+      } else if (teams.length > 1) {
+        // Auto-select first team
+        setSelectedTeamId(teams[0].id);
+        setReport(prev => prev.team_name ? prev : { ...prev, team_name: teams[0].name });
+      }
+    });
   }, []);
+
+  // Check submission status when team or date changes
+  useEffect(() => {
+    if (!selectedTeamId || !report.report_date) return;
+    getMySubmission(selectedTeamId, report.report_date).then((result) => {
+      if (result.submitted && result.submission) {
+        setSubmittedTeams(prev => new Map(prev).set(selectedTeamId, result.submission!.report_id));
+      } else {
+        setSubmittedTeams(prev => {
+          const next = new Map(prev);
+          next.delete(selectedTeamId);
+          return next;
+        });
+      }
+    }).catch(() => {});
+  }, [selectedTeamId, report.report_date]);
 
   useEffect(() => {
     return () => {
@@ -88,15 +133,34 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
   }, []);
 
   const updateField = useCallback(<K extends keyof Report>(field: K, value: Report[K]) => {
-    setReport((prev) => ({ ...prev, [field]: value }));
+    setReport((prev) => {
+      const next = { ...prev, [field]: value };
+      // When date changes, load existing report for that date
+      if (field === 'report_date' && typeof value === 'string') {
+        const existing = existingReports.find(r => r.report_date === value);
+        if (existing) {
+          return existing;
+        } else {
+          // Reset to blank for new date but keep team_name and author_name
+          return {
+            ...next,
+            id: undefined,
+            this_week: [],
+            next_week: [],
+            issues: '',
+            notes: '',
+            next_issues: '',
+            next_notes: '',
+          };
+        }
+      }
+      return next;
+    });
 
-    if (field === 'team_name' && typeof value === 'string') {
-      setCachedValue(STORAGE_KEYS.teamName, value);
-    }
     if (field === 'author_name' && typeof value === 'string') {
       setCachedValue(STORAGE_KEYS.authorName, value);
     }
-  }, []);
+  }, [existingReports]);
 
   const handleAIGenerate = useCallback((thisWeek: Task[], nextWeek: Task[]) => {
     setReport((prev) => ({
@@ -137,6 +201,94 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
       setIsGenerating(false);
     }
   }, [report, validateReport, showSuccess]);
+
+  const handleSave = useCallback(async () => {
+    const validationError = validateReport();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setError(null);
+    setIsSaving(true);
+    try {
+      const saved = await saveReport(report);
+      setReport(saved);
+      // Update existing reports cache
+      setExistingReports(prev => {
+        const idx = prev.findIndex(r => r.id === saved.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = saved;
+          return next;
+        }
+        return [...prev, saved];
+      });
+      showSuccess('저장되었습니다!');
+    } catch (err: any) {
+      setError(err.message || '저장에 실패했습니다.');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [report, validateReport, showSuccess]);
+
+  const handleSubmitToTeam = useCallback(async () => {
+    const validationError = validateReport();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    if (!selectedTeamId) {
+      setError('제출할 팀을 선택해주세요.');
+      return;
+    }
+
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      // Save (upsert) first, then submit
+      const saved = await saveReport(report);
+      setReport(saved);
+      // Update existing reports cache
+      setExistingReports(prev => {
+        const idx = prev.findIndex(r => r.id === saved.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = saved;
+          return next;
+        }
+        return [...prev, saved];
+      });
+      await apiSubmitReport(selectedTeamId, saved.id!);
+      setSubmittedTeams(prev => new Map(prev).set(selectedTeamId, saved.id!));
+      showSuccess('보고서가 제출되었습니다!');
+    } catch (err: any) {
+      setError(err.message || '제출에 실패했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [report, selectedTeamId, validateReport, showSuccess]);
+
+  const handleUnsubmit = useCallback(async () => {
+    if (!selectedTeamId) return;
+    const reportId = submittedTeams.get(selectedTeamId);
+    if (!reportId) return;
+
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await apiUnsubmitReport(selectedTeamId, reportId);
+      setSubmittedTeams(prev => {
+        const next = new Map(prev);
+        next.delete(selectedTeamId);
+        return next;
+      });
+      showSuccess('제출이 취소되었습니다. 수정 후 다시 제출해주세요.');
+    } catch (err: any) {
+      setError(err.message || '제출 취소에 실패했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [selectedTeamId, submittedTeams, showSuccess]);
 
   const completedTasks = report.this_week.filter(t => t.progress === 100).length;
   const totalTasks = report.this_week.length;
@@ -233,26 +385,40 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-neutral-500 mb-1.5">팀명</label>
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => updateField('team_name', report.team_name === TEAM_NAME ? '' : TEAM_NAME)}
-                  className={`shrink-0 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                    report.team_name === TEAM_NAME
-                      ? 'bg-neutral-900 text-white border-neutral-900'
-                      : 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-300'
-                  }`}
+              {myTeams.length > 0 ? (
+                <select
+                  value={report.team_name}
+                  onChange={(e) => {
+                    updateField('team_name', e.target.value);
+                    const team = myTeams.find(t => t.name === e.target.value);
+                    if (team) setSelectedTeamId(team.id);
+                  }}
+                  className="input"
                 >
-                  {TEAM_NAME}
-                </button>
+                  <option value="">팀 선택</option>
+                  {myTeams.map(t => (
+                    <option key={t.id} value={t.name}>{t.name}</option>
+                  ))}
+                  <option value="__custom__">직접 입력...</option>
+                </select>
+              ) : (
                 <input
                   type="text"
                   value={report.team_name}
                   onChange={(e) => updateField('team_name', e.target.value)}
-                  placeholder="직접 입력"
+                  placeholder="팀명 입력"
                   className="input"
                 />
-              </div>
+              )}
+              {report.team_name === '__custom__' && (
+                <input
+                  type="text"
+                  onChange={(e) => updateField('team_name', e.target.value)}
+                  placeholder="팀명 직접 입력"
+                  className="input mt-1"
+                  autoFocus
+                />
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-neutral-500 mb-1.5">이름</label>
@@ -335,8 +501,81 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
           </div>
         </div>
 
-        {/* Download Button */}
-        <div className="flex justify-end pt-2">
+        {/* Action Buttons */}
+        <div className="flex items-center justify-end gap-3 pt-2">
+          {/* Save */}
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaving}
+            className="px-4 py-2.5 text-sm font-medium rounded-lg border transition-colors flex items-center gap-2
+                       bg-white text-neutral-700 border-neutral-200 hover:border-neutral-400
+                       disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {isSaving ? (
+              <>
+                {spinnerIcon}
+                저장 중...
+              </>
+            ) : (
+              <>
+                {saveIcon}
+                저장
+              </>
+            )}
+          </button>
+
+          {/* Submit to team */}
+          {myTeams.length > 0 && selectedTeamId && (
+            submittedTeams.has(selectedTeamId) ? (
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-2.5 text-sm font-medium rounded-lg bg-green-50 text-green-700 border border-green-200 flex items-center gap-1.5">
+                  {checkIcon}
+                  제출완료
+                </span>
+                <button
+                  type="button"
+                  onClick={handleUnsubmit}
+                  disabled={isSubmitting}
+                  className="px-3 py-2.5 text-xs font-medium rounded-lg border transition-colors flex items-center gap-1.5
+                             text-red-500 border-red-200 hover:bg-red-50
+                             disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? (
+                    <>
+                      {spinnerIcon}
+                      취소 중...
+                    </>
+                  ) : (
+                    '제출 취소'
+                  )}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSubmitToTeam}
+                disabled={isSubmitting}
+                className="px-4 py-2.5 text-sm font-medium rounded-lg border transition-colors flex items-center gap-2
+                           bg-white text-neutral-700 border-neutral-200 hover:border-neutral-400
+                           disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? (
+                  <>
+                    {spinnerIcon}
+                    제출 중...
+                  </>
+                ) : (
+                  <>
+                    {submitIcon}
+                    제출
+                  </>
+                )}
+              </button>
+            )
+          )}
+
+          {/* Download */}
           <button
             type="button"
             onClick={handleDownload}
@@ -347,10 +586,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
           >
             {isGenerating ? (
               <>
-                <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-                </svg>
+                {spinnerIcon}
                 생성 중...
               </>
             ) : (
@@ -488,5 +724,30 @@ const issueIcon = (
 const noteIcon = (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+  </svg>
+);
+
+const submitIcon = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+const saveIcon = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+  </svg>
+);
+
+const checkIcon = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+  </svg>
+);
+
+const spinnerIcon = (
+  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
   </svg>
 );

@@ -88,6 +88,18 @@ func (h *Handler) DeleteTemplate(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 
+// User list handler (for team member selection)
+func (h *Handler) GetUsers(c *fiber.Ctx) error {
+	users, err := h.repo.GetAllUsers()
+	if err != nil {
+		return internalError(c, err)
+	}
+	if users == nil {
+		users = []model.User{}
+	}
+	return c.JSON(users)
+}
+
 // Report handlers
 func (h *Handler) GetReport(c *fiber.Ctx) error {
 	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
@@ -116,6 +128,60 @@ func (h *Handler) CreateReport(c *fiber.Ctx) error {
 		return internalError(c, err)
 	}
 
+	return c.Status(201).JSON(report)
+}
+
+func (h *Handler) UpdateReport(c *fiber.Ctx) error {
+	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "Invalid ID")
+	}
+
+	var req model.CreateReportRequest
+	if err := c.BodyParser(&req); err != nil {
+		return badRequest(c, "Invalid request body")
+	}
+
+	userID := getUserID(c)
+	if err := h.repo.UpdateReport(id, req, userID); err != nil {
+		return internalError(c, err)
+	}
+
+	// Return the updated report
+	report, err := h.repo.GetReport(id, userID)
+	if err != nil {
+		return internalError(c, err)
+	}
+	return c.JSON(report)
+}
+
+func (h *Handler) SaveReport(c *fiber.Ctx) error {
+	var req model.CreateReportRequest
+	if err := c.BodyParser(&req); err != nil {
+		return badRequest(c, "Invalid request body")
+	}
+
+	userID := getUserID(c)
+
+	// Check if report already exists for this date
+	existing, _ := h.repo.GetReportByDateAndUser(req.ReportDate, userID)
+	if existing != nil {
+		// Update existing
+		if err := h.repo.UpdateReport(existing.ID, req, userID); err != nil {
+			return internalError(c, err)
+		}
+		report, err := h.repo.GetReport(existing.ID, userID)
+		if err != nil {
+			return internalError(c, err)
+		}
+		return c.JSON(report)
+	}
+
+	// Create new
+	report, err := h.repo.CreateReport(req, userID)
+	if err != nil {
+		return internalError(c, err)
+	}
 	return c.Status(201).JSON(report)
 }
 
