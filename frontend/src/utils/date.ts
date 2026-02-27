@@ -18,6 +18,18 @@ export function getWeekRange(dateStr: string): string {
   return `${fmt(monday)}~${fmt(friday)}`;
 }
 
+export function getMonday(dateStr: string): string {
+  const date = new Date(dateStr);
+  const dayOfWeek = date.getDay();
+  const monday = new Date(date);
+  monday.setDate(date.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+  return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
+}
+
+export function isSameWeek(dateA: string, dateB: string): boolean {
+  return getMonday(dateA) === getMonday(dateB);
+}
+
 export function getNextWeekRange(dateStr: string): string {
   if (!dateStr) return '';
   const date = new Date(dateStr);

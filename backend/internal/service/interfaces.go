@@ -21,6 +21,7 @@ type JiraSyncer interface {
 // HiworksSyncer syncs data from Hiworks
 type HiworksSyncer interface {
 	Sync(req model.HiworksSyncRequest) (*model.SyncResult, error)
+	TestLogin(officeID, userID, password string) error
 }
 
 // AIReportGenerator generates reports using AI

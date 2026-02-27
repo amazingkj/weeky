@@ -45,7 +45,7 @@ function groupTasksByTitle(
 function mergeText(members: MemberReportData[], field: 'issues' | 'notes' | 'next_issues' | 'next_notes'): string {
   return members
     .filter(m => m.report && m.report[field])
-    .map(m => `[${m.user_name}] ${m.report![field]}`)
+    .map(m => m.user_name ? `[${m.user_name}] ${m.report![field]}` : m.report![field])
     .join('\n');
 }
 
@@ -79,7 +79,7 @@ function TaskGroupRows({ groups, showProgress }: { groups: ConsolidatedTask[]; s
           <Cell valign="top" className="whitespace-pre-line">
             {g.items.map((item, ii) => (
               <div key={ii} className="py-0.5">
-                <span className="text-neutral-500">({item.memberName} {item.roleCode})</span>{' '}
+                {item.memberName && <span className="text-neutral-500">({item.memberName} {item.roleCode}) </span>}
                 {item.task.details || '-'}
                 {item.task.description && <div className="text-neutral-400 ml-2">{item.task.description}</div>}
               </div>

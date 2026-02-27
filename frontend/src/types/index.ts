@@ -4,6 +4,7 @@ export interface Task {
   description?: string; // 진행사항 상세내용
   due_date: string;
   progress: number; // 0-100
+  _carriedForward?: boolean; // UI 전용, 백엔드 저장 안됨
 }
 
 export interface TemplateStyle {

@@ -156,6 +156,11 @@ const TaskItem = memo(function TaskItem({
           <span className="w-5 h-5 flex items-center justify-center bg-neutral-200 text-neutral-600 text-xs font-mono rounded">
             {index + 1}
           </span>
+          {task._carriedForward && (
+            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 text-[10px] font-medium rounded">
+              이전 주
+            </span>
+          )}
           {showProgress ? (
             <span className={`px-1.5 py-0.5 text-xs font-medium rounded ${
               task.progress === 100
@@ -225,10 +230,10 @@ const TaskItem = memo(function TaskItem({
             placeholder="- 세부 작업 항목을 입력하세요&#10;- 여러 줄로 작성 가능합니다"
             value={task.description || ''}
             onChange={(e) => onUpdate('description', e.target.value)}
-            rows={3}
-            className="w-full mt-1 px-2.5 py-1.5 bg-white border border-neutral-200 rounded-md
+            rows={5}
+            className="w-full mt-1 px-2.5 py-2 bg-white border border-neutral-200 rounded-md
                        focus:outline-none focus:ring-1 focus:ring-neutral-400 focus:border-neutral-400
-                       text-neutral-700 text-xs placeholder:text-neutral-300 transition-colors resize-y"
+                       text-neutral-700 text-sm leading-relaxed placeholder:text-neutral-300 transition-colors resize-y"
           />
         )}
       </div>

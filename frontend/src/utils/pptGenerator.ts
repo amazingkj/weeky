@@ -2,6 +2,34 @@ import PptxGenJS from 'pptxgenjs';
 import { Report, TemplateStyle, Task, ConsolidatedReport, MemberReportData, defaultTemplateStyle } from '../types';
 import { formatDateShort, getWeekRange, getNextWeekRange } from './date';
 
+// Cross-browser file download (Safari compatible)
+function downloadBlob(blob: Blob, filename: string): void {
+  // Safari detection
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  const url = URL.createObjectURL(blob);
+
+  if (isSafari) {
+    // Safari: window.open works more reliably than anchor click for blob downloads
+    const newWindow = window.open(url, '_blank');
+    if (!newWindow) {
+      // Popup blocked — fall back to location assign
+      window.location.href = url;
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  } else {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 200);
+  }
+}
+
 // Template colors
 const COLORS = {
   headerBg: 'E6E6E6',
@@ -116,7 +144,8 @@ export async function generatePPT(report: Report, style: TemplateStyle = default
   });
 
   const filename = generateFilename(report);
-  await pptx.writeFile({ fileName: filename });
+  const blob = await pptx.write({ outputType: 'blob' }) as Blob;
+  downloadBlob(blob, filename);
 }
 
 function createTaskSlide(pptx: PptxGenJS, report: Report, config: TaskSlideConfig): void {
@@ -332,19 +361,20 @@ function mergeIssuesNotes(
 ): string {
   return members
     .filter(m => m.report && m.report[field])
-    .map(m => `[${m.user_name}] ${m.report![field]}`)
+    .map(m => m.user_name ? `[${m.user_name}] ${m.report![field]}` : m.report![field])
     .join('\n');
 }
 
 function getConsolidatedFontSize(groups: ConsolidatedGroup[]): number {
   let totalLines = 0;
   for (const g of groups) {
-    totalLines += 1; // group title
+    totalLines += 1; // group title line
     for (const item of g.items) {
-      const detail = item.task.details || '-';
+      let detail = item.task.details || '-';
+      if (item.task.description) detail += '\n' + item.task.description;
       totalLines += detail.split('\n').length;
-      if (item.task.description) totalLines += item.task.description.split('\n').length;
     }
+    totalLines += 1; // spacing between groups
   }
   if (totalLines <= 15) return 9;
   if (totalLines <= 22) return 8;
@@ -353,47 +383,42 @@ function getConsolidatedFontSize(groups: ConsolidatedGroup[]): number {
 }
 
 function buildConsolidatedColumnText(groups: ConsolidatedGroup[]) {
-  const titleParts: string[] = [];
-  const detailParts: string[] = [];
-  const dateParts: string[] = [];
-  const progressParts: string[] = [];
+  const bodyLines: string[] = [];
+  const dateLines: string[] = [];
+  const progressLines: string[] = [];
 
   groups.forEach((g, gi) => {
-    const itemTexts = g.items.map(item => {
-      const memberTag = `(${item.memberName} ${item.roleCode})`;
-      let detail = `${memberTag} ${item.task.details || '-'}`;
+    // Group title line
+    bodyLines.push(`${gi + 1}. ${g.title}`);
+    dateLines.push('');
+    progressLines.push('');
+
+    // Each member's task under this group
+    g.items.forEach(item => {
+      const memberTag = item.memberName ? `(${item.memberName} ${item.roleCode}) ` : '';
+      let detail = `${memberTag}${item.task.details || '-'}`;
       if (item.task.description) detail += '\n' + item.task.description;
-      return { detail, date: item.task.due_date || '-', progress: `${item.task.progress}%` };
+      const lines = detail.split('\n');
+
+      lines.forEach((line, li) => {
+        bodyLines.push(line);
+        dateLines.push(li === 0 ? (item.task.due_date || '-') : '');
+        progressLines.push(li === 0 ? `${item.task.progress}%` : '');
+      });
     });
-
-    // Title only for first line
-    titleParts.push(`${gi + 1}. ${g.title}`);
-    detailParts.push(itemTexts[0]?.detail || '-');
-    dateParts.push(itemTexts[0]?.date || '-');
-    progressParts.push(itemTexts[0]?.progress || '0%');
-
-    // Rest of items in group
-    for (let i = 1; i < itemTexts.length; i++) {
-      titleParts.push('');
-      detailParts.push(itemTexts[i].detail);
-      dateParts.push(itemTexts[i].date);
-      progressParts.push(itemTexts[i].progress);
-    }
 
     // Spacing between groups
     if (gi < groups.length - 1) {
-      titleParts.push('');
-      detailParts.push('');
-      dateParts.push('');
-      progressParts.push('');
+      bodyLines.push('');
+      dateLines.push('');
+      progressLines.push('');
     }
   });
 
   return {
-    titles: titleParts.join('\n'),
-    details: detailParts.join('\n'),
-    dates: dateParts.join('\n'),
-    progress: progressParts.join('\n'),
+    body: bodyLines.join('\n'),
+    dates: dateLines.join('\n'),
+    progress: progressLines.join('\n'),
   };
 }
 
@@ -504,7 +529,7 @@ export async function generateConsolidatedPPT(
   // Left body
   slide.addTable(
     [[
-      { text: leftData.titles + '\n' + leftData.details, options: { valign: 'top' } },
+      { text: leftData.body, options: { valign: 'top' } },
       { text: leftData.dates, options: { valign: 'top', align: 'center' } },
       { text: leftData.progress, options: { valign: 'top', align: 'center' } },
     ]],
@@ -519,7 +544,7 @@ export async function generateConsolidatedPPT(
   // Right body
   slide.addTable(
     [[
-      { text: rightData.titles + '\n' + rightData.details, options: { valign: 'top' } },
+      { text: rightData.body, options: { valign: 'top' } },
       { text: rightData.dates, options: { valign: 'top', align: 'center' } },
     ]],
     {
@@ -563,5 +588,6 @@ export async function generateConsolidatedPPT(
   // Generate filename: {팀이름}_주간보고_{작성자}_{날짜}.pptx
   const date = data.report_date.replace(/-/g, '');
   const filename = `${data.team.name}_주간보고_${displayAuthor}_${date}.pptx`;
-  await pptx.writeFile({ fileName: filename });
+  const blob = await pptx.write({ outputType: 'blob' }) as Blob;
+  downloadBlob(blob, filename);
 }

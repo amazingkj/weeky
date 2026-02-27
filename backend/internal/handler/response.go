@@ -47,5 +47,6 @@ func internalError(c *fiber.Ctx, err error) error {
 }
 
 func internalErrorWithMessage(c *fiber.Ctx, message string) error {
+	slog.Error("Internal error", "path", c.Path(), "method", c.Method(), "message", message)
 	return respondError(c, fiber.StatusInternalServerError, message)
 }

@@ -133,6 +133,7 @@ func main() {
 	protected.Post("/sync/gitlab", h.SyncGitLab)
 	protected.Post("/sync/jira", h.SyncJira)
 	protected.Post("/sync/hiworks", h.SyncHiworks)
+	protected.Post("/sync/hiworks/test", h.TestHiworks)
 
 	// GitLab project discovery
 	protected.Get("/gitlab/projects", h.ListGitLabProjects)

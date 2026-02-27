@@ -316,6 +316,17 @@ export async function syncHiworks(request: HiworksSyncRequest): Promise<SyncResu
   return res.json();
 }
 
+export async function testHiworks(): Promise<{ status: string; message: string }> {
+  const res = await apiFetch(`${API_BASE}/sync/hiworks/test`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || 'Hiworks 연결 실패');
+  }
+  return res.json();
+}
+
 // ============ GitLab Projects API ============
 
 export async function listGitLabProjects(): Promise<GitLabProject[]> {

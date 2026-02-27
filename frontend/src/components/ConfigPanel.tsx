@@ -3,7 +3,7 @@ import { useConfig } from '../hooks';
 import Loading from './ui/Loading';
 import Alert from './ui/Alert';
 import { ConfigMap, GitLabProject } from '../types';
-import { listGitLabProjects } from '../services/api';
+import { listGitLabProjects, syncJira, testHiworks } from '../services/api';
 
 interface FormData {
   gitlab_token: string;
@@ -35,6 +35,12 @@ export default function ConfigPanel() {
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [projectError, setProjectError] = useState<string | null>(null);
+
+  // 연결 검증 상태: null=미검증, true=성공, false=실패
+  const [verifiedGitlab, setVerifiedGitlab] = useState<boolean | null>(null);
+  const [verifiedJira, setVerifiedJira] = useState<boolean | null>(null);
+  const [verifiedHiworks, setVerifiedHiworks] = useState<boolean | null>(null);
+  const [testingSection, setTestingSection] = useState<string | null>(null);
 
   // Pre-fill form with saved non-sensitive values (sensitive ones return '***configured***')
   useEffect(() => {
@@ -96,6 +102,44 @@ export default function ConfigPanel() {
     });
   }, []);
 
+  const handleTestConnection = useCallback(async (section: string) => {
+    setTestingSection(section);
+    setMessage(null);
+    const setVerified = (v: boolean) => {
+      switch (section) {
+        case 'gitlab': setVerifiedGitlab(v); break;
+        case 'jira': setVerifiedJira(v); break;
+        case 'hiworks': setVerifiedHiworks(v); break;
+      }
+    };
+    try {
+      switch (section) {
+        case 'gitlab': {
+          await listGitLabProjects();
+          break;
+        }
+        case 'jira': {
+          // base_url은 저장된 값 사용 (config), email/token은 빈값 → 서버 저장값 fallback
+          const baseUrl = config.jira_base_url || formData.jira_base_url;
+          if (!baseUrl) throw new Error('Jira Base URL이 저장되지 않았습니다. 먼저 설정을 저장하세요.');
+          const today = new Date().toISOString().split('T')[0];
+          await syncJira({ base_url: baseUrl, email: '', token: '', start_date: today, end_date: today });
+          break;
+        }
+        case 'hiworks': {
+          await testHiworks();
+          break;
+        }
+      }
+      setVerified(true);
+    } catch (err: any) {
+      setVerified(false);
+      setMessage({ type: 'error', text: `${section} 연결 실패: ${err.message}` });
+    } finally {
+      setTestingSection(null);
+    }
+  }, [config, formData.jira_base_url]);
+
   const handleSave = async () => {
     setIsSaving(true);
     setMessage(null);
@@ -123,6 +167,10 @@ export default function ConfigPanel() {
       const { updateConfig } = await import('../services/api');
       await updateConfig(configs);
       setMessage({ type: 'success', text: '설정이 저장되었습니다.' });
+      // 저장 후 검증 상태 초기화 (새 값으로 재검증 필요)
+      setVerifiedGitlab(null);
+      setVerifiedJira(null);
+      setVerifiedHiworks(null);
       // Clear only sensitive fields (non-sensitive will be re-filled from config by useEffect)
       setFormData((prev) => ({
         ...prev,
@@ -162,7 +210,7 @@ export default function ConfigPanel() {
         title="GitLab" description="커밋, MR 정보를 가져옵니다"
         expanded={expandedSections.has('gitlab')} onToggle={() => toggleSection('gitlab')}
         configuredCount={hasGitLabToken && selectedProjects.size > 0 ? 2 : hasGitLabToken ? 1 : 0}
-        totalCount={2}
+        totalCount={2} verified={verifiedGitlab}
       >
         <ConfigInput label="Personal Access Token" type="password"
           value={formData.gitlab_token} onChange={(v) => handleFieldChange('gitlab_token', v)}
@@ -242,13 +290,14 @@ export default function ConfigPanel() {
             <p className="text-[10px] text-neutral-500 mt-1.5">{selectedProjects.size}개 프로젝트 선택됨</p>
           )}
         </div>
+        {hasGitLabToken && <TestConnectionButton section="gitlab" testing={testingSection} verified={verifiedGitlab} onTest={handleTestConnection} />}
       </ConfigSection>
 
       <ConfigSection
         title="Jira" description="이슈 정보를 가져옵니다"
         expanded={expandedSections.has('jira')} onToggle={() => toggleSection('jira')}
         configuredCount={getConfiguredCount(['jira_base_url', 'jira_email', 'jira_token'])}
-        totalCount={3}
+        totalCount={3} verified={verifiedJira}
       >
         <ConfigInput label="Base URL" type="url"
           value={formData.jira_base_url} onChange={(v) => handleFieldChange('jira_base_url', v)}
@@ -261,13 +310,14 @@ export default function ConfigPanel() {
             onChange={(v) => handleFieldChange('jira_token', v)}
             placeholder="Atlassian API Token" configured={isConfigured('jira_token')} />
         </div>
+        {getConfiguredCount(['jira_base_url', 'jira_email', 'jira_token']) === 3 && <TestConnectionButton section="jira" testing={testingSection} verified={verifiedJira} onTest={handleTestConnection} />}
       </ConfigSection>
 
       <ConfigSection
         title="Hiworks" description="보낸 메일 정보를 가져옵니다"
         expanded={expandedSections.has('hiworks')} onToggle={() => toggleSection('hiworks')}
         configuredCount={getConfiguredCount(['hiworks_office_id', 'hiworks_user_id', 'hiworks_password'])}
-        totalCount={3}
+        totalCount={3} verified={verifiedHiworks}
       >
         <ConfigInput label="회사 ID" value={formData.hiworks_office_id}
           onChange={(v) => handleFieldChange('hiworks_office_id', v)}
@@ -282,6 +332,7 @@ export default function ConfigPanel() {
             placeholder="비밀번호" configured={isConfigured('hiworks_password')} />
         </div>
         <p className="text-[10px] text-neutral-400">비밀번호는 AES-256으로 암호화되어 저장됩니다.</p>
+        {getConfiguredCount(['hiworks_office_id', 'hiworks_user_id', 'hiworks_password']) === 3 && <TestConnectionButton section="hiworks" testing={testingSection} verified={verifiedHiworks} onTest={handleTestConnection} />}
       </ConfigSection>
 
       <ConfigSection
@@ -319,11 +370,12 @@ interface ConfigSectionProps {
   onToggle: () => void;
   configuredCount: number;
   totalCount: number;
+  verified?: boolean | null; // null = not tested, true = success, false = fail
   children: React.ReactNode;
 }
 
-function ConfigSection({ title, description, expanded, onToggle, configuredCount, totalCount, children }: ConfigSectionProps) {
-  const isFullyConfigured = configuredCount === totalCount;
+function ConfigSection({ title, description, expanded, onToggle, configuredCount, totalCount, verified, children }: ConfigSectionProps) {
+  const isFullySaved = configuredCount === totalCount;
 
   return (
     <section className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
@@ -334,9 +386,17 @@ function ConfigSection({ title, description, expanded, onToggle, configuredCount
         <div className="text-left">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
-            {isFullyConfigured ? (
-              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-neutral-100 text-neutral-600 text-[10px] font-medium rounded">
-                {checkIcon} 완료
+            {verified === true ? (
+              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] font-medium rounded">
+                {checkIcon} 연결 확인
+              </span>
+            ) : verified === false ? (
+              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-red-100 text-red-600 text-[10px] font-medium rounded">
+                {warnIcon} 연결 실패
+              </span>
+            ) : isFullySaved ? (
+              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-neutral-100 text-neutral-500 text-[10px] font-medium rounded">
+                {savedIcon} 저장됨
               </span>
             ) : configuredCount > 0 ? (
               <span className="px-1.5 py-0.5 bg-neutral-100 text-neutral-500 text-[10px] font-medium rounded">
@@ -383,7 +443,7 @@ function ConfigInput({ label, type = 'text', value, onChange, placeholder, confi
       <label className="flex items-center gap-2 text-xs font-medium text-neutral-500 mb-1.5">
         {label}
         {configured ? (
-          <span className="flex items-center gap-0.5 text-neutral-500 text-[10px]">{checkIcon} 설정됨</span>
+          <span className="flex items-center gap-0.5 text-neutral-400 text-[10px]">{savedIcon} 저장됨</span>
         ) : null}
       </label>
       <div className="relative">
@@ -403,6 +463,31 @@ function ConfigInput({ label, type = 'text', value, onChange, placeholder, confi
   );
 }
 
+// Test connection button
+interface TestConnectionButtonProps {
+  section: string;
+  testing: string | null;
+  verified: boolean | null;
+  onTest: (section: string) => void;
+}
+
+function TestConnectionButton({ section, testing, verified, onTest }: TestConnectionButtonProps) {
+  const isTesting = testing === section;
+  return (
+    <div className="flex items-center gap-2 pt-1">
+      <button type="button" onClick={() => onTest(section)} disabled={isTesting}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium rounded-md border
+                   border-neutral-200 text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50
+                   disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+        {isTesting ? spinner : plugIcon}
+        {isTesting ? '테스트 중...' : '연결 테스트'}
+      </button>
+      {verified === true && <span className="text-[11px] text-green-600 font-medium flex items-center gap-1">{checkIcon} 연결 성공</span>}
+      {verified === false && <span className="text-[11px] text-red-500 font-medium flex items-center gap-1">{warnIcon} 연결 실패 - 설정을 확인하세요</span>}
+    </div>
+  );
+}
+
 // Icons
 const refreshIcon = (
   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -417,6 +502,21 @@ const closeIconSmall = (
 const checkIcon = (
   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+  </svg>
+);
+const savedIcon = (
+  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+  </svg>
+);
+const warnIcon = (
+  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+const plugIcon = (
+  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
   </svg>
 );
 const chevronIcon = (

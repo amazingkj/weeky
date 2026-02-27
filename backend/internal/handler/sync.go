@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/gofiber/fiber/v2"
@@ -80,7 +81,7 @@ func (h *Handler) SyncJira(c *fiber.Ctx) error {
 
 	result, err := h.services.Jira.Sync(req)
 	if err != nil {
-		return internalError(c, err)
+		return internalErrorWithMessage(c, err.Error())
 	}
 
 	return c.JSON(result)
@@ -168,10 +169,29 @@ func (h *Handler) SyncHiworks(c *fiber.Ctx) error {
 
 	result, err := h.services.Hiworks.Sync(req)
 	if err != nil {
-		return internalError(c, err)
+		return internalErrorWithMessage(c, err.Error())
 	}
 
 	return c.JSON(result)
+}
+
+// TestHiworks verifies Hiworks login credentials without fetching mails
+func (h *Handler) TestHiworks(c *fiber.Ctx) error {
+	userID := getUserID(c)
+
+	officeID, _ := h.GetConfigValue("hiworks_office_id", userID)
+	hwUserID, _ := h.GetConfigValue("hiworks_user_id", userID)
+	password, _ := h.GetConfigValue("hiworks_password", userID)
+
+	if officeID == "" || hwUserID == "" || password == "" {
+		return badRequest(c, "Hiworks 로그인 정보가 저장되지 않았습니다. 먼저 설정을 저장하세요.")
+	}
+
+	if err := h.services.Hiworks.TestLogin(officeID, hwUserID, password); err != nil {
+		return internalErrorWithMessage(c, fmt.Sprintf("Hiworks 로그인 실패: %v", err))
+	}
+
+	return c.JSON(fiber.Map{"status": "ok", "message": "Hiworks 연결 성공"})
 }
 
 // ListGitLabProjects fetches available GitLab projects using stored token

@@ -32,6 +32,22 @@ func NewHiworksService() *HiworksService {
 	}
 }
 
+// TestLogin verifies Hiworks credentials by attempting login only (no mail fetch)
+func (s *HiworksService) TestLogin(officeID, userID, password string) error {
+	// Use a fresh client to avoid stale session cookies
+	jar, _ := cookiejar.New(nil)
+	fresh := &HiworksService{
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+			Jar:     jar,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return nil
+			},
+		},
+	}
+	return fresh.login(officeID, userID, password)
+}
+
 func (s *HiworksService) Sync(req model.HiworksSyncRequest) (*model.SyncResult, error) {
 	result := &model.SyncResult{
 		Source:   "hiworks",
@@ -39,13 +55,25 @@ func (s *HiworksService) Sync(req model.HiworksSyncRequest) (*model.SyncResult, 
 		SyncedAt: time.Now(),
 	}
 
+	// Use a fresh instance per request to avoid shared session state
+	jar, _ := cookiejar.New(nil)
+	fresh := &HiworksService{
+		client: &http.Client{
+			Timeout: 60 * time.Second,
+			Jar:     jar,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return nil
+			},
+		},
+	}
+
 	// Step 1: Login to Hiworks
-	if err := s.login(req.OfficeID, req.UserID, req.Password); err != nil {
+	if err := fresh.login(req.OfficeID, req.UserID, req.Password); err != nil {
 		return nil, fmt.Errorf("Hiworks 로그인 실패: %w", err)
 	}
 
 	// Step 2: Fetch sent mails
-	mails, err := s.fetchSentMails(req.OfficeID, req.StartDate, req.EndDate)
+	mails, err := fresh.fetchSentMails(req.OfficeID, req.StartDate, req.EndDate)
 	if err != nil {
 		return nil, fmt.Errorf("보낸메일 조회 실패: %w", err)
 	}

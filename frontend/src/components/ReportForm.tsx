@@ -3,6 +3,7 @@ import { Report, Task, Team, defaultTemplateStyle } from '../types';
 import { generatePPT } from '../utils/pptGenerator';
 import { getConfig, saveReport, getMyTeams, getReports, getMySubmission, submitReport as apiSubmitReport, unsubmitReport as apiUnsubmitReport } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { isSameWeek } from '../utils/date';
 import TaskList from './TaskList';
 import SyncPanel from './SyncPanel';
 import PptPreview from './PptPreview';
@@ -62,7 +63,15 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
   const [submittedTeams, setSubmittedTeams] = useState<Map<number, number>>(new Map()); // teamId -> reportId
   const [isSaving, setIsSaving] = useState(false);
   const [existingReports, setExistingReports] = useState<Report[]>([]);
+  const [carriedForward, setCarriedForward] = useState(false);
   const successTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const findPreviousWeekReport = useCallback((reports: Report[], currentDate: string): Report | null => {
+    const prevDate = new Date(currentDate);
+    prevDate.setDate(prevDate.getDate() - 7);
+    const prevDateStr = prevDate.toISOString().split('T')[0];
+    return reports.find(r => isSameWeek(r.report_date, prevDateStr)) || null;
+  }, []);
 
   // Load teams, config, existing reports on mount
   useEffect(() => {
@@ -93,13 +102,22 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
         } else if (teams.length === 1) {
           setSelectedTeamId(teams[0].id);
         }
-      } else if (teams.length === 1) {
-        setSelectedTeamId(teams[0].id);
-        setReport(prev => ({ ...prev, team_name: teams[0].name }));
-      } else if (teams.length > 1) {
-        // Auto-select first team
-        setSelectedTeamId(teams[0].id);
-        setReport(prev => prev.team_name ? prev : { ...prev, team_name: teams[0].name });
+      } else {
+        // 이번 주 보고서 없음 → 이전 주 차주계획 자동 채움
+        const prevReport = findPreviousWeekReport(reports, today);
+        if (prevReport && prevReport.next_week.length > 0) {
+          const carried = prevReport.next_week.map(t => ({ ...t, _carriedForward: true }));
+          setReport(prev => ({ ...prev, this_week: carried }));
+          setCarriedForward(true);
+        }
+        if (teams.length === 1) {
+          setSelectedTeamId(teams[0].id);
+          setReport(prev => ({ ...prev, team_name: teams[0].name }));
+        } else if (teams.length > 1) {
+          // Auto-select first team
+          setSelectedTeamId(teams[0].id);
+          setReport(prev => prev.team_name ? prev : { ...prev, team_name: teams[0].name });
+        }
       }
     });
   }, []);
@@ -139,19 +157,29 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
       if (field === 'report_date' && typeof value === 'string') {
         const existing = existingReports.find(r => r.report_date === value);
         if (existing) {
+          setCarriedForward(false);
           return existing;
         } else {
           // Reset to blank for new date but keep team_name and author_name
-          return {
+          const blank = {
             ...next,
             id: undefined,
-            this_week: [],
+            this_week: [] as Task[],
             next_week: [],
             issues: '',
             notes: '',
             next_issues: '',
             next_notes: '',
           };
+          // 이전 주 차주계획 자동 채움
+          const prevReport = findPreviousWeekReport(existingReports, value);
+          if (prevReport && prevReport.next_week.length > 0) {
+            blank.this_week = prevReport.next_week.map(t => ({ ...t, _carriedForward: true }));
+            setCarriedForward(true);
+          } else {
+            setCarriedForward(false);
+          }
+          return blank;
         }
       }
       return next;
@@ -160,7 +188,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
     if (field === 'author_name' && typeof value === 'string') {
       setCachedValue(STORAGE_KEYS.authorName, value);
     }
-  }, [existingReports]);
+  }, [existingReports, findPreviousWeekReport]);
 
   const handleAIGenerate = useCallback((thisWeek: Task[], nextWeek: Task[]) => {
     setReport((prev) => ({
@@ -176,7 +204,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
   }, [showSuccess]);
 
   const validateReport = useCallback((): string | null => {
-    if (!report.team_name.trim()) return '팀명을 입력해주세요.';
+    if (!report.team_name.trim() || report.team_name === '__custom__') return '팀명을 입력해주세요.';
     if (!report.author_name.trim()) return '이름을 입력해주세요.';
     if (report.this_week.length === 0) return '금주실적을 최소 1개 이상 입력해주세요.';
     return null;
@@ -211,8 +239,15 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
     setError(null);
     setIsSaving(true);
     try {
-      const saved = await saveReport(report);
+      // _carriedForward는 UI 전용 필드 → 백엔드 전송 전 제거
+      const cleanReport = {
+        ...report,
+        this_week: report.this_week.map(({ _carriedForward, ...t }) => t),
+        next_week: report.next_week.map(({ _carriedForward, ...t }) => t),
+      };
+      const saved = await saveReport(cleanReport);
       setReport(saved);
+      setCarriedForward(false);
       // Update existing reports cache
       setExistingReports(prev => {
         const idx = prev.findIndex(r => r.id === saved.id);
@@ -246,7 +281,12 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
     setIsSubmitting(true);
     try {
       // Save (upsert) first, then submit
-      const saved = await saveReport(report);
+      const cleanReport = {
+        ...report,
+        this_week: report.this_week.map(({ _carriedForward, ...t }) => t),
+        next_week: report.next_week.map(({ _carriedForward, ...t }) => t),
+      };
+      const saved = await saveReport(cleanReport);
       setReport(saved);
       // Update existing reports cache
       setExistingReports(prev => {
@@ -290,9 +330,6 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
     }
   }, [selectedTeamId, submittedTeams, showSuccess]);
 
-  const completedTasks = report.this_week.filter(t => t.progress === 100).length;
-  const totalTasks = report.this_week.length;
-
   return (
     <div className="space-y-6">
       {/* Alerts */}
@@ -301,16 +338,6 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
       ) : null}
       {success ? (
         <Alert type="success" onClose={() => setSuccess(null)}>{success}</Alert>
-      ) : null}
-
-      {/* Quick Stats */}
-      {(totalTasks > 0 || report.next_week.length > 0) ? (
-        <div className="flex gap-6 text-sm">
-          <Stat label="금주 업무" value={totalTasks} />
-          <Stat label="완료" value={completedTasks} />
-          <Stat label="진행중" value={totalTasks - completedTasks} />
-          <Stat label="차주 계획" value={report.next_week.length} />
-        </div>
       ) : null}
 
       {/* Setup Guide Banner */}
@@ -333,8 +360,14 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
         </div>
       )}
 
-      {/* Action Buttons */}
-      <div className="flex gap-2">
+      {/* AI / Stats bar */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3 text-xs text-neutral-500">
+          <span className="font-medium text-neutral-700">금주 업무 <span className="text-neutral-900 font-semibold">{report.this_week.length}</span></span>
+          <span>완료 <span className="text-green-600 font-semibold">{report.this_week.filter(t => t.progress === 100).length}</span></span>
+          <span>진행중 <span className="text-blue-600 font-semibold">{report.this_week.filter(t => t.progress > 0 && t.progress < 100).length}</span></span>
+          <span className="font-medium text-neutral-700">차주 계획 <span className="text-neutral-900 font-semibold">{report.next_week.length}</span></span>
+        </div>
         <button
           type="button"
           onClick={() => setShowAIPanel((p) => !p)}
@@ -346,18 +379,6 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
         >
           {aiIcon}
           AI 자동 생성
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowPreview((p) => !p)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
-            showPreview
-              ? 'bg-neutral-900 text-white border-neutral-900'
-              : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
-          }`}
-        >
-          {previewIcon}
-          미리보기
         </button>
       </div>
 
@@ -447,6 +468,27 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
           {/* 금주 컬럼 */}
           <div className="space-y-5">
             <section className="bg-white p-5 rounded-xl border border-neutral-200">
+              {carriedForward && (
+                <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-4">
+                  <div className="flex items-center gap-2">
+                    {infoIcon}
+                    <div className="text-xs text-blue-800">
+                      <p>지난주 차주계획에서 {report.this_week.filter(t => t._carriedForward).length}건 불러왔습니다.</p>
+                      <p className="text-blue-600 mt-0.5">같은 업무 제목을 사용하면 PPT에서 자동으로 합쳐집니다.</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReport(prev => ({ ...prev, this_week: prev.this_week.filter(t => !t._carriedForward) }));
+                      setCarriedForward(false);
+                    }}
+                    className="shrink-0 px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                  >
+                    지우기
+                  </button>
+                </div>
+              )}
               <TaskList
                 title="금주실적"
                 description="이번 주에 수행한 업무를 입력하세요"
@@ -508,28 +550,18 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="px-4 py-2.5 text-sm font-medium rounded-lg border transition-colors flex items-center gap-2
+            className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-2
                        bg-white text-neutral-700 border-neutral-200 hover:border-neutral-400
                        disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {isSaving ? (
-              <>
-                {spinnerIcon}
-                저장 중...
-              </>
-            ) : (
-              <>
-                {saveIcon}
-                저장
-              </>
-            )}
+            {isSaving ? <>{spinnerIcon} 저장 중...</> : <>{saveIcon} 저장</>}
           </button>
 
           {/* Submit to team */}
           {myTeams.length > 0 && selectedTeamId && (
             submittedTeams.has(selectedTeamId) ? (
               <div className="flex items-center gap-2">
-                <span className="px-3 py-2.5 text-sm font-medium rounded-lg bg-green-50 text-green-700 border border-green-200 flex items-center gap-1.5">
+                <span className="px-4 py-2 text-sm font-medium rounded-lg bg-green-50 text-green-700 border border-green-200 flex items-center gap-1.5">
                   {checkIcon}
                   제출완료
                 </span>
@@ -537,18 +569,11 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
                   type="button"
                   onClick={handleUnsubmit}
                   disabled={isSubmitting}
-                  className="px-3 py-2.5 text-xs font-medium rounded-lg border transition-colors flex items-center gap-1.5
+                  className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-1.5
                              text-red-500 border-red-200 hover:bg-red-50
                              disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {isSubmitting ? (
-                    <>
-                      {spinnerIcon}
-                      취소 중...
-                    </>
-                  ) : (
-                    '제출 취소'
-                  )}
+                  {isSubmitting ? <>{spinnerIcon} 취소 중...</> : '제출 취소'}
                 </button>
               </div>
             ) : (
@@ -556,45 +581,39 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
                 type="button"
                 onClick={handleSubmitToTeam}
                 disabled={isSubmitting}
-                className="px-4 py-2.5 text-sm font-medium rounded-lg border transition-colors flex items-center gap-2
+                className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-2
                            bg-white text-neutral-700 border-neutral-200 hover:border-neutral-400
                            disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? (
-                  <>
-                    {spinnerIcon}
-                    제출 중...
-                  </>
-                ) : (
-                  <>
-                    {submitIcon}
-                    제출
-                  </>
-                )}
+                {isSubmitting ? <>{spinnerIcon} 제출 중...</> : <>{submitIcon} 제출</>}
               </button>
             )
           )}
+
+          {/* Preview */}
+          <button
+            type="button"
+            onClick={() => setShowPreview((p) => !p)}
+            className={`px-4 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-2 ${
+              showPreview
+                ? 'bg-neutral-900 text-white border-neutral-900'
+                : 'bg-white text-neutral-700 border-neutral-200 hover:border-neutral-400'
+            }`}
+          >
+            {previewIcon}
+            미리보기
+          </button>
 
           {/* Download */}
           <button
             type="button"
             onClick={handleDownload}
             disabled={isGenerating}
-            className="px-5 py-2.5 bg-neutral-900 text-white text-sm font-medium rounded-lg
-                       hover:bg-neutral-800 disabled:opacity-40 disabled:cursor-not-allowed
-                       transition-colors flex items-center gap-2"
+            className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-2
+                       bg-white text-neutral-700 border-neutral-200 hover:border-neutral-400
+                       disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {isGenerating ? (
-              <>
-                {spinnerIcon}
-                생성 중...
-              </>
-            ) : (
-              <>
-                {downloadIcon}
-                PPT 다운로드
-              </>
-            )}
+            {isGenerating ? <>{spinnerIcon} 생성 중...</> : <>{downloadIcon} PPT 다운로드</>}
           </button>
         </div>
       </form>
@@ -659,15 +678,6 @@ function TextSection({
         className="input resize-none"
       />
     </section>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-lg font-semibold text-neutral-900 tabular-nums">{value}</span>
-      <span className="text-xs text-neutral-500">{label}</span>
-    </div>
   );
 }
 
