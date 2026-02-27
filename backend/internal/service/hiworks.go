@@ -93,6 +93,7 @@ func truncate(s string, maxLen int) string {
 type hiworksLoginRequest struct {
 	ID              string `json:"id"`
 	Password        string `json:"password"`
+	OfficeID        string `json:"office_id"`
 	IPSecurityLevel string `json:"ip_security_level"`
 }
 
@@ -102,7 +103,7 @@ func (s *HiworksService) login(officeID, userID, password string) error {
 	// Step 1: Visit login page first to get session cookie
 	loginPageURL := fmt.Sprintf("https://login.office.hiworks.com/%s/", officeID)
 	pageReq, _ := http.NewRequest("GET", loginPageURL, nil)
-	pageReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	pageReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
 	pageResp, err := s.client.Do(pageReq)
 	if err != nil {
 		return fmt.Errorf("로그인 페이지 접근 실패: %w", err)
@@ -112,8 +113,7 @@ func (s *HiworksService) login(officeID, userID, password string) error {
 	// Step 2: POST login credentials as JSON
 	loginURL := "https://auth-api.office.hiworks.com/office-web/login"
 
-	// Prepare login JSON body - ID format: userid@officeid
-	// userID can be just "jikim" or full email "jikim@direa.co.kr"
+	// Login ID format: userid@officeDomain (e.g. "jikim@direa.co.kr")
 	loginID := userID
 	if !strings.Contains(userID, "@") {
 		loginID = fmt.Sprintf("%s@%s", userID, officeID)
@@ -122,6 +122,7 @@ func (s *HiworksService) login(officeID, userID, password string) error {
 	loginReq := hiworksLoginRequest{
 		ID:              loginID,
 		Password:        password,
+		OfficeID:        officeID,
 		IPSecurityLevel: "-1",
 	}
 
@@ -132,9 +133,12 @@ func (s *HiworksService) login(officeID, userID, password string) error {
 		return err
 	}
 
+	// Set h_officeid cookie (client-side set in browser, needed for auth-api)
+	req.AddCookie(&http.Cookie{Name: "h_officeid", Value: officeID})
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("Origin", "https://login.office.hiworks.com")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
 	req.Header.Set("Referer", fmt.Sprintf("https://login.office.hiworks.com/%s/", officeID))
 
 	resp, err := s.client.Do(req)

@@ -149,7 +149,7 @@ const TaskItem = memo(function TaskItem({
       : 'bg-neutral-300';
 
   return (
-    <div className="group bg-neutral-50 hover:bg-neutral-100/80 p-4 rounded-lg border border-neutral-200 transition-colors">
+    <div className="group bg-neutral-50 hover:bg-neutral-100/80 p-4 rounded-lg border border-neutral-200 shadow-sm transition-colors">
       {/* Header Row */}
       <div className="flex items-center justify-between mb-2.5">
         <div className="flex items-center gap-2">

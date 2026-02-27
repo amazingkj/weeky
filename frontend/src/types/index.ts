@@ -200,6 +200,7 @@ export interface ReportSubmission {
   created_at: string;
   user_name?: string;
   user_email?: string;
+  report_date?: string;
 }
 
 export interface TeamMemberWithSubmission extends TeamMember {

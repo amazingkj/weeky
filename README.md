@@ -1,6 +1,6 @@
-# weeky
+# jugan
 
-> Weekly report, without the hassle
+> 주간업무보고 자동화
 
 주간업무보고 PPT를 자동으로 생성해주는 멀티유저 웹 도구입니다.
 
@@ -35,7 +35,7 @@
 ### Docker (권장)
 
 ```bash
-docker pull jiin724/weeky:latest
+docker pull jiin724/jugan:latest
 docker compose up -d
 ```
 
@@ -47,7 +47,7 @@ http://localhost:8080 접속
 |------|------|------|
 | `ENCRYPTION_KEY` | AES-256 암호화 키 (32자 이상) | O |
 | `JWT_SECRET` | JWT 서명 키 | O |
-| `DB_PATH` | SQLite DB 경로 (기본: `./weeky.db`) | |
+| `DB_PATH` | SQLite DB 경로 (기본: `./jugan.db`) | |
 | `PORT` | 서버 포트 (기본: `8080`) | |
 
 ### Development

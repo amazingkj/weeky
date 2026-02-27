@@ -196,7 +196,7 @@ func (h *Handler) UpdateTeamMember(c *fiber.Ctx) error {
 		return badRequest(c, "잘못된 요청입니다")
 	}
 
-	if err := h.repo.UpdateTeamMember(memberID, req.Role, req.RoleCode); err != nil {
+	if err := h.repo.UpdateTeamMember(memberID, req.Role, req.RoleCode, req.Name); err != nil {
 		return internalError(c, err)
 	}
 	return c.SendStatus(204)
@@ -247,6 +247,27 @@ func (h *Handler) GetMySubmission(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"submitted": false})
 	}
 	return c.JSON(fiber.Map{"submitted": true, "submission": sub})
+}
+
+func (h *Handler) GetMySubmissions(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+
+	userID := getUserID(c)
+	if _, err := h.repo.GetTeamMember(teamID, userID); err != nil {
+		return respondError(c, fiber.StatusForbidden, "팀 멤버가 아닙니다")
+	}
+
+	subs, err := h.repo.GetSubmissionsByUser(teamID, userID)
+	if err != nil {
+		return internalError(c, err)
+	}
+	if subs == nil {
+		subs = []model.ReportSubmission{}
+	}
+	return c.JSON(subs)
 }
 
 func (h *Handler) SubmitReport(c *fiber.Ctx) error {

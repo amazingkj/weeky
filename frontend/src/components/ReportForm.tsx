@@ -10,7 +10,7 @@ import PptPreview from './PptPreview';
 import Alert from './ui/Alert';
 
 const STORAGE_KEYS = {
-  authorName: 'weeky_author_name',
+  authorName: 'jugan_author_name',
 };
 
 const getDefaultDate = (): string => {
@@ -384,7 +384,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
 
       {/* AI Generate Panel */}
       {showAIPanel ? (
-        <div className="bg-white p-5 rounded-xl border border-neutral-200 animate-fadeIn">
+        <div className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm animate-fadeIn">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-neutral-900">AI 자동 생성</h3>
             <button
@@ -401,7 +401,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
       {/* Form */}
       <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
         {/* Meta Info */}
-        <section className="bg-white p-5 rounded-xl border border-neutral-200">
+        <section className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm">
           <SectionHeader title="기본 정보" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
@@ -467,7 +467,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* 금주 컬럼 */}
           <div className="space-y-5">
-            <section className="bg-white p-5 rounded-xl border border-neutral-200">
+            <section className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm">
               {carriedForward && (
                 <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-4">
                   <div className="flex items-center gap-2">
@@ -516,7 +516,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
 
           {/* 차주 컬럼 */}
           <div className="space-y-5">
-            <section className="bg-white p-5 rounded-xl border border-neutral-200">
+            <section className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm">
               <TaskList
                 title="차주계획"
                 description="다음 주에 예정된 업무를 입력하세요"
@@ -620,7 +620,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
 
       {/* PPT Preview */}
       {showPreview ? (
-        <section className="bg-white p-5 rounded-xl border border-neutral-200 animate-fadeIn">
+        <section className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm animate-fadeIn">
           <div className="flex items-center justify-between mb-4">
             <SectionHeader title="PPT 미리보기" />
             <button
@@ -664,7 +664,7 @@ function TextSection({
   placeholder: string;
 }) {
   return (
-    <section className="bg-white p-5 rounded-xl border border-neutral-200">
+    <section className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm">
       <div className="flex items-center gap-2 mb-3">
         <span className="text-neutral-400">{icon}</span>
         <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>

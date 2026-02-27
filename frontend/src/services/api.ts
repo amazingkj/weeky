@@ -245,6 +245,12 @@ export async function getMySubmission(teamId: number, reportDate: string): Promi
   return res.json();
 }
 
+export async function getMySubmissions(teamId: number): Promise<ReportSubmission[]> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/my-submissions`);
+  if (!res.ok) throw new Error('제출 이력 조회에 실패했습니다');
+  return res.json();
+}
+
 // ============ Config API ============
 
 export async function getConfig(): Promise<ConfigMap> {
@@ -412,10 +418,12 @@ export async function getTeamMembers(teamId: number): Promise<TeamMember[]> {
   return res.json();
 }
 
-export async function updateTeamMember(teamId: number, memberId: number, role: TeamRole, roleCode: RoleCode): Promise<void> {
+export async function updateTeamMember(teamId: number, memberId: number, role: TeamRole, roleCode: RoleCode, name?: string): Promise<void> {
+  const body: Record<string, string> = { role, role_code: roleCode };
+  if (name !== undefined) body.name = name;
   const res = await apiFetch(`${API_BASE}/teams/${teamId}/members/${memberId}`, {
     method: 'PUT',
-    body: JSON.stringify({ role, role_code: roleCode }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error('멤버 수정에 실패했습니다');
 }

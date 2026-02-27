@@ -871,8 +871,14 @@ func (r *Repository) GetTeamMember(teamID, userID int64) (*model.TeamMember, err
 	return &m, nil
 }
 
-func (r *Repository) UpdateTeamMember(id int64, role model.TeamRole, roleCode model.RoleCode) error {
+func (r *Repository) UpdateTeamMember(id int64, role model.TeamRole, roleCode model.RoleCode, name string) error {
 	_, err := r.db.Exec("UPDATE team_members SET role = ?, role_code = ? WHERE id = ?", string(role), string(roleCode), id)
+	if err != nil {
+		return err
+	}
+	if name != "" {
+		_, err = r.db.Exec("UPDATE users SET name = ? WHERE id = (SELECT user_id FROM team_members WHERE id = ?)", name, id)
+	}
 	return err
 }
 
@@ -953,6 +959,30 @@ func (r *Repository) GetSubmissionByUser(teamID, userID int64, reportDate string
 		return nil, err
 	}
 	return &s, nil
+}
+
+func (r *Repository) GetSubmissionsByUser(teamID, userID int64) ([]model.ReportSubmission, error) {
+	rows, err := r.db.Query(
+		`SELECT rs.id, rs.report_id, rs.team_id, rs.user_id, rs.status, rs.submitted_at, rs.created_at, r.report_date
+		 FROM report_submissions rs
+		 JOIN reports r ON rs.report_id = r.id
+		 WHERE rs.team_id = ? AND rs.user_id = ?
+		 ORDER BY r.report_date DESC`, teamID, userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []model.ReportSubmission
+	for rows.Next() {
+		var s model.ReportSubmission
+		if err := rows.Scan(&s.ID, &s.ReportID, &s.TeamID, &s.UserID, &s.Status, &s.SubmittedAt, &s.CreatedAt, &s.ReportDate); err != nil {
+			return nil, err
+		}
+		results = append(results, s)
+	}
+	return results, rows.Err()
 }
 
 // ============ Report by ID (for team leader access) ============

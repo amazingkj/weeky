@@ -215,8 +215,9 @@ type ReportSubmission struct {
 	SubmittedAt *time.Time `json:"submitted_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
 	// Joined fields
-	UserName  string `json:"user_name,omitempty"`
-	UserEmail string `json:"user_email,omitempty"`
+	UserName   string `json:"user_name,omitempty"`
+	UserEmail  string `json:"user_email,omitempty"`
+	ReportDate string `json:"report_date,omitempty"`
 }
 
 // Request types for team operations
@@ -234,6 +235,7 @@ type AddTeamMemberRequest struct {
 type UpdateTeamMemberRequest struct {
 	Role     TeamRole `json:"role"`
 	RoleCode RoleCode `json:"role_code"`
+	Name     string   `json:"name"`
 }
 
 type SubmitReportRequest struct {

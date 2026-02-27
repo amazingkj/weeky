@@ -1,16 +1,16 @@
 services:
-  weeky:
-    image: jiin724/weeky:latest
+  jugan:
+    image: jiin724/jugan:latest
     ports:
       - "8080:8080"
     volumes:
-      - weeky-data:/app/data
+      - jugan-data:/app/data
     environment:
       - PORT=8080
-      - DB_PATH=/app/data/weeky.db
+      - DB_PATH=/app/data/jugan.db
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - JWT_SECRET=${JWT_SECRET}
     restart: unless-stopped
 
 volumes:
-  weeky-data:
+  jugan-data:

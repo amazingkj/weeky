@@ -38,7 +38,7 @@ func main() {
 	// Database path
 	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
-		dbPath = "./weeky.db"
+		dbPath = "./jugan.db"
 	}
 
 	// Initialize repository
@@ -53,7 +53,7 @@ func main() {
 
 	// Initialize Fiber app
 	app := fiber.New(fiber.Config{
-		AppName: "weeky",
+		AppName: "jugan",
 	})
 
 	// Middleware
@@ -159,6 +159,7 @@ func main() {
 	protected.Delete("/teams/:id/submit/:reportId", h.UnsubmitReport)
 	protected.Get("/teams/:id/submissions", h.GetTeamSubmissions)
 	protected.Get("/teams/:id/my-submission", h.GetMySubmission)
+	protected.Get("/teams/:id/my-submissions", h.GetMySubmissions)
 
 	// Team report routes (leader/group_leader)
 	protected.Get("/teams/:id/reports/:reportId", h.GetTeamMemberReport)

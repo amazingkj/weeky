@@ -8,7 +8,7 @@
   }
 
   body {
-    @apply bg-neutral-50 text-neutral-900 antialiased text-sm;
+    @apply bg-neutral-100 text-neutral-900 antialiased text-sm;
     font-feature-settings: "kern" 1, "liga" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -25,7 +25,7 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-neutral-200 rounded-full;
+    @apply bg-neutral-300 rounded-full;
   }
 
   ::-webkit-scrollbar-thumb:hover {
@@ -41,7 +41,7 @@
 @layer components {
   /* Input base */
   .input {
-    @apply w-full px-3 py-2 text-sm bg-white border border-neutral-200 rounded-lg
+    @apply w-full px-3 py-2 text-sm bg-neutral-50 border border-neutral-200 rounded-lg
            text-neutral-900 placeholder:text-neutral-400
            focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400
            transition-colors;
@@ -64,7 +64,7 @@
 
   /* Section card */
   .section-card {
-    @apply bg-white p-5 rounded-xl border border-neutral-200;
+    @apply bg-white p-5 rounded-xl border border-neutral-200 shadow-sm;
   }
 }
 

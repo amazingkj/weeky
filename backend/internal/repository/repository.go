@@ -56,7 +56,7 @@ type IRepository interface {
 	AddTeamMember(teamID, userID int64, role model.TeamRole, roleCode model.RoleCode) (*model.TeamMember, error)
 	GetTeamMembers(teamID int64) ([]model.TeamMember, error)
 	GetTeamMember(teamID, userID int64) (*model.TeamMember, error)
-	UpdateTeamMember(id int64, role model.TeamRole, roleCode model.RoleCode) error
+	UpdateTeamMember(id int64, role model.TeamRole, roleCode model.RoleCode, name string) error
 	RemoveTeamMember(id int64) error
 
 	// Report submission methods
@@ -64,6 +64,7 @@ type IRepository interface {
 	UnsubmitReport(reportID, teamID int64) error
 	GetSubmissions(teamID int64, reportDate string) ([]model.ReportSubmission, error)
 	GetSubmissionByUser(teamID, userID int64, reportDate string) (*model.ReportSubmission, error)
+	GetSubmissionsByUser(teamID, userID int64) ([]model.ReportSubmission, error)
 
 	// Consolidated report
 	GetReportByID(id int64) (*model.Report, error)

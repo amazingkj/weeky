@@ -30,7 +30,7 @@ export default function Loading({ size = 'md', text, className = '' }: LoadingPr
               r="10"
               stroke="currentColor"
               strokeWidth="3"
-              className="text-slate-200"
+              className="text-neutral-200"
             />
             {/* Animated arc */}
             <circle
@@ -53,7 +53,7 @@ export default function Loading({ size = 'md', text, className = '' }: LoadingPr
       </div>
 
       {text && (
-        <p className={`${textSize} text-slate-500 font-medium animate-pulse`}>
+        <p className={`${textSize} text-neutral-500 font-medium animate-pulse`}>
           {text}
         </p>
       )}

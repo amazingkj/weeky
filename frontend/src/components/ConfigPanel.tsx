@@ -350,8 +350,8 @@ export default function ConfigPanel() {
 
       <div className="flex justify-end pt-2">
         <button onClick={handleSave} disabled={isSaving}
-          className="px-5 py-2.5 bg-neutral-900 text-white text-sm font-medium rounded-lg
-                     hover:bg-neutral-800 disabled:opacity-40 transition-colors flex items-center gap-2"
+          className="px-5 py-2.5 bg-white text-neutral-700 text-sm font-medium rounded-lg border border-neutral-300
+                     hover:bg-neutral-50 hover:border-neutral-400 disabled:opacity-40 transition-colors flex items-center gap-2"
         >
           {isSaving ? spinner : saveIcon}
           {isSaving ? '저장 중...' : '설정 저장'}
@@ -378,7 +378,7 @@ function ConfigSection({ title, description, expanded, onToggle, configuredCount
   const isFullySaved = configuredCount === totalCount;
 
   return (
-    <section className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
+    <section className="bg-white rounded-xl border border-neutral-200 shadow-sm overflow-hidden">
       <button
         onClick={onToggle}
         className="w-full px-5 py-4 flex items-center justify-between hover:bg-neutral-50 transition-colors"

@@ -80,6 +80,17 @@ export default function TeamMemberManager({ team }: TeamMemberManagerProps) {
     }
   };
 
+  const handleUpdateName = async (member: TeamMember, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === member.user_name) return;
+    try {
+      await updateTeamMember(team.id, member.id, member.role, member.role_code, trimmed);
+      await fetchMembers();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   const handleRemove = async (member: TeamMember) => {
     if (!confirm(`${member.user_name}님을 팀에서 제거하시겠습니까?`)) return;
     try {
@@ -142,7 +153,13 @@ export default function TeamMemberManager({ team }: TeamMemberManagerProps) {
         {members.map((m) => (
           <div key={m.id} className="group flex items-center gap-3 py-2.5">
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-neutral-900 truncate">{m.user_name}</div>
+              <input
+                type="text"
+                defaultValue={m.user_name}
+                onBlur={(e) => handleUpdateName(m, e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                className="text-sm font-medium text-neutral-900 bg-transparent border-b border-transparent hover:border-neutral-300 focus:border-neutral-400 focus:outline-none w-full truncate transition-colors"
+              />
               <div className="text-xs text-neutral-400 truncate">{m.user_email}</div>
             </div>
             <select value={m.role} onChange={(e) => handleUpdateRole(m, e.target.value as TeamRole)}

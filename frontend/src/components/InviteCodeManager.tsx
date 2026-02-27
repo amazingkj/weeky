@@ -59,7 +59,7 @@ export default function InviteCodeManager() {
         <button
           onClick={handleCreate}
           disabled={isLoading}
-          className="px-3 py-1.5 bg-neutral-900 text-white text-xs font-medium rounded-lg hover:bg-neutral-800 disabled:opacity-50 transition-colors"
+          className="px-3 py-1.5 bg-white text-neutral-700 text-xs font-medium rounded-lg border border-neutral-300 hover:bg-neutral-50 hover:border-neutral-400 disabled:opacity-50 transition-colors"
         >
           {isLoading ? '생성 중...' : '새 초대 코드'}
         </button>

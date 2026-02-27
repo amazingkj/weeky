@@ -400,7 +400,7 @@ func (m *MockRepository) GetTeamMember(teamID, userID int64) (*model.TeamMember,
 	return nil, errors.New("not found")
 }
 
-func (m *MockRepository) UpdateTeamMember(id int64, role model.TeamRole, roleCode model.RoleCode) error {
+func (m *MockRepository) UpdateTeamMember(id int64, role model.TeamRole, roleCode model.RoleCode, name string) error {
 	return nil
 }
 
@@ -422,6 +422,10 @@ func (m *MockRepository) GetSubmissions(teamID int64, reportDate string) ([]mode
 
 func (m *MockRepository) GetSubmissionByUser(teamID, userID int64, reportDate string) (*model.ReportSubmission, error) {
 	return nil, errors.New("not found")
+}
+
+func (m *MockRepository) GetSubmissionsByUser(teamID, userID int64) ([]model.ReportSubmission, error) {
+	return nil, nil
 }
 
 func (m *MockRepository) GetReportByID(id int64) (*model.Report, error) {

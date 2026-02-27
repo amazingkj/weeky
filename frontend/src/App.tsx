@@ -49,14 +49,14 @@ function App() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
+      <div className="min-h-screen bg-neutral-100 flex items-center justify-center">
         <Loading text="로딩 중..." size="lg" />
       </div>
     );
   }
 
   return (
-    <Suspense fallback={<div className="min-h-screen bg-neutral-50 flex items-center justify-center"><Loading text="로딩 중..." size="lg" /></div>}>
+    <Suspense fallback={<div className="min-h-screen bg-neutral-100 flex items-center justify-center"><Loading text="로딩 중..." size="lg" /></div>}>
       <Routes>
         <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
         <Route path="/register" element={isAuthenticated ? <Navigate to="/" replace /> : <RegisterPage />} />
@@ -74,10 +74,10 @@ function AuthenticatedApp() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-neutral-50">
+    <div className="min-h-screen bg-neutral-100">
       <Header />
       <Navigation activeTab={activeTab} onTabChange={handleTabChange} />
-      <main className={`mx-auto px-4 sm:px-6 py-8 ${activeTab === 'config' ? 'max-w-3xl' : 'max-w-6xl'}`}>
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         <ErrorBoundary>
           <Suspense fallback={<LoadingFallback />}>
             {activeTab === 'report' && <ReportForm onNavigateToConfig={() => setActiveTab('config')} />}
@@ -108,7 +108,7 @@ function Header() {
   const { user, logout } = useAuth();
 
   return (
-    <header className="border-b border-neutral-200 bg-white">
+    <header className="border-b border-neutral-200 bg-white shadow-sm">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -117,7 +117,7 @@ function Header() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
               </svg>
             </div>
-            <h1 className="text-base font-semibold text-neutral-900 tracking-tight">weeky</h1>
+            <h1 className="text-base font-semibold text-neutral-900 tracking-tight">jugan</h1>
             <span className="text-[10px] text-neutral-400 font-medium">v0.3</span>
           </div>
           <div className="flex items-center gap-3">
@@ -151,7 +151,7 @@ interface NavigationProps {
 
 function Navigation({ activeTab, onTabChange }: NavigationProps) {
   return (
-    <nav className="border-b border-neutral-200 bg-white">
+    <nav className="border-b border-neutral-200 bg-neutral-50/80">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="flex gap-0" role="tablist">
           {TABS.map((tab) => {
