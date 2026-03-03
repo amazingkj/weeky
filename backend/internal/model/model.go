@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // User represents an authenticated user
 type User struct {
@@ -43,6 +46,7 @@ type AuthResponse struct {
 
 type Task struct {
 	Title       string `json:"title"`
+	Client      string `json:"client,omitempty"`      // 고객사명
 	Details     string `json:"details,omitempty"`
 	Description string `json:"description,omitempty"` // 진행사항 상세내용
 	DueDate     string `json:"due_date"`
@@ -254,4 +258,68 @@ type ConsolidatedReport struct {
 	Team       Team               `json:"team"`
 	ReportDate string             `json:"report_date"`
 	Members    []MemberReportData `json:"members"`
+}
+
+// ============ Team Project types ============
+
+type TeamProject struct {
+	ID        int64     `json:"id"`
+	TeamID    int64     `json:"team_id"`
+	Name      string    `json:"name"`
+	Client    string    `json:"client"`
+	IsActive  bool      `json:"is_active"`
+	SortOrder int       `json:"sort_order"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type CreateTeamProjectRequest struct {
+	Name   string `json:"name"`
+	Client string `json:"client"`
+}
+
+type UpdateTeamProjectRequest struct {
+	Name     string `json:"name"`
+	Client   string `json:"client"`
+	IsActive *bool  `json:"is_active,omitempty"`
+}
+
+type ReorderProjectsRequest struct {
+	IDs []int64 `json:"ids"`
+}
+
+// ============ Consolidated Edit types ============
+
+type ConsolidatedEdit struct {
+	ID         int64     `json:"id"`
+	TeamID     int64     `json:"team_id"`
+	ReportDate string    `json:"report_date"`
+	Data       string    `json:"data"` // JSON blob
+	UpdatedBy  int64     `json:"updated_by"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+type SaveConsolidatedEditRequest struct {
+	ReportDate string          `json:"report_date"`
+	ThisWeek   json.RawMessage `json:"this_week"`
+	NextWeek   json.RawMessage `json:"next_week"`
+	Issues     string          `json:"issues"`
+	Notes      string          `json:"notes"`
+	NextIssues string          `json:"next_issues"`
+	NextNotes  string          `json:"next_notes"`
+}
+
+// ============ Team History types ============
+
+type WeekSummary struct {
+	WeekDate       string   `json:"week_date"`
+	FridayDate     string   `json:"friday_date"`
+	SubmittedCount int      `json:"submitted_count"`
+	TotalMembers   int      `json:"total_members"`
+	SubmittedNames []string `json:"submitted_names"`
+}
+
+type TeamHistoryResponse struct {
+	TeamID   int64         `json:"team_id"`
+	TeamName string        `json:"team_name"`
+	Weeks    []WeekSummary `json:"weeks"`
 }

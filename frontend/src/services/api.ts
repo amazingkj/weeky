@@ -1,4 +1,4 @@
-import { Template, Report, SyncResult, SyncItem, Task, GitHubSyncRequest, GitLabSyncRequest, JiraSyncRequest, HiworksSyncRequest, ConfigMap, AuthResponse, LoginRequest, RegisterRequest, User, InviteCode, GitLabProject, Team, TeamMember, TeamRole, RoleCode, ReportSubmission, TeamMemberWithSubmission, ConsolidatedReport } from '../types';
+import { Template, Report, SyncResult, SyncItem, Task, GitHubSyncRequest, GitLabSyncRequest, JiraSyncRequest, HiworksSyncRequest, ConfigMap, AuthResponse, LoginRequest, RegisterRequest, User, InviteCode, GitLabProject, Team, TeamMember, TeamRole, RoleCode, ReportSubmission, TeamMemberWithSubmission, ConsolidatedReport, TeamProject, TeamHistoryResponse } from '../types';
 
 // AI Generate types
 export interface GenerateReportRequest {
@@ -6,6 +6,7 @@ export interface GenerateReportRequest {
   start_date: string;
   end_date: string;
   style?: 'concise' | 'detailed' | 'very_detailed';
+  project_names?: string[];
 }
 
 export interface GenerateReportResponse {
@@ -489,5 +490,102 @@ export async function summarizeConsolidatedReport(teamId: number, reportDate: st
     const error = await res.json();
     throw new Error(error.error || 'AI 요약 생성에 실패했습니다');
   }
+  return res.json();
+}
+
+// ============ Team Project API ============
+
+export async function getTeamProjects(teamId: number, activeOnly = false): Promise<TeamProject[]> {
+  const params = activeOnly ? '?active_only=true' : '';
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/projects${params}`);
+  if (!res.ok) throw new Error('프로젝트 목록 조회에 실패했습니다');
+  return res.json();
+}
+
+export async function createTeamProject(teamId: number, name: string, client = ''): Promise<TeamProject> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/projects`, {
+    method: 'POST',
+    body: JSON.stringify({ name, client }),
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || '프로젝트 생성에 실패했습니다');
+  }
+  return res.json();
+}
+
+export async function autoCreateTeamProject(teamId: number, name: string): Promise<TeamProject> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/projects/auto`, {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || '프로젝트 자동 생성에 실패했습니다');
+  }
+  return res.json();
+}
+
+export async function updateTeamProject(teamId: number, pid: number, name: string, client: string, isActive?: boolean): Promise<void> {
+  const body: Record<string, unknown> = { name, client };
+  if (isActive !== undefined) body.is_active = isActive;
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/projects/${pid}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('프로젝트 수정에 실패했습니다');
+}
+
+export async function deleteTeamProject(teamId: number, pid: number): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/projects/${pid}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('프로젝트 삭제에 실패했습니다');
+}
+
+export async function reorderTeamProjects(teamId: number, ids: number[]): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/projects/reorder`, {
+    method: 'PUT',
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) throw new Error('프로젝트 순서 변경에 실패했습니다');
+}
+
+// ============ Consolidated Edit API ============
+
+export async function saveConsolidatedEdit(teamId: number, data: {
+  report_date: string;
+  this_week: Task[];
+  next_week: Task[];
+  issues: string;
+  notes: string;
+  next_issues: string;
+  next_notes: string;
+}): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/consolidated-edit`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('취합 편집 저장에 실패했습니다');
+}
+
+export async function getConsolidatedEdit(teamId: number, reportDate: string): Promise<{
+  exists: boolean;
+  data?: { this_week: Task[]; next_week: Task[]; issues: string; notes: string; next_issues: string; next_notes: string };
+  updated_at?: string;
+}> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/consolidated-edit?report_date=${reportDate}`);
+  if (!res.ok) throw new Error('취합 편집 조회에 실패했습니다');
+  return res.json();
+}
+
+export async function deleteConsolidatedEdit(teamId: number, reportDate: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/consolidated-edit?report_date=${reportDate}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('취합 편집 삭제에 실패했습니다');
+}
+
+// ============ Team History API ============
+
+export async function getTeamHistory(teamId: number, weeks = 8): Promise<TeamHistoryResponse> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/history?weeks=${weeks}`);
+  if (!res.ok) throw new Error('히스토리 조회에 실패했습니다');
   return res.json();
 }

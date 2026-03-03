@@ -489,5 +489,51 @@ func (m *MockRepository) GetReportByDateAndUser(reportDate string, userID int64)
 	return nil, errors.New("report not found")
 }
 
+// ============ Team Project methods (stub) ============
+
+func (m *MockRepository) CreateTeamProject(teamID int64, name, client string) (*model.TeamProject, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	id := m.nextID
+	m.nextID++
+	return &model.TeamProject{ID: id, TeamID: teamID, Name: name, Client: client, IsActive: true}, nil
+}
+
+func (m *MockRepository) GetTeamProjects(teamID int64, activeOnly bool) ([]model.TeamProject, error) {
+	return nil, nil
+}
+
+func (m *MockRepository) GetTeamProject(id int64) (*model.TeamProject, error) {
+	return nil, errors.New("not found")
+}
+
+func (m *MockRepository) UpdateTeamProject(id int64, name, client string, isActive *bool) error {
+	return nil
+}
+
+func (m *MockRepository) DeleteTeamProject(id int64) error {
+	return nil
+}
+
+func (m *MockRepository) GetOrCreateTeamProject(teamID int64, name string) (*model.TeamProject, error) {
+	return m.CreateTeamProject(teamID, name, "")
+}
+
+func (m *MockRepository) ReorderTeamProjects(teamID int64, ids []int64) error {
+	return nil
+}
+
+func (m *MockRepository) SaveConsolidatedEdit(teamID int64, reportDate, data string, updatedBy int64) error {
+	return nil
+}
+
+func (m *MockRepository) GetConsolidatedEdit(teamID int64, reportDate string) (*model.ConsolidatedEdit, error) {
+	return nil, errors.New("not found")
+}
+
+func (m *MockRepository) DeleteConsolidatedEdit(teamID int64, reportDate string) error {
+	return nil
+}
+
 // Ensure MockRepository implements IRepository
 var _ IRepository = (*MockRepository)(nil)

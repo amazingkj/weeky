@@ -16,7 +16,7 @@ interface PreviewRow {
   date: string;
   progress: string;
   bold: boolean;
-  memberTag: string;
+  isProjectHeader?: boolean;
 }
 
 function groupTasksByTitle(
@@ -49,31 +49,96 @@ function mergeText(members: MemberReportData[], field: 'issues' | 'notes' | 'nex
     .join('\n');
 }
 
-// Build row-per-line data matching pptGenerator's buildConsolidatedRows
-function buildPreviewRows(groups: ConsolidatedTask[]): PreviewRow[] {
+function formatDateMMDD(dateStr: string): string {
+  if (!dateStr) return '-';
+  const parts = dateStr.split('-');
+  if (parts.length >= 3) return `${parts[1]}/${parts[2]}`;
+  return dateStr;
+}
+
+function subGroupByClient(items: ConsolidatedTask['items']): Map<string, ConsolidatedTask['items']> {
+  const map = new Map<string, ConsolidatedTask['items']>();
+  for (const item of items) {
+    const key = (item.task.client || '').trim();
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(item);
+  }
+  return map;
+}
+
+// Build detail rows for a list of items (without project/client headers)
+function buildItemPreviewRows(items: ConsolidatedTask['items']): PreviewRow[] {
   const rows: PreviewRow[] = [];
-  groups.forEach((g, gi) => {
-    rows.push({ body: `${gi + 1}. ${g.title}`, date: '', progress: '', bold: true, memberTag: '' });
-    for (const item of g.items) {
-      let detail = item.task.details || '-';
-      if (item.task.description) detail += '\n' + item.task.description;
-      const lines = detail.split('\n');
-      const tag = item.memberName ? `(${item.memberName} ${item.roleCode}) ` : '';
-      lines.forEach((line, li) => {
-        rows.push({
-          body: line,
-          date: li === 0 ? (item.task.due_date || '-') : '',
-          progress: li === 0 ? `${item.task.progress}%` : '',
-          bold: false,
-          memberTag: li === 0 ? tag : '',
-        });
+  for (const item of items) {
+    const memberTag = item.memberName ? ` ( ${item.memberName} )` : '';
+    let detail = item.task.details || '-';
+    if (item.task.description) detail += '\n' + item.task.description;
+    const lines = detail.split('\n');
+    lines.forEach((line, li) => {
+      rows.push({
+        body: li === 0 ? `- ${line}${memberTag}` : line,
+        date: li === 0 ? formatDateMMDD(item.task.due_date) : '',
+        progress: li === 0 ? `${item.task.progress}%` : '',
+        bold: false,
       });
-    }
-    if (gi < groups.length - 1) {
-      rows.push({ body: '', date: '', progress: '', bold: false, memberTag: '' });
-    }
-  });
+    });
+  }
   return rows;
+}
+
+// Build left/right preview rows aligned by project+client
+function buildAlignedPreviewRows(
+  leftGroups: ConsolidatedTask[],
+  rightGroups: ConsolidatedTask[]
+): { leftRows: PreviewRow[]; rightRows: PreviewRow[] } {
+  const empty: PreviewRow = { body: '', date: '', progress: '', bold: false };
+  const leftRows: PreviewRow[] = [];
+  const rightRows: PreviewRow[] = [];
+
+  // Merge project titles preserving insertion order
+  const allTitles: string[] = [];
+  const seen = new Set<string>();
+  for (const g of leftGroups) { if (!seen.has(g.title)) { seen.add(g.title); allTitles.push(g.title); } }
+  for (const g of rightGroups) { if (!seen.has(g.title)) { seen.add(g.title); allTitles.push(g.title); } }
+
+  const leftMap = new Map(leftGroups.map(g => [g.title, g]));
+  const rightMap = new Map(rightGroups.map(g => [g.title, g]));
+
+  for (const title of allTitles) {
+    const leftGroup = leftMap.get(title);
+    const rightGroup = rightMap.get(title);
+
+    leftRows.push({ body: `[${title}]`, date: '', progress: '', bold: true, isProjectHeader: true });
+    rightRows.push({ body: `[${title}]`, date: '', progress: '', bold: true, isProjectHeader: true });
+
+    const leftClients = leftGroup ? subGroupByClient(leftGroup.items) : new Map<string, ConsolidatedTask['items']>();
+    const rightClients = rightGroup ? subGroupByClient(rightGroup.items) : new Map<string, ConsolidatedTask['items']>();
+    const allClients: string[] = [];
+    const clientSeen = new Set<string>();
+    for (const k of leftClients.keys()) { if (!clientSeen.has(k)) { clientSeen.add(k); allClients.push(k); } }
+    for (const k of rightClients.keys()) { if (!clientSeen.has(k)) { clientSeen.add(k); allClients.push(k); } }
+
+    for (const client of allClients) {
+      const lItems = leftClients.get(client) || [];
+      const rItems = rightClients.get(client) || [];
+
+      if (client) {
+        leftRows.push({ body: `• ${client}`, date: '', progress: '', bold: false, isProjectHeader: false });
+        rightRows.push({ body: `• ${client}`, date: '', progress: '', bold: false, isProjectHeader: false });
+      }
+
+      const lDetailRows = buildItemPreviewRows(lItems);
+      const rDetailRows = buildItemPreviewRows(rItems);
+      const maxLen = Math.max(lDetailRows.length, rDetailRows.length);
+
+      for (let i = 0; i < maxLen; i++) {
+        leftRows.push(i < lDetailRows.length ? lDetailRows[i] : empty);
+        rightRows.push(i < rDetailRows.length ? rDetailRows[i] : empty);
+      }
+    }
+  }
+
+  return { leftRows, rightRows };
 }
 
 // Same pagination as pptGenerator with balanced distribution
@@ -93,7 +158,7 @@ function calcPagination(leftCount: number, rightCount: number, bodyH: number) {
   return { fontSize: 7, pages, linesPerPage: balancedPerPage };
 }
 
-const emptyRow: PreviewRow = { body: '', date: '', progress: '', bold: false, memberTag: '' };
+const emptyRow: PreviewRow = { body: '', date: '', progress: '', bold: false };
 
 // Header cell
 function HCell({ children, className = '', colSpan = 1, align = 'left' }: {
@@ -121,8 +186,7 @@ export default function ConsolidatedPptPreview({ data }: ConsolidatedPptPreviewP
   const slides = useMemo(() => {
     const thisWeekGroups = groupTasksByTitle(data.members, 'this_week');
     const nextWeekGroups = groupTasksByTitle(data.members, 'next_week');
-    const leftRows = buildPreviewRows(thisWeekGroups);
-    const rightRows = buildPreviewRows(nextWeekGroups);
+    const { leftRows, rightRows } = buildAlignedPreviewRows(thisWeekGroups, nextWeekGroups);
 
     const issues = mergeText(data.members, 'issues');
     const notes = mergeText(data.members, 'notes');
@@ -137,7 +201,7 @@ export default function ConsolidatedPptPreview({ data }: ConsolidatedPptPreviewP
     const noteH = Math.max(0.28, Math.min(0.55, noteLineCount * 0.14 + 0.05));
     const bodyH = 6.9 - (0.35 + 0.30 + 0.40 + issueH + noteH);
 
-    const { pages, linesPerPage } = calcPagination(leftRows.length, rightRows.length, bodyH);
+    const { pages, linesPerPage } = calcPagination(leftRows.length, leftRows.length, bodyH);
 
     const slideList: { title: string; content: React.ReactNode }[] = [];
 
@@ -209,7 +273,7 @@ export default function ConsolidatedPptPreview({ data }: ConsolidatedPptPreviewP
                       <td className={`${brdCls} px-1 py-0 align-top`}>
                         {lr.bold
                           ? <span className="font-medium">{lr.body}</span>
-                          : <span className="pl-1">{lr.memberTag && <span className="text-neutral-500">{lr.memberTag}</span>}{lr.body}</span>
+                          : <span className="pl-2">{lr.body}</span>
                         }
                       </td>
                       <td className={`${brdCls} px-1 py-0 text-center align-top`}>{lr.date}</td>
@@ -217,7 +281,7 @@ export default function ConsolidatedPptPreview({ data }: ConsolidatedPptPreviewP
                       <td className={`${brdCls} px-1 py-0 align-top`}>
                         {rr.bold
                           ? <span className="font-medium">{rr.body}</span>
-                          : <span className="pl-1">{rr.memberTag && <span className="text-neutral-500">{rr.memberTag}</span>}{rr.body}</span>
+                          : <span className="pl-2">{rr.body}</span>
                         }
                       </td>
                       <td className={`${brdCls} px-1 py-0 text-center align-top`}>{rr.date}</td>

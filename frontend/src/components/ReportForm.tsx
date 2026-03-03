@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Report, Task, Team, defaultTemplateStyle } from '../types';
+import { Report, Task, Team, TeamProject, defaultTemplateStyle } from '../types';
 import { generatePPT } from '../utils/pptGenerator';
-import { getConfig, saveReport, getMyTeams, getReports, getMySubmission, submitReport as apiSubmitReport, unsubmitReport as apiUnsubmitReport } from '../services/api';
+import { getConfig, saveReport, getMyTeams, getReports, getMySubmission, submitReport as apiSubmitReport, unsubmitReport as apiUnsubmitReport, getTeamProjects, autoCreateTeamProject } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { isSameWeek } from '../utils/date';
 import TaskList from './TaskList';
@@ -64,6 +64,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [existingReports, setExistingReports] = useState<Report[]>([]);
   const [carriedForward, setCarriedForward] = useState(false);
+  const [teamProjects, setTeamProjects] = useState<TeamProject[]>([]);
   const successTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const findPreviousWeekReport = useCallback((reports: Report[], currentDate: string): Report | null => {
@@ -121,6 +122,12 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
       }
     });
   }, []);
+
+  // Fetch team projects when team changes
+  useEffect(() => {
+    if (!selectedTeamId) { setTeamProjects([]); return; }
+    getTeamProjects(selectedTeamId, true).then(setTeamProjects).catch(() => setTeamProjects([]));
+  }, [selectedTeamId]);
 
   // Check submission status when team or date changes
   useEffect(() => {
@@ -189,6 +196,17 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
       setCachedValue(STORAGE_KEYS.authorName, value);
     }
   }, [existingReports, findPreviousWeekReport]);
+
+  const handleAutoCreateProject = useCallback(async (name: string) => {
+    if (!selectedTeamId || !name.trim()) return;
+    try {
+      const project = await autoCreateTeamProject(selectedTeamId, name.trim());
+      setTeamProjects(prev => {
+        if (prev.some(p => p.id === project.id)) return prev;
+        return [...prev, project];
+      });
+    } catch { /* ignore */ }
+  }, [selectedTeamId]);
 
   const handleAIGenerate = useCallback((thisWeek: Task[], nextWeek: Task[]) => {
     setReport((prev) => ({
@@ -394,7 +412,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
               {closeIcon}
             </button>
           </div>
-          <SyncPanel onAIGenerate={handleAIGenerate} />
+          <SyncPanel onAIGenerate={handleAIGenerate} projectNames={teamProjects.map(p => p.client ? `${p.name} (고객사: ${p.client})` : p.name)} />
         </div>
       ) : null}
 
@@ -496,6 +514,8 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
                 onChange={(tasks) => updateField('this_week', tasks)}
                 showProgress={true}
                 emptyIcon={emptyTaskIcon}
+                projectSuggestions={teamProjects}
+                onAutoCreateProject={handleAutoCreateProject}
               />
             </section>
             <TextSection
@@ -524,6 +544,8 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
                 onChange={(tasks) => updateField('next_week', tasks)}
                 showProgress={false}
                 emptyIcon={emptyPlanIcon}
+                projectSuggestions={teamProjects}
+                onAutoCreateProject={handleAutoCreateProject}
               />
             </section>
             <TextSection

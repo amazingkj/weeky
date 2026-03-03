@@ -167,6 +167,22 @@ func main() {
 	protected.Get("/teams/:id/consolidated", h.GetConsolidatedReport)
 	protected.Post("/teams/:id/ai/summarize", h.SummarizeConsolidatedReport)
 
+	// Team project routes
+	protected.Get("/teams/:id/projects", h.GetTeamProjects)
+	protected.Post("/teams/:id/projects", h.CreateTeamProject)
+	protected.Post("/teams/:id/projects/auto", h.AutoCreateTeamProject)
+	protected.Put("/teams/:id/projects/reorder", h.ReorderTeamProjects)
+	protected.Put("/teams/:id/projects/:pid", h.UpdateTeamProject)
+	protected.Delete("/teams/:id/projects/:pid", h.DeleteTeamProject)
+
+	// Consolidated edit routes
+	protected.Put("/teams/:id/consolidated-edit", h.SaveConsolidatedEdit)
+	protected.Get("/teams/:id/consolidated-edit", h.GetConsolidatedEdit)
+	protected.Delete("/teams/:id/consolidated-edit", h.DeleteConsolidatedEdit)
+
+	// Team history route
+	protected.Get("/teams/:id/history", h.GetTeamHistory)
+
 	// Backward-compatible /api routes (redirect to /api/v1)
 	app.Use("/api", func(c *fiber.Ctx) error {
 		path := c.Path()

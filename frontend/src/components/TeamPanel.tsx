@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Team, TeamMember, ReportSubmission, Report, TEAM_ROLE_LABELS, ROLE_CODE_LABELS } from '../types';
-import { getMyTeams, getTeamMembers, getMySubmission, getMySubmissions, getReports, deleteTeam, updateTeam } from '../services/api';
+import { Team, TeamMember, TeamProject, ReportSubmission, Report, TEAM_ROLE_LABELS, ROLE_CODE_LABELS } from '../types';
+import { getMyTeams, getTeamMembers, getMySubmission, getMySubmissions, getReports, deleteTeam, updateTeam, getTeamProjects, createTeamProject, updateTeamProject, deleteTeamProject, reorderTeamProjects } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import TeamCreateModal from './TeamCreateModal';
 import TeamMemberManager from './TeamMemberManager';
 import TeamSubmissionPanel from './TeamSubmissionPanel';
+import WeeklyHistoryPanel from './WeeklyHistoryPanel';
 import Loading from './ui/Loading';
 
 export default function TeamPanel() {
@@ -14,7 +15,7 @@ export default function TeamPanel() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [myRole, setMyRole] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'members' | 'submissions'>('submissions');
+  const [activeView, setActiveView] = useState<'members' | 'submissions' | 'projects' | 'history'>('submissions');
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [mySubmissionStatus, setMySubmissionStatus] = useState<boolean>(false);
   const [submissionHistory, setSubmissionHistory] = useState<ReportSubmission[]>([]);
@@ -25,6 +26,11 @@ export default function TeamPanel() {
   const [teamNameInput, setTeamNameInput] = useState('');
   const [teamDescInput, setTeamDescInput] = useState('');
   const [teamNameSaving, setTeamNameSaving] = useState(false);
+  const [teamProjects, setTeamProjects] = useState<TeamProject[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectClient, setNewProjectClient] = useState('');
+  const [editingProject, setEditingProject] = useState<TeamProject | null>(null);
 
   const fetchTeams = useCallback(async () => {
     try {
@@ -64,6 +70,62 @@ export default function TeamPanel() {
       setSubmissionHistory(data);
     }).catch(() => setSubmissionHistory([])).finally(() => setHistoryLoading(false));
   }, [selectedTeam, user]);
+
+  // Fetch team projects
+  useEffect(() => {
+    if (!selectedTeam || (activeView !== 'projects' && activeView !== 'history')) return;
+    setProjectsLoading(true);
+    getTeamProjects(selectedTeam.id).then(setTeamProjects).catch(() => setTeamProjects([])).finally(() => setProjectsLoading(false));
+  }, [selectedTeam, activeView]);
+
+  const handleCreateProject = async () => {
+    if (!selectedTeam || !newProjectName.trim()) return;
+    try {
+      const project = await createTeamProject(selectedTeam.id, newProjectName.trim(), newProjectClient.trim());
+      setTeamProjects(prev => [...prev, project]);
+      setNewProjectName('');
+      setNewProjectClient('');
+    } catch (err: any) {
+      alert(err.message || '프로젝트 생성에 실패했습니다.');
+    }
+  };
+
+  const handleUpdateProject = async (p: TeamProject) => {
+    if (!selectedTeam) return;
+    try {
+      await updateTeamProject(selectedTeam.id, p.id, p.name, p.client, p.is_active);
+      setTeamProjects(prev => prev.map(x => x.id === p.id ? p : x));
+      setEditingProject(null);
+    } catch (err: any) {
+      alert(err.message || '프로젝트 수정에 실패했습니다.');
+    }
+  };
+
+  const handleDeleteProject = async (pid: number) => {
+    if (!selectedTeam || !confirm('이 프로젝트를 삭제하시겠습니까?')) return;
+    try {
+      await deleteTeamProject(selectedTeam.id, pid);
+      setTeamProjects(prev => prev.filter(x => x.id !== pid));
+    } catch (err: any) {
+      alert(err.message || '프로젝트 삭제에 실패했습니다.');
+    }
+  };
+
+  const handleMoveProject = async (index: number, direction: 'up' | 'down') => {
+    if (!selectedTeam) return;
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= teamProjects.length) return;
+    const newList = [...teamProjects];
+    [newList[index], newList[newIndex]] = [newList[newIndex], newList[index]];
+    setTeamProjects(newList);
+    try {
+      await reorderTeamProjects(selectedTeam.id, newList.map(p => p.id));
+    } catch (err: any) {
+      // Revert on error
+      setTeamProjects(teamProjects);
+      alert(err.message || '순서 변경에 실패했습니다.');
+    }
+  };
 
   const handleTeamCreated = (team: Team) => {
     setTeams(prev => [team, ...prev]);
@@ -252,16 +314,36 @@ export default function TeamPanel() {
                 }`}>
                 취합 현황
               </button>
+              <button
+                onClick={() => setActiveView('history')}
+                className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                  activeView === 'history'
+                    ? 'border-neutral-900 text-neutral-900'
+                    : 'border-transparent text-neutral-500 hover:text-neutral-700'
+                }`}>
+                히스토리
+              </button>
               {(myRole === 'leader' || user?.is_admin) && (
-                <button
-                  onClick={() => setActiveView('members')}
-                  className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
-                    activeView === 'members'
-                      ? 'border-neutral-900 text-neutral-900'
-                      : 'border-transparent text-neutral-500 hover:text-neutral-700'
-                  }`}>
-                  멤버 관리
-                </button>
+                <>
+                  <button
+                    onClick={() => setActiveView('projects')}
+                    className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                      activeView === 'projects'
+                        ? 'border-neutral-900 text-neutral-900'
+                        : 'border-transparent text-neutral-500 hover:text-neutral-700'
+                    }`}>
+                    프로젝트 관리
+                  </button>
+                  <button
+                    onClick={() => setActiveView('members')}
+                    className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                      activeView === 'members'
+                        ? 'border-neutral-900 text-neutral-900'
+                        : 'border-transparent text-neutral-500 hover:text-neutral-700'
+                    }`}>
+                    멤버 관리
+                  </button>
+                </>
               )}
             </div>
           )}
@@ -270,6 +352,141 @@ export default function TeamPanel() {
           <div className="p-5">
             {isLeaderOrGroupLeader && activeView === 'submissions' && (
               <TeamSubmissionPanel team={selectedTeam} />
+            )}
+            {isLeaderOrGroupLeader && activeView === 'history' && (
+              <WeeklyHistoryPanel teamId={selectedTeam.id} />
+            )}
+            {(myRole === 'leader' || user?.is_admin) && activeView === 'projects' && (
+              <div className="space-y-4">
+                {/* Add project form */}
+                <div className="flex items-end gap-2">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-neutral-500 mb-1">프로젝트명</label>
+                    <input
+                      type="text"
+                      value={newProjectName}
+                      onChange={e => setNewProjectName(e.target.value)}
+                      placeholder="프로젝트 이름"
+                      className="w-full px-2.5 py-1.5 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400"
+                      onKeyDown={e => { if (e.key === 'Enter' && newProjectName.trim()) handleCreateProject(); }}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-neutral-500 mb-1">고객사 (선택)</label>
+                    <input
+                      type="text"
+                      value={newProjectClient}
+                      onChange={e => setNewProjectClient(e.target.value)}
+                      placeholder="고객사명"
+                      className="w-full px-2.5 py-1.5 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-400"
+                      onKeyDown={e => { if (e.key === 'Enter' && newProjectName.trim()) handleCreateProject(); }}
+                    />
+                  </div>
+                  <button
+                    onClick={handleCreateProject}
+                    disabled={!newProjectName.trim()}
+                    className="px-3 py-1.5 text-xs font-medium text-white bg-neutral-900 rounded-lg hover:bg-neutral-800 disabled:opacity-40 transition-colors"
+                  >
+                    추가
+                  </button>
+                </div>
+
+                {/* Project list */}
+                {projectsLoading ? (
+                  <Loading text="프로젝트 로딩 중..." />
+                ) : teamProjects.length === 0 ? (
+                  <p className="text-xs text-neutral-400 py-4 text-center">등록된 프로젝트가 없습니다.</p>
+                ) : (
+                  <div className="divide-y divide-neutral-100">
+                    {teamProjects.map((p, idx) => (
+                      <div key={p.id} className="group flex items-center gap-2 py-2.5">
+                        {editingProject?.id === p.id ? (
+                          <>
+                            <input
+                              type="text"
+                              value={editingProject.name}
+                              onChange={e => setEditingProject({ ...editingProject, name: e.target.value })}
+                              className="flex-1 px-2 py-1 text-sm border border-neutral-300 rounded-md focus:outline-none focus:border-neutral-400"
+                            />
+                            <input
+                              type="text"
+                              value={editingProject.client}
+                              onChange={e => setEditingProject({ ...editingProject, client: e.target.value })}
+                              placeholder="고객사"
+                              className="flex-1 px-2 py-1 text-sm border border-neutral-300 rounded-md focus:outline-none focus:border-neutral-400"
+                            />
+                            <label className="flex items-center gap-1 text-xs text-neutral-500">
+                              <input
+                                type="checkbox"
+                                checked={editingProject.is_active}
+                                onChange={e => setEditingProject({ ...editingProject, is_active: e.target.checked })}
+                              />
+                              활성
+                            </label>
+                            <button
+                              onClick={() => handleUpdateProject(editingProject)}
+                              className="p-1 text-green-600 hover:text-green-700 transition-colors" title="저장">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => setEditingProject(null)}
+                              className="p-1 text-neutral-400 hover:text-neutral-600 transition-colors" title="취소">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {/* Reorder buttons */}
+                            <div className="flex flex-col gap-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => handleMoveProject(idx, 'up')} disabled={idx === 0}
+                                className="p-0.5 text-neutral-400 hover:text-neutral-600 disabled:opacity-20" title="위로">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 15l7-7 7 7" />
+                                </svg>
+                              </button>
+                              <button onClick={() => handleMoveProject(idx, 'down')} disabled={idx === teamProjects.length - 1}
+                                className="p-0.5 text-neutral-400 hover:text-neutral-600 disabled:opacity-20" title="아래로">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </button>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <span className={`text-sm font-medium ${p.is_active ? 'text-neutral-900' : 'text-neutral-400 line-through'}`}>
+                                {p.name}
+                              </span>
+                              {p.client && (
+                                <span className="ml-2 text-xs text-neutral-400">{p.client}</span>
+                              )}
+                            </div>
+                            {!p.is_active && (
+                              <span className="px-1.5 py-0.5 bg-neutral-100 text-neutral-400 text-[10px] rounded">비활성</span>
+                            )}
+                            <button
+                              onClick={() => setEditingProject({ ...p })}
+                              className="p-1 text-neutral-400 hover:text-neutral-600 transition-colors" title="수정">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteProject(p.id)}
+                              className="p-1 text-neutral-400 hover:text-red-500 transition-colors" title="삭제">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
             {(myRole === 'leader' || user?.is_admin) && activeView === 'members' && (
               <TeamMemberManager team={selectedTeam} />

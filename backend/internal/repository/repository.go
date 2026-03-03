@@ -69,6 +69,20 @@ type IRepository interface {
 	// Consolidated report
 	GetReportByID(id int64) (*model.Report, error)
 	UpdateReportByID(id int64, req model.CreateReportRequest) error
+
+	// Team project methods
+	CreateTeamProject(teamID int64, name, client string) (*model.TeamProject, error)
+	GetTeamProjects(teamID int64, activeOnly bool) ([]model.TeamProject, error)
+	GetTeamProject(id int64) (*model.TeamProject, error)
+	UpdateTeamProject(id int64, name, client string, isActive *bool) error
+	DeleteTeamProject(id int64) error
+	GetOrCreateTeamProject(teamID int64, name string) (*model.TeamProject, error)
+	ReorderTeamProjects(teamID int64, ids []int64) error
+
+	// Consolidated edit methods
+	SaveConsolidatedEdit(teamID int64, reportDate, data string, updatedBy int64) error
+	GetConsolidatedEdit(teamID int64, reportDate string) (*model.ConsolidatedEdit, error)
+	DeleteConsolidatedEdit(teamID int64, reportDate string) error
 }
 
 // Ensure Repository implements IRepository

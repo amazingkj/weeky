@@ -6,6 +6,7 @@ import { SyncResult } from '../types';
 interface SyncPanelProps {
   onAddItems?: (items: never[]) => void;
   onAIGenerate?: (thisWeek: Task[], nextWeek: Task[]) => void;
+  projectNames?: string[];
 }
 
 const getWeekRange = () => {
@@ -24,7 +25,7 @@ const getWeekRange = () => {
 
 type ReportStyle = 'concise' | 'detailed' | 'very_detailed';
 
-export default function SyncPanel({ onAIGenerate }: SyncPanelProps) {
+export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps) {
   const [dateRange, setDateRange] = useState(() => getWeekRange());
   const [reportStyle, setReportStyle] = useState<ReportStyle>(() => {
     const saved = localStorage.getItem('reportStyle');
@@ -139,6 +140,7 @@ export default function SyncPanel({ onAIGenerate }: SyncPanelProps) {
         start_date: dateRange.start,
         end_date: dateRange.end,
         style: reportStyle,
+        project_names: projectNames,
       });
       onAIGenerate?.(response.this_week, response.next_week || []);
     } catch (err) {
@@ -146,7 +148,7 @@ export default function SyncPanel({ onAIGenerate }: SyncPanelProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [config, dateRange, reportStyle, onAIGenerate]);
+  }, [config, dateRange, reportStyle, onAIGenerate, projectNames]);
 
   const services = configuredServices();
 

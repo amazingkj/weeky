@@ -1,10 +1,13 @@
 export interface Task {
   title: string;
+  client?: string; // 고객사명
   details?: string; // 진행 사항
   description?: string; // 진행사항 상세내용
   due_date: string;
   progress: number; // 0-100
   _carriedForward?: boolean; // UI 전용, 백엔드 저장 안됨
+  _memberName?: string; // UI 전용, 취합 편집 시 멤버 추적용
+  _roleCode?: string; // UI 전용, 취합 편집 시 멤버 추적용
 }
 
 export interface TemplateStyle {
@@ -218,4 +221,32 @@ export interface ConsolidatedReport {
   team: Team;
   report_date: string;
   members: MemberReportData[];
+}
+
+// ============ Team Project types ============
+
+export interface TeamProject {
+  id: number;
+  team_id: number;
+  name: string;
+  client: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+// ============ Team History types ============
+
+export interface WeekSummary {
+  week_date: string;
+  friday_date: string;
+  submitted_count: number;
+  total_members: number;
+  submitted_names: string[];
+}
+
+export interface TeamHistoryResponse {
+  team_id: number;
+  team_name: string;
+  weeks: WeekSummary[];
 }

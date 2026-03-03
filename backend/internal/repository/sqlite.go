@@ -149,6 +149,48 @@ ALTER TABLE reports ADD COLUMN next_notes TEXT DEFAULT '';`,
 			UNIQUE(report_id, team_id)
 		);`,
 	},
+	{
+		version: 5,
+		sql: `CREATE TABLE IF NOT EXISTS team_projects (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			client TEXT DEFAULT '',
+			is_active INTEGER DEFAULT 1,
+			sort_order INTEGER DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(team_id, name)
+		);`,
+	},
+	{
+		version: 6,
+		sql: `CREATE TABLE IF NOT EXISTS team_projects_new (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			client TEXT DEFAULT '',
+			is_active INTEGER DEFAULT 1,
+			sort_order INTEGER DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(team_id, name, client)
+		);
+		INSERT INTO team_projects_new (id, team_id, name, client, is_active, sort_order, created_at)
+			SELECT id, team_id, name, client, is_active, sort_order, created_at FROM team_projects;
+		DROP TABLE team_projects;
+		ALTER TABLE team_projects_new RENAME TO team_projects;`,
+	},
+	{
+		version: 7,
+		sql: `CREATE TABLE IF NOT EXISTS consolidated_edits (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+			report_date TEXT NOT NULL,
+			data TEXT NOT NULL,
+			updated_by INTEGER NOT NULL,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(team_id, report_date)
+		);`,
+	},
 }
 
 func runMigrations(db *sql.DB) error {
@@ -1026,5 +1068,151 @@ func (r *Repository) UpdateReportByID(id int64, req model.CreateReportRequest) e
 		req.TeamName, req.AuthorName, req.ReportDate, string(thisWeekJSON), string(nextWeekJSON),
 		req.Issues, req.Notes, req.NextIssues, req.NextNotes, req.TemplateID, id,
 	)
+	return err
+}
+
+// ============ Team Project methods ============
+
+func (r *Repository) CreateTeamProject(teamID int64, name, client string) (*model.TeamProject, error) {
+	result, err := r.db.Exec(
+		"INSERT INTO team_projects (team_id, name, client) VALUES (?, ?, ?)",
+		teamID, name, client,
+	)
+	if err != nil {
+		return nil, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	return &model.TeamProject{
+		ID:        id,
+		TeamID:    teamID,
+		Name:      name,
+		Client:    client,
+		IsActive:  true,
+		CreatedAt: time.Now(),
+	}, nil
+}
+
+func (r *Repository) GetTeamProjects(teamID int64, activeOnly bool) ([]model.TeamProject, error) {
+	query := "SELECT id, team_id, name, client, is_active, sort_order, created_at FROM team_projects WHERE team_id = ?"
+	if activeOnly {
+		query += " AND is_active = 1"
+	}
+	query += " ORDER BY sort_order, name"
+
+	rows, err := r.db.Query(query, teamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var projects []model.TeamProject
+	for rows.Next() {
+		var p model.TeamProject
+		var isActive int
+		if err := rows.Scan(&p.ID, &p.TeamID, &p.Name, &p.Client, &isActive, &p.SortOrder, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		p.IsActive = isActive == 1
+		projects = append(projects, p)
+	}
+	return projects, rows.Err()
+}
+
+func (r *Repository) GetTeamProject(id int64) (*model.TeamProject, error) {
+	var p model.TeamProject
+	var isActive int
+	err := r.db.QueryRow(
+		"SELECT id, team_id, name, client, is_active, sort_order, created_at FROM team_projects WHERE id = ?", id,
+	).Scan(&p.ID, &p.TeamID, &p.Name, &p.Client, &isActive, &p.SortOrder, &p.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	p.IsActive = isActive == 1
+	return &p, nil
+}
+
+func (r *Repository) UpdateTeamProject(id int64, name, client string, isActive *bool) error {
+	if isActive != nil {
+		active := 0
+		if *isActive {
+			active = 1
+		}
+		_, err := r.db.Exec("UPDATE team_projects SET name = ?, client = ?, is_active = ? WHERE id = ?", name, client, active, id)
+		return err
+	}
+	_, err := r.db.Exec("UPDATE team_projects SET name = ?, client = ? WHERE id = ?", name, client, id)
+	return err
+}
+
+func (r *Repository) DeleteTeamProject(id int64) error {
+	_, err := r.db.Exec("DELETE FROM team_projects WHERE id = ?", id)
+	return err
+}
+
+func (r *Repository) GetOrCreateTeamProject(teamID int64, name string) (*model.TeamProject, error) {
+	var p model.TeamProject
+	var isActive int
+	err := r.db.QueryRow(
+		"SELECT id, team_id, name, client, is_active, sort_order, created_at FROM team_projects WHERE team_id = ? AND name = ?",
+		teamID, name,
+	).Scan(&p.ID, &p.TeamID, &p.Name, &p.Client, &isActive, &p.SortOrder, &p.CreatedAt)
+	if err == nil {
+		p.IsActive = isActive == 1
+		return &p, nil
+	}
+	// Not found, create
+	return r.CreateTeamProject(teamID, name, "")
+}
+
+func (r *Repository) ReorderTeamProjects(teamID int64, ids []int64) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare("UPDATE team_projects SET sort_order = ? WHERE id = ? AND team_id = ?")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for i, id := range ids {
+		if _, err := stmt.Exec(i, id, teamID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ============ Consolidated Edit methods ============
+
+func (r *Repository) SaveConsolidatedEdit(teamID int64, reportDate, data string, updatedBy int64) error {
+	_, err := r.db.Exec(
+		`INSERT INTO consolidated_edits (team_id, report_date, data, updated_by, updated_at)
+		 VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+		 ON CONFLICT(team_id, report_date) DO UPDATE SET data = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP`,
+		teamID, reportDate, data, updatedBy, data, updatedBy,
+	)
+	return err
+}
+
+func (r *Repository) GetConsolidatedEdit(teamID int64, reportDate string) (*model.ConsolidatedEdit, error) {
+	var e model.ConsolidatedEdit
+	err := r.db.QueryRow(
+		"SELECT id, team_id, report_date, data, updated_by, updated_at FROM consolidated_edits WHERE team_id = ? AND report_date = ?",
+		teamID, reportDate,
+	).Scan(&e.ID, &e.TeamID, &e.ReportDate, &e.Data, &e.UpdatedBy, &e.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &e, nil
+}
+
+func (r *Repository) DeleteConsolidatedEdit(teamID int64, reportDate string) error {
+	_, err := r.db.Exec("DELETE FROM consolidated_edits WHERE team_id = ? AND report_date = ?", teamID, reportDate)
 	return err
 }

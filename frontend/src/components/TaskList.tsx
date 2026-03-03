@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, memo } from 'react';
-import { Task } from '../types';
+import { Task, TeamProject } from '../types';
+import ProjectCombobox from './ProjectCombobox';
 
 interface TaskListProps {
   title: string;
@@ -8,6 +9,8 @@ interface TaskListProps {
   onChange: (tasks: Task[]) => void;
   showProgress?: boolean;
   emptyIcon?: React.ReactNode;
+  projectSuggestions?: TeamProject[];
+  onAutoCreateProject?: (name: string) => void;
 }
 
 export default function TaskList({
@@ -16,7 +19,9 @@ export default function TaskList({
   tasks,
   onChange,
   showProgress = true,
-  emptyIcon
+  emptyIcon,
+  projectSuggestions,
+  onAutoCreateProject
 }: TaskListProps) {
   const idCounter = useRef(0);
   const taskIdsRef = useRef<number[]>([]);
@@ -36,6 +41,13 @@ export default function TaskList({
     // IDs stay the same — no change needed
     const updated = tasks.map((task, i) =>
       i === index ? { ...task, [field]: value } : task
+    );
+    onChange(updated);
+  }, [tasks, onChange]);
+
+  const updateTaskMulti = useCallback((index: number, fields: Partial<Task>) => {
+    const updated = tasks.map((task, i) =>
+      i === index ? { ...task, ...fields } : task
     );
     onChange(updated);
   }, [tasks, onChange]);
@@ -74,6 +86,9 @@ export default function TaskList({
           {description ? (
             <p className="text-xs text-neutral-400 mt-0.5">{description}</p>
           ) : null}
+          {projectSuggestions && projectSuggestions.length > 0 && (
+            <p className="text-[11px] text-neutral-400 mt-0.5">업무 제목을 클릭하면 등록된 프로젝트를 선택할 수 있습니다</p>
+          )}
         </div>
         <button
           type="button"
@@ -108,9 +123,12 @@ export default function TaskList({
               totalCount={tasks.length}
               showProgress={showProgress}
               onUpdate={(field, value) => updateTask(index, field, value)}
+              onUpdateMulti={(fields) => updateTaskMulti(index, fields)}
               onRemove={() => removeTask(index)}
               onMoveUp={() => moveTask(index, 'up')}
               onMoveDown={() => moveTask(index, 'down')}
+              projectSuggestions={projectSuggestions}
+              onAutoCreateProject={onAutoCreateProject}
             />
           ))}
         </div>
@@ -125,9 +143,12 @@ interface TaskItemProps {
   totalCount: number;
   showProgress: boolean;
   onUpdate: (field: keyof Task, value: string | number) => void;
+  onUpdateMulti: (fields: Partial<Task>) => void;
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  projectSuggestions?: TeamProject[];
+  onAutoCreateProject?: (name: string) => void;
 }
 
 const TaskItem = memo(function TaskItem({
@@ -136,9 +157,12 @@ const TaskItem = memo(function TaskItem({
   totalCount,
   showProgress,
   onUpdate,
+  onUpdateMulti,
   onRemove,
   onMoveUp,
-  onMoveDown
+  onMoveDown,
+  projectSuggestions,
+  onAutoCreateProject
 }: TaskItemProps) {
   const [showDescription, setShowDescription] = useState(() => !!task.description);
 
@@ -159,6 +183,11 @@ const TaskItem = memo(function TaskItem({
           {task._carriedForward && (
             <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 text-[10px] font-medium rounded">
               이전 주
+            </span>
+          )}
+          {task._memberName && (
+            <span className="px-1.5 py-0.5 bg-neutral-200 text-neutral-600 text-[10px] font-medium rounded">
+              {task._memberName}{task._roleCode ? ` (${task._roleCode})` : ''}
             </span>
           )}
           {showProgress ? (
@@ -190,14 +219,36 @@ const TaskItem = memo(function TaskItem({
       </div>
 
       {/* Title */}
+      {projectSuggestions && projectSuggestions.length > 0 ? (
+        <ProjectCombobox
+          value={task.title}
+          onChange={(v) => onUpdate('title', v)}
+          onSelectProject={(p) => onUpdateMulti({ title: p.name, client: p.client || '' })}
+          projects={projectSuggestions}
+          onAutoCreate={onAutoCreateProject}
+          placeholder="업무 제목"
+        />
+      ) : (
+        <input
+          type="text"
+          placeholder="업무 제목"
+          value={task.title}
+          onChange={(e) => onUpdate('title', e.target.value)}
+          className="w-full px-2.5 py-1.5 text-sm bg-white border border-neutral-200 rounded-md
+                     focus:outline-none focus:ring-1 focus:ring-neutral-400 focus:border-neutral-400
+                     text-neutral-900 placeholder:text-neutral-300 font-medium transition-colors"
+        />
+      )}
+
+      {/* Client */}
       <input
         type="text"
-        placeholder="업무 제목"
-        value={task.title}
-        onChange={(e) => onUpdate('title', e.target.value)}
-        className="w-full px-2.5 py-1.5 text-sm bg-white border border-neutral-200 rounded-md
+        placeholder="고객사 (선택)"
+        value={task.client || ''}
+        onChange={(e) => onUpdate('client', e.target.value)}
+        className="w-full mt-1.5 px-2.5 py-1.5 text-xs bg-white border border-neutral-200 rounded-md
                    focus:outline-none focus:ring-1 focus:ring-neutral-400 focus:border-neutral-400
-                   text-neutral-900 placeholder:text-neutral-300 font-medium transition-colors"
+                   text-neutral-500 placeholder:text-neutral-300 transition-colors"
       />
 
       {/* Details */}

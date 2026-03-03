@@ -384,29 +384,101 @@ interface BodyRow {
   bold: boolean;
 }
 
-function buildConsolidatedRows(groups: ConsolidatedGroup[]): BodyRow[] {
+function formatDateShortMMDD(dateStr: string): string {
+  if (!dateStr) return '-';
+  const parts = dateStr.split('-');
+  if (parts.length >= 3) return `${parts[1]}/${parts[2]}`;
+  return dateStr;
+}
+
+function subGroupByClient(items: ConsolidatedTaskItem[]): Map<string, ConsolidatedTaskItem[]> {
+  const map = new Map<string, ConsolidatedTaskItem[]>();
+  for (const item of items) {
+    const key = (item.task.client || '').trim();
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(item);
+  }
+  return map;
+}
+
+// Build detail rows for a list of items (without project/client headers)
+function buildItemRows(items: ConsolidatedTaskItem[], indent: string): BodyRow[] {
   const rows: BodyRow[] = [];
-  groups.forEach((g, gi) => {
-    rows.push({ body: `${gi + 1}. ${g.title}`, date: '', progress: '', bold: true });
-    g.items.forEach(item => {
-      const memberTag = item.memberName ? `(${item.memberName} ${item.roleCode}) ` : '';
-      let detail = `${memberTag}${item.task.details || '-'}`;
-      if (item.task.description) detail += '\n' + item.task.description;
-      const lines = detail.split('\n');
-      lines.forEach((line, li) => {
-        rows.push({
-          body: `  ${line}`,
-          date: li === 0 ? (item.task.due_date || '-') : '',
-          progress: li === 0 ? `${item.task.progress}%` : '',
-          bold: false,
-        });
+  for (const item of items) {
+    const memberTag = item.memberName ? ` ( ${item.memberName} )` : '';
+    let detail = item.task.details || '-';
+    if (item.task.description) detail += '\n' + item.task.description;
+    const lines = detail.split('\n');
+    lines.forEach((line, li) => {
+      rows.push({
+        body: li === 0 ? `${indent}- ${line}${memberTag}` : `${indent}  ${line}`,
+        date: li === 0 ? formatDateShortMMDD(item.task.due_date) : '',
+        progress: li === 0 ? `${item.task.progress}%` : '',
+        bold: false,
       });
     });
-    if (gi < groups.length - 1) {
-      rows.push({ body: '', date: '', progress: '', bold: false });
-    }
-  });
+  }
   return rows;
+}
+
+// Build left/right rows aligned by project+client
+function buildAlignedRows(
+  leftGroups: ConsolidatedGroup[],
+  rightGroups: ConsolidatedGroup[]
+): { leftRows: BodyRow[]; rightRows: BodyRow[] } {
+  const emptyRow: BodyRow = { body: '', date: '', progress: '', bold: false };
+  const leftRows: BodyRow[] = [];
+  const rightRows: BodyRow[] = [];
+
+  // Merge project titles preserving insertion order (left first, then right-only)
+  const allTitles: string[] = [];
+  const seen = new Set<string>();
+  for (const g of leftGroups) { if (!seen.has(g.title)) { seen.add(g.title); allTitles.push(g.title); } }
+  for (const g of rightGroups) { if (!seen.has(g.title)) { seen.add(g.title); allTitles.push(g.title); } }
+
+  const leftMap = new Map(leftGroups.map(g => [g.title, g]));
+  const rightMap = new Map(rightGroups.map(g => [g.title, g]));
+
+  for (const title of allTitles) {
+    const leftGroup = leftMap.get(title);
+    const rightGroup = rightMap.get(title);
+
+    // Project header row on both sides
+    leftRows.push({ body: `[${title}]`, date: '', progress: '', bold: true });
+    rightRows.push({ body: `[${title}]`, date: '', progress: '', bold: true });
+
+    // Merge clients from both sides
+    const leftClients = leftGroup ? subGroupByClient(leftGroup.items) : new Map<string, ConsolidatedTaskItem[]>();
+    const rightClients = rightGroup ? subGroupByClient(rightGroup.items) : new Map<string, ConsolidatedTaskItem[]>();
+    const allClients: string[] = [];
+    const clientSeen = new Set<string>();
+    for (const k of leftClients.keys()) { if (!clientSeen.has(k)) { clientSeen.add(k); allClients.push(k); } }
+    for (const k of rightClients.keys()) { if (!clientSeen.has(k)) { clientSeen.add(k); allClients.push(k); } }
+
+    for (const client of allClients) {
+      const lItems = leftClients.get(client) || [];
+      const rItems = rightClients.get(client) || [];
+      const indent = client ? '    ' : '  ';
+
+      // Client header on both sides
+      if (client) {
+        leftRows.push({ body: `  • ${client}`, date: '', progress: '', bold: false });
+        rightRows.push({ body: `  • ${client}`, date: '', progress: '', bold: false });
+      }
+
+      // Build detail rows for each side
+      const lDetailRows = buildItemRows(lItems, indent);
+      const rDetailRows = buildItemRows(rItems, indent);
+      const maxLen = Math.max(lDetailRows.length, rDetailRows.length);
+
+      for (let i = 0; i < maxLen; i++) {
+        leftRows.push(i < lDetailRows.length ? lDetailRows[i] : emptyRow);
+        rightRows.push(i < rDetailRows.length ? rDetailRows[i] : emptyRow);
+      }
+    }
+  }
+
+  return { leftRows, rightRows };
 }
 
 function getConsolidatedRowH(fontSize: number): number {
@@ -454,9 +526,8 @@ export async function generateConsolidatedPPT(
   const leftColW = [2.8, 1.0, 0.9];
   const rightColW = [3.2, 1.5];
 
-  // Build row-aligned data
-  const leftRows = buildConsolidatedRows(thisWeekGroups);
-  const rightRows = buildConsolidatedRows(nextWeekGroups);
+  // Build row-aligned data (left/right aligned by project+client)
+  const { leftRows, rightRows } = buildAlignedRows(thisWeekGroups, nextWeekGroups);
 
   // Issues/notes auto-fit: smaller font + dynamic height
   const issueLineCount = (issues || '-').split('\n').length;

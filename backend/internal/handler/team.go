@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/jiin/weeky/internal/model"
@@ -579,12 +581,24 @@ func (h *Handler) SummarizeConsolidatedReport(c *fiber.Ctx) error {
 		},
 	}
 
+	// Get team projects for AI prompt context
+	projects, _ := h.repo.GetTeamProjects(teamID, true)
+	var projectNames []string
+	for _, p := range projects {
+		if p.Client != "" {
+			projectNames = append(projectNames, fmt.Sprintf("%s (고객사: %s)", p.Name, p.Client))
+		} else {
+			projectNames = append(projectNames, p.Name)
+		}
+	}
+
 	generator := h.services.NewAIGenerator(apiKey)
 	result, err := generator.GenerateReport(service.GenerateReportRequest{
-		Items:     items,
-		StartDate: req.ReportDate,
-		EndDate:   req.ReportDate,
-		Style:     "detailed",
+		Items:        items,
+		StartDate:    req.ReportDate,
+		EndDate:      req.ReportDate,
+		Style:        "detailed",
+		ProjectNames: projectNames,
 	})
 	if err != nil {
 		return internalError(c, err)
@@ -592,3 +606,348 @@ func (h *Handler) SummarizeConsolidatedReport(c *fiber.Ctx) error {
 
 	return c.JSON(result)
 }
+
+// ============ Team Projects ============
+
+func (h *Handler) GetTeamProjects(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+
+	userID := getUserID(c)
+	if _, err := h.repo.GetTeamMember(teamID, userID); err != nil {
+		return respondError(c, fiber.StatusForbidden, "팀 멤버가 아닙니다")
+	}
+
+	activeOnly := c.Query("active_only") == "true"
+	projects, err := h.repo.GetTeamProjects(teamID, activeOnly)
+	if err != nil {
+		return internalError(c, err)
+	}
+	if projects == nil {
+		projects = []model.TeamProject{}
+	}
+	return c.JSON(projects)
+}
+
+func (h *Handler) CreateTeamProject(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+
+	userID := getUserID(c)
+	member, err := h.repo.GetTeamMember(teamID, userID)
+	if !isAdmin(c) && (err != nil || member.Role != model.TeamRoleLeader) {
+		return respondError(c, fiber.StatusForbidden, "팀장 권한이 필요합니다")
+	}
+
+	var req model.CreateTeamProjectRequest
+	if err := c.BodyParser(&req); err != nil {
+		return badRequest(c, "잘못된 요청입니다")
+	}
+	if req.Name == "" {
+		return badRequest(c, "프로젝트 이름은 필수입니다")
+	}
+
+	project, err := h.repo.CreateTeamProject(teamID, req.Name, req.Client)
+	if err != nil {
+		return badRequest(c, "이미 존재하는 프로젝트 이름이거나 오류가 발생했습니다")
+	}
+	return c.Status(201).JSON(project)
+}
+
+func (h *Handler) AutoCreateTeamProject(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+
+	userID := getUserID(c)
+	if _, err := h.repo.GetTeamMember(teamID, userID); err != nil {
+		return respondError(c, fiber.StatusForbidden, "팀 멤버가 아닙니다")
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return badRequest(c, "잘못된 요청입니다")
+	}
+	if req.Name == "" {
+		return badRequest(c, "프로젝트 이름은 필수입니다")
+	}
+
+	project, err := h.repo.GetOrCreateTeamProject(teamID, req.Name)
+	if err != nil {
+		return internalError(c, err)
+	}
+	return c.JSON(project)
+}
+
+func (h *Handler) UpdateTeamProject(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+	pid, err := strconv.ParseInt(c.Params("pid"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 프로젝트 ID입니다")
+	}
+
+	userID := getUserID(c)
+	member, err := h.repo.GetTeamMember(teamID, userID)
+	if !isAdmin(c) && (err != nil || member.Role != model.TeamRoleLeader) {
+		return respondError(c, fiber.StatusForbidden, "팀장 권한이 필요합니다")
+	}
+
+	// Verify project belongs to this team
+	project, err := h.repo.GetTeamProject(pid)
+	if err != nil {
+		return notFound(c, "프로젝트를 찾을 수 없습니다")
+	}
+	if project.TeamID != teamID {
+		return respondError(c, fiber.StatusForbidden, "해당 팀의 프로젝트가 아닙니다")
+	}
+
+	var req model.UpdateTeamProjectRequest
+	if err := c.BodyParser(&req); err != nil {
+		return badRequest(c, "잘못된 요청입니다")
+	}
+
+	if err := h.repo.UpdateTeamProject(pid, req.Name, req.Client, req.IsActive); err != nil {
+		return internalError(c, err)
+	}
+	return c.SendStatus(204)
+}
+
+func (h *Handler) DeleteTeamProject(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+	pid, err := strconv.ParseInt(c.Params("pid"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 프로젝트 ID입니다")
+	}
+
+	userID := getUserID(c)
+	member, err := h.repo.GetTeamMember(teamID, userID)
+	if !isAdmin(c) && (err != nil || member.Role != model.TeamRoleLeader) {
+		return respondError(c, fiber.StatusForbidden, "팀장 권한이 필요합니다")
+	}
+
+	// Verify project belongs to this team
+	project, err := h.repo.GetTeamProject(pid)
+	if err != nil {
+		return notFound(c, "프로젝트를 찾을 수 없습니다")
+	}
+	if project.TeamID != teamID {
+		return respondError(c, fiber.StatusForbidden, "해당 팀의 프로젝트가 아닙니다")
+	}
+
+	if err := h.repo.DeleteTeamProject(pid); err != nil {
+		return internalError(c, err)
+	}
+	return c.SendStatus(204)
+}
+
+func (h *Handler) ReorderTeamProjects(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+
+	userID := getUserID(c)
+	member, err := h.repo.GetTeamMember(teamID, userID)
+	if !isAdmin(c) && (err != nil || member.Role != model.TeamRoleLeader) {
+		return respondError(c, fiber.StatusForbidden, "팀장 권한이 필요합니다")
+	}
+
+	var req model.ReorderProjectsRequest
+	if err := c.BodyParser(&req); err != nil {
+		return badRequest(c, "잘못된 요청입니다")
+	}
+	if len(req.IDs) == 0 {
+		return badRequest(c, "프로젝트 ID 목록이 필요합니다")
+	}
+
+	if err := h.repo.ReorderTeamProjects(teamID, req.IDs); err != nil {
+		return internalError(c, err)
+	}
+	return c.SendStatus(204)
+}
+
+// ============ Consolidated Edit ============
+
+func (h *Handler) SaveConsolidatedEdit(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+
+	userID := getUserID(c)
+	member, err := h.repo.GetTeamMember(teamID, userID)
+	if !isAdmin(c) && (err != nil || (member.Role != model.TeamRoleLeader && member.Role != model.TeamRoleGroupLeader)) {
+		return respondError(c, fiber.StatusForbidden, "팀장/그룹장 권한이 필요합니다")
+	}
+
+	var req model.SaveConsolidatedEditRequest
+	if err := c.BodyParser(&req); err != nil {
+		return badRequest(c, "잘못된 요청입니다")
+	}
+	if req.ReportDate == "" {
+		return badRequest(c, "보고일자가 필요합니다")
+	}
+
+	// Serialize the edit data as JSON
+	dataMap := map[string]interface{}{
+		"this_week":   req.ThisWeek,
+		"next_week":   req.NextWeek,
+		"issues":      req.Issues,
+		"notes":       req.Notes,
+		"next_issues": req.NextIssues,
+		"next_notes":  req.NextNotes,
+	}
+	dataBytes, err := json.Marshal(dataMap)
+	if err != nil {
+		return internalError(c, err)
+	}
+
+	if err := h.repo.SaveConsolidatedEdit(teamID, req.ReportDate, string(dataBytes), userID); err != nil {
+		return internalError(c, err)
+	}
+	return c.SendStatus(204)
+}
+
+func (h *Handler) GetConsolidatedEdit(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+
+	userID := getUserID(c)
+	member, err := h.repo.GetTeamMember(teamID, userID)
+	if !isAdmin(c) && (err != nil || (member.Role != model.TeamRoleLeader && member.Role != model.TeamRoleGroupLeader)) {
+		return respondError(c, fiber.StatusForbidden, "팀장/그룹장 권한이 필요합니다")
+	}
+
+	reportDate := c.Query("report_date")
+	if reportDate == "" {
+		return badRequest(c, "report_date 파라미터가 필요합니다")
+	}
+
+	edit, err := h.repo.GetConsolidatedEdit(teamID, reportDate)
+	if err != nil {
+		return c.JSON(fiber.Map{"exists": false})
+	}
+
+	// Parse the stored JSON data and include it directly
+	var data json.RawMessage
+	data = json.RawMessage(edit.Data)
+
+	return c.JSON(fiber.Map{
+		"exists":     true,
+		"data":       data,
+		"updated_at": edit.UpdatedAt,
+	})
+}
+
+func (h *Handler) DeleteConsolidatedEdit(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+
+	userID := getUserID(c)
+	member, err := h.repo.GetTeamMember(teamID, userID)
+	if !isAdmin(c) && (err != nil || (member.Role != model.TeamRoleLeader && member.Role != model.TeamRoleGroupLeader)) {
+		return respondError(c, fiber.StatusForbidden, "팀장/그룹장 권한이 필요합니다")
+	}
+
+	reportDate := c.Query("report_date")
+	if reportDate == "" {
+		return badRequest(c, "report_date 파라미터가 필요합니다")
+	}
+
+	if err := h.repo.DeleteConsolidatedEdit(teamID, reportDate); err != nil {
+		return internalError(c, err)
+	}
+	return c.SendStatus(204)
+}
+
+// ============ Team History ============
+
+func (h *Handler) GetTeamHistory(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+
+	userID := getUserID(c)
+	if _, err := h.repo.GetTeamMember(teamID, userID); err != nil {
+		return respondError(c, fiber.StatusForbidden, "팀 멤버가 아닙니다")
+	}
+
+	weeksStr := c.Query("weeks", "8")
+	weeks, err := strconv.Atoi(weeksStr)
+	if err != nil || weeks < 1 || weeks > 24 {
+		weeks = 8
+	}
+
+	team, err := h.repo.GetTeam(teamID)
+	if err != nil {
+		return notFound(c, "팀을 찾을 수 없습니다")
+	}
+
+	members, err := h.repo.GetTeamMembers(teamID)
+	if err != nil {
+		return internalError(c, err)
+	}
+
+	// Calculate week dates (Monday of each week)
+	now := time.Now()
+	daysSinceMonday := int(now.Weekday()) - 1
+	if now.Weekday() == time.Sunday {
+		daysSinceMonday = 6
+	}
+	currentMonday := now.AddDate(0, 0, -daysSinceMonday)
+
+	var weekSummaries []model.WeekSummary
+	for i := 0; i < weeks; i++ {
+		monday := currentMonday.AddDate(0, 0, -7*i)
+		friday := monday.AddDate(0, 0, 4)
+		weekDate := monday.Format("2006-01-02")
+		fridayDate := friday.Format("2006-01-02")
+
+		submissions, err := h.repo.GetSubmissions(teamID, weekDate)
+		if err != nil {
+			continue
+		}
+
+		var submittedNames []string
+		for _, s := range submissions {
+			if s.UserName != "" {
+				submittedNames = append(submittedNames, s.UserName)
+			}
+		}
+
+		weekSummaries = append(weekSummaries, model.WeekSummary{
+			WeekDate:       weekDate,
+			FridayDate:     fridayDate,
+			SubmittedCount: len(submissions),
+			TotalMembers:   len(members),
+			SubmittedNames: submittedNames,
+		})
+	}
+
+	resp := model.TeamHistoryResponse{
+		TeamID:   team.ID,
+		TeamName: team.Name,
+		Weeks:    weekSummaries,
+	}
+
+	return c.JSON(resp)
+}
+

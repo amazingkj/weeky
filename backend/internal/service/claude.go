@@ -45,10 +45,11 @@ type claudeResponse struct {
 }
 
 type GenerateReportRequest struct {
-	Items     []model.SyncItem `json:"items"`
-	StartDate string           `json:"start_date"`
-	EndDate   string           `json:"end_date"`
-	Style     string           `json:"style"` // "concise" or "detailed"
+	Items        []model.SyncItem `json:"items"`
+	StartDate    string           `json:"start_date"`
+	EndDate      string           `json:"end_date"`
+	Style        string           `json:"style"` // "concise" or "detailed"
+	ProjectNames []string         `json:"project_names,omitempty"`
 }
 
 type GenerateReportResponse struct {
@@ -67,7 +68,7 @@ func (s *ClaudeService) GenerateReport(req GenerateReportRequest) (*GenerateRepo
 	if style == "" {
 		style = "concise"
 	}
-	prompt := buildPrompt(req.Items, req.StartDate, req.EndDate, style)
+	prompt := buildPrompt(req.Items, req.StartDate, req.EndDate, style, req.ProjectNames)
 
 	// Call Claude API
 	maxTokens := 2000
@@ -127,7 +128,7 @@ func (s *ClaudeService) GenerateReport(req GenerateReportRequest) (*GenerateRepo
 	return parseClaudeResponse(claudeResp.Content[0].Text)
 }
 
-func buildPrompt(items []model.SyncItem, startDate, endDate, style string) string {
+func buildPrompt(items []model.SyncItem, startDate, endDate, style string, projectNames []string) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, `당신은 주간 업무 보고서 작성을 돕는 어시스턴트입니다.
@@ -221,53 +222,60 @@ func buildPrompt(items []model.SyncItem, startDate, endDate, style string) strin
 		b.WriteString("\n")
 	}
 
+	if len(projectNames) > 0 {
+		b.WriteString("이 팀에서 사용하는 프로젝트 목록입니다:\n")
+		for _, name := range projectNames {
+			fmt.Fprintf(&b, "- %s\n", name)
+		}
+		b.WriteString("\ntask의 title은 위 프로젝트 이름을 **정확히** 사용해주세요.\n")
+		b.WriteString("위 목록에 해당하지 않는 새로운 프로젝트가 발견되면 적절한 이름으로 title을 지정해주세요.\n\n")
+	}
+
 	b.WriteString("위 활동들을 분석하여 주간 업무 보고서를 작성해주세요.\n\n")
 
 	if style == "very_detailed" {
 		b.WriteString(`요구사항:
-1. 프로젝트/고객사별로 업무를 그룹화
-2. title: 짧은 프로젝트명 또는 고객사명 (예: "삼성카드", "Mesh", "기술검토")
-3. details: 해당 프로젝트에서 수행한 진행사항을 2~3줄로 구체적으로 작성
+1. 프로젝트별로 업무를 그룹화
+2. title: 짧은 프로젝트명 (예: "CruzAPIM", "Mesh", "마이데이터")
+3. client: 해당 업무의 고객사명 (예: "삼성카드", "도로교통공단", "흥국화재"). 고객사가 없으면 빈 문자열
+4. details: 해당 고객사에서 수행한 진행사항을 2~3줄로 구체적으로 작성
    - 예시: "모니모 APIM imanager 프로젝트 API 설계 및 구현, 인증 모듈 개발, QA 환경 배포"
-4. description: 진행사항 **완전 상세내용**. 모든 세부 작업을 빠짐없이 "- " 접두사로 나열
+5. description: 진행사항 **완전 상세내용**. 모든 세부 작업을 빠짐없이 "- " 접두사로 나열
    - 줄바꿈(\n)을 사용하여 각 항목 구분
    - 커밋 메시지, MR, Jira 이슈의 내용을 최대한 반영하여 구체적으로 기술
    - 각 항목을 기술적으로 상세하게 작성 (어떤 모듈, 어떤 기능, 어떤 환경 등)
-   - 예시: "- API Gateway 라우팅 설정 및 인증 미들웨어 구현\n- JWT 토큰 검증 로직 추가 (RS256 알고리즘)\n- 사용자 권한 체계 설계 (RBAC) 및 DB 스키마 반영\n- QA 환경 배포 및 통합 테스트 수행\n- API 문서 (Swagger) 업데이트"
-5. due_date: YYYY-MM-DD 형식
-6. 메일 제목/내용, 커밋 메시지, Jira 이슈를 분석해서 프로젝트를 식별
-7. "this_week" (금주실적): 커밋, MR, 완료된 Jira 이슈, 메일 기반으로 해당 기간의 모든 업무를 빠짐없이 포함. progress는 100
-8. "next_week" (차주계획): 미완료 Jira 이슈 기반으로 구체적 계획 작성. progress는 0
-9. 하나의 프로젝트에 대해 세부 업무가 많으면 title이 같은 Task를 여러 개 생성하여 카테고리별로 분리
-   - 예: title "삼성카드"로 "API 개발" Task와 "테스트/배포" Task를 분리
-10. summary: 금주 전체 업무를 3~5줄로 요약 (주요 성과, 진행 현황, 특이사항 포함)
+6. due_date: YYYY-MM-DD 형식
+7. 메일 제목/내용, 커밋 메시지, Jira 이슈를 분석해서 프로젝트와 고객사를 식별
+8. "this_week" (금주실적): 커밋, MR, 완료된 Jira 이슈, 메일 기반으로 해당 기간의 모든 업무를 빠짐없이 포함. progress는 100
+9. "next_week" (차주계획): 미완료 Jira 이슈 기반으로 구체적 계획 작성. progress는 0
+10. 같은 title(프로젝트)에 여러 client(고객사)가 있을 수 있음. 각 고객사별로 별도의 Task를 생성
+11. summary: 금주 전체 업무를 3~5줄로 요약 (주요 성과, 진행 현황, 특이사항 포함)
 `)
 	} else if style == "detailed" {
 		b.WriteString(`요구사항:
-1. 프로젝트/고객사별로 업무를 그룹화
-2. title: 짧은 프로젝트명 또는 고객사명 (예: "삼성카드", "Mesh", "기술검토")
-3. details: 해당 프로젝트에서 수행한 진행사항 한 줄 요약
-   - 예시: "모니모 APIM imanager 프로젝트 진행"
-4. description: 진행사항 상세내용. 세부 작업을 "- " 접두사로 여러 줄 나열
+1. 프로젝트별로 업무를 그룹화
+2. title: 짧은 프로젝트명 (예: "CruzAPIM", "Mesh", "마이데이터")
+3. client: 해당 업무의 고객사명 (예: "삼성카드", "도로교통공단"). 고객사가 없으면 빈 문자열
+4. details: 해당 고객사에서 수행한 진행사항 한 줄 요약
+5. description: 진행사항 상세내용. 세부 작업을 "- " 접두사로 여러 줄 나열
    - 줄바꿈(\n)을 사용하여 각 항목 구분
-   - 예시: "- API 설계 및 구현\n- 인증 모듈 JWT 토큰 검증 로직 추가\n- QA 환경 배포 및 테스트 수행"
-   - 예시: "- Backend 아키텍처 설계 문서 작성\n- DB 스키마 리뷰 및 인덱스 최적화"
-5. due_date: YYYY-MM-DD 형식
-6. 메일 제목/내용, 커밋 메시지, Jira 이슈를 분석해서 프로젝트를 식별
-7. "this_week" (금주실적): 커밋, MR, 완료된 Jira 이슈, 메일 기반으로 해당 기간의 모든 업무를 포함. progress는 100
-8. "next_week" (차주계획): 미완료 Jira 이슈 기반. progress는 0
+6. due_date: YYYY-MM-DD 형식
+7. 메일 제목/내용, 커밋 메시지, Jira 이슈를 분석해서 프로젝트와 고객사를 식별
+8. "this_week" (금주실적): 커밋, MR, 완료된 Jira 이슈, 메일 기반으로 해당 기간의 모든 업무를 포함. progress는 100
+9. "next_week" (차주계획): 미완료 Jira 이슈 기반. progress는 0
+10. 같은 title(프로젝트)에 여러 client(고객사)가 있을 수 있음
 `)
 	} else {
 		b.WriteString(`요구사항:
-1. 프로젝트/고객사별로 업무를 그룹화
-2. title: 짧은 프로젝트명 또는 고객사명 (예: "삼성카드", "Mesh", "기술검토")
-3. details: 해당 프로젝트에서 수행한 진행사항을 **한 줄로 간결하게** 작성
-   - 예시: "모니모 APIM imanager 프로젝트 진행"
-   - 예시: "Backend 아키텍처 설계 및 문서화"
-4. due_date: YYYY-MM-DD 형식
-5. 메일 제목/내용, 커밋 메시지, Jira 이슈를 분석해서 프로젝트를 식별
-6. "this_week" (금주실적): 커밋, MR, 완료된 Jira 이슈, 메일 기반으로 해당 기간의 모든 업무를 포함. progress는 100
-7. "next_week" (차주계획): 미완료 Jira 이슈 기반. progress는 0
+1. 프로젝트별로 업무를 그룹화
+2. title: 짧은 프로젝트명 (예: "CruzAPIM", "Mesh", "마이데이터")
+3. client: 해당 업무의 고객사명 (예: "삼성카드", "도로교통공단"). 고객사가 없으면 빈 문자열
+4. details: 해당 고객사에서 수행한 진행사항을 **한 줄로 간결하게** 작성
+5. due_date: YYYY-MM-DD 형식
+6. 메일 제목/내용, 커밋 메시지, Jira 이슈를 분석해서 프로젝트와 고객사를 식별
+7. "this_week" (금주실적): 커밋, MR, 완료된 Jira 이슈, 메일 기반으로 해당 기간의 모든 업무를 포함. progress는 100
+8. "next_week" (차주계획): 미완료 Jira 이슈 기반. progress는 0
+9. 같은 title(프로젝트)에 여러 client(고객사)가 있을 수 있음
 `)
 	}
 
@@ -276,7 +284,8 @@ func buildPrompt(items []model.SyncItem, startDate, endDate, style string) strin
 {
   "this_week": [
     {
-      "title": "삼성카드",
+      "title": "CruzAPIM",
+      "client": "삼성카드",
       "details": "모니모 APIM imanager 프로젝트 진행",
       "description": "- API 설계 및 구현\n- 인증 모듈 JWT 토큰 검증 로직 추가",
       "due_date": "2026-01-24",
@@ -305,6 +314,7 @@ JSON만 응답하고 다른 텍스트는 포함하지 마세요.`)
 func parseClaudeResponse(text string) (*GenerateReportResponse, error) {
 	type taskJSON struct {
 		Title       string `json:"title"`
+		Client      string `json:"client"`
 		Details     string `json:"details"`
 		Description string `json:"description"`
 		DueDate     string `json:"due_date"`
@@ -341,6 +351,7 @@ func parseClaudeResponse(text string) (*GenerateReportResponse, error) {
 		for _, t := range items {
 			tasks = append(tasks, model.Task{
 				Title:       t.Title,
+				Client:      t.Client,
 				Details:     t.Details,
 				Description: t.Description,
 				DueDate:     t.DueDate,
