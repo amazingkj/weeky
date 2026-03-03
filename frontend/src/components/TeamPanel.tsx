@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Team, TeamMember, ReportSubmission, Report, TEAM_ROLE_LABELS, ROLE_CODE_LABELS } from '../types';
-import { getMyTeams, getTeamMembers, getMySubmission, getMySubmissions, getReports, deleteTeam } from '../services/api';
+import { getMyTeams, getTeamMembers, getMySubmission, getMySubmissions, getReports, deleteTeam, updateTeam } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import TeamCreateModal from './TeamCreateModal';
 import TeamMemberManager from './TeamMemberManager';
@@ -21,6 +21,10 @@ export default function TeamPanel() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [viewingReport, setViewingReport] = useState<Report | null>(null);
   const [viewingReportLoading, setViewingReportLoading] = useState(false);
+  const [editingTeamName, setEditingTeamName] = useState(false);
+  const [teamNameInput, setTeamNameInput] = useState('');
+  const [teamDescInput, setTeamDescInput] = useState('');
+  const [teamNameSaving, setTeamNameSaving] = useState(false);
 
   const fetchTeams = useCallback(async () => {
     try {
@@ -65,6 +69,22 @@ export default function TeamPanel() {
     setTeams(prev => [team, ...prev]);
     setSelectedTeam(team);
     setMyRole('leader');
+  };
+
+  const handleTeamNameSave = async () => {
+    if (!selectedTeam || !teamNameInput.trim()) return;
+    setTeamNameSaving(true);
+    try {
+      await updateTeam(selectedTeam.id, teamNameInput.trim(), teamDescInput.trim());
+      const updated = { ...selectedTeam, name: teamNameInput.trim(), description: teamDescInput.trim() };
+      setSelectedTeam(updated);
+      setTeams(prev => prev.map(t => t.id === updated.id ? updated : t));
+      setEditingTeamName(false);
+    } catch (err: any) {
+      alert(err.message || '팀 이름 수정에 실패했습니다.');
+    } finally {
+      setTeamNameSaving(false);
+    }
   };
 
   const isLeaderOrGroupLeader = myRole === 'leader' || myRole === 'group_leader' || user?.is_admin;
@@ -121,10 +141,63 @@ export default function TeamPanel() {
         <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
           {/* Team info header */}
           <div className="px-5 py-3 border-b border-neutral-100 flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-neutral-900">{selectedTeam.name}</h2>
-              {selectedTeam.description && (
-                <p className="text-xs text-neutral-400 mt-0.5">{selectedTeam.description}</p>
+            <div className="flex-1 min-w-0">
+              {editingTeamName ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 space-y-1">
+                    <input
+                      type="text"
+                      value={teamNameInput}
+                      onChange={e => setTeamNameInput(e.target.value)}
+                      className="w-full text-sm font-semibold text-neutral-900 border border-neutral-300 rounded-lg px-2 py-1 focus:outline-none focus:border-neutral-500"
+                      placeholder="팀 이름"
+                      autoFocus
+                      onKeyDown={e => {
+                        if (e.key === 'Escape') setEditingTeamName(false);
+                        if (e.key === 'Enter' && teamNameInput.trim()) {
+                          e.preventDefault();
+                          handleTeamNameSave();
+                        }
+                      }}
+                    />
+                    <input
+                      type="text"
+                      value={teamDescInput}
+                      onChange={e => setTeamDescInput(e.target.value)}
+                      className="w-full text-xs text-neutral-500 border border-neutral-200 rounded-lg px-2 py-1 focus:outline-none focus:border-neutral-400"
+                      placeholder="설명 (선택)"
+                      onKeyDown={e => {
+                        if (e.key === 'Escape') setEditingTeamName(false);
+                        if (e.key === 'Enter' && teamNameInput.trim()) {
+                          e.preventDefault();
+                          handleTeamNameSave();
+                        }
+                      }}
+                    />
+                  </div>
+                  <button
+                    onClick={handleTeamNameSave}
+                    disabled={!teamNameInput.trim() || teamNameSaving}
+                    className="p-1 text-green-600 hover:text-green-700 disabled:opacity-40 transition-colors" title="저장">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setEditingTeamName(false)}
+                    className="p-1 text-neutral-400 hover:text-neutral-600 transition-colors" title="취소">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-sm font-semibold text-neutral-900">{selectedTeam.name}</h2>
+                  {selectedTeam.description && (
+                    <p className="text-xs text-neutral-400 mt-0.5">{selectedTeam.description}</p>
+                  )}
+                </>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -132,6 +205,19 @@ export default function TeamPanel() {
                 <span className="px-2 py-0.5 bg-neutral-100 text-neutral-600 rounded text-[10px] font-medium">
                   {myRole === 'leader' ? '팀장' : myRole === 'group_leader' ? '그룹장' : '팀원'}
                 </span>
+              )}
+              {(myRole === 'leader' || user?.is_admin) && !editingTeamName && (
+                <button
+                  onClick={() => {
+                    setTeamNameInput(selectedTeam.name);
+                    setTeamDescInput(selectedTeam.description || '');
+                    setEditingTeamName(true);
+                  }}
+                  className="p-1 text-neutral-400 hover:text-neutral-600 transition-colors" title="팀 이름 수정">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
               )}
               {(myRole === 'leader' || user?.is_admin) && (
                 <button
