@@ -36,8 +36,7 @@ func New(dbPath string) (*Repository, error) {
 		return nil, err
 	}
 
-	// SQLite optimizations for concurrent access
-	db.SetMaxOpenConns(1) // SQLite supports single writer
+	db.SetMaxOpenConns(1)
 	db.Exec("PRAGMA journal_mode=WAL")
 	db.Exec("PRAGMA busy_timeout=5000")
 	db.Exec("PRAGMA foreign_keys=ON")
@@ -49,7 +48,6 @@ func New(dbPath string) (*Repository, error) {
 	return &Repository{db: db}, nil
 }
 
-// Migration system
 type migration struct {
 	version int
 	sql     string
@@ -84,7 +82,6 @@ var migrations = []migration{
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 
-		-- New reports table with user_id
 		CREATE TABLE IF NOT EXISTS reports (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user_id INTEGER NOT NULL DEFAULT 0,
@@ -98,7 +95,6 @@ var migrations = []migration{
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 
-		-- New configs table with user_id and composite unique key
 		CREATE TABLE IF NOT EXISTS configs (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user_id INTEGER NOT NULL DEFAULT 0,
@@ -194,7 +190,6 @@ ALTER TABLE reports ADD COLUMN next_notes TEXT DEFAULT '';`,
 }
 
 func runMigrations(db *sql.DB) error {
-	// Create migrations table if not exists
 	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS _migrations (
 		version INTEGER PRIMARY KEY,
 		applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -203,7 +198,6 @@ func runMigrations(db *sql.DB) error {
 		return fmt.Errorf("failed to create _migrations table: %w", err)
 	}
 
-	// Check if this is a legacy database (has tables but no migrations record)
 	var hasLegacyConfigs bool
 	err = db.QueryRow("SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='configs'").Scan(&hasLegacyConfigs)
 	if err != nil {
@@ -214,14 +208,12 @@ func runMigrations(db *sql.DB) error {
 	db.QueryRow("SELECT COUNT(*) FROM _migrations").Scan(&migrationCount)
 
 	if hasLegacyConfigs && migrationCount == 0 {
-		// Legacy database: migrate existing data
 		if err := migrateLegacyDB(db); err != nil {
 			return fmt.Errorf("failed to migrate legacy database: %w", err)
 		}
 		return nil
 	}
 
-	// Run pending migrations
 	for _, m := range migrations {
 		var exists bool
 		db.QueryRow("SELECT COUNT(*) > 0 FROM _migrations WHERE version = ?", m.version).Scan(&exists)
@@ -241,7 +233,6 @@ func runMigrations(db *sql.DB) error {
 	return nil
 }
 
-// migrateLegacyDB handles migration from the old schema (no user_id) to the new schema
 func migrateLegacyDB(db *sql.DB) error {
 	tx, err := db.Begin()
 	if err != nil {
@@ -249,7 +240,6 @@ func migrateLegacyDB(db *sql.DB) error {
 	}
 	defer tx.Rollback()
 
-	// Create new tables
 	_, err = tx.Exec(`
 		CREATE TABLE IF NOT EXISTS users (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -273,7 +263,6 @@ func migrateLegacyDB(db *sql.DB) error {
 		return fmt.Errorf("failed to create new tables: %w", err)
 	}
 
-	// Migrate configs: rename old table, create new, copy data
 	_, err = tx.Exec(`
 		ALTER TABLE configs RENAME TO _configs_old;
 
@@ -295,8 +284,6 @@ func migrateLegacyDB(db *sql.DB) error {
 		return fmt.Errorf("failed to migrate configs table: %w", err)
 	}
 
-	// Migrate reports: add user_id column
-	// Check if user_id column already exists
 	var hasUserID bool
 	rows, err := tx.Query("PRAGMA table_info(reports)")
 	if err != nil {
@@ -322,7 +309,6 @@ func migrateLegacyDB(db *sql.DB) error {
 		}
 	}
 
-	// Record migration
 	_, err = tx.Exec("INSERT INTO _migrations (version) VALUES (?)", 1)
 	if err != nil {
 		return fmt.Errorf("failed to record migration: %w", err)
@@ -334,8 +320,6 @@ func migrateLegacyDB(db *sql.DB) error {
 func (r *Repository) Close() error {
 	return r.db.Close()
 }
-
-// ============ User methods ============
 
 func (r *Repository) CreateUser(email, passwordHash, name string, isAdmin bool) (*model.User, error) {
 	adminInt := 0
@@ -404,7 +388,6 @@ func (r *Repository) CreateFirstAdmin(email, passwordHash, name string) (*model.
 	}
 	defer tx.Rollback()
 
-	// Atomically check no users exist inside the transaction
 	var count int64
 	if err := tx.QueryRow("SELECT COUNT(*) FROM users").Scan(&count); err != nil {
 		return nil, err
@@ -447,8 +430,6 @@ func (r *Repository) ReassignLegacyData(userID int64) error {
 	_, err = r.db.Exec("UPDATE reports SET user_id = ? WHERE user_id = 0", userID)
 	return err
 }
-
-// ============ Invite code methods ============
 
 func (r *Repository) CreateInviteCode(code string, createdBy int64) (*model.InviteCode, error) {
 	result, err := r.db.Exec(
@@ -512,8 +493,6 @@ func (r *Repository) GetInviteCodes(createdBy int64) ([]model.InviteCode, error)
 	return codes, rows.Err()
 }
 
-// ============ Template methods ============
-
 func (r *Repository) GetTemplates() ([]model.Template, error) {
 	rows, err := r.db.Query("SELECT id, name, style, created_at FROM templates ORDER BY created_at DESC")
 	if err != nil {
@@ -529,10 +508,7 @@ func (r *Repository) GetTemplates() ([]model.Template, error) {
 		}
 		templates = append(templates, t)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return templates, nil
+	return templates, rows.Err()
 }
 
 func (r *Repository) CreateTemplate(name, style string) (*model.Template, error) {
@@ -563,8 +539,6 @@ func (r *Repository) DeleteTemplate(id int64) error {
 	return err
 }
 
-// ============ User list ============
-
 func (r *Repository) GetAllUsers() ([]model.User, error) {
 	rows, err := r.db.Query("SELECT id, email, name, is_admin, created_at FROM users ORDER BY name")
 	if err != nil {
@@ -584,8 +558,6 @@ func (r *Repository) GetAllUsers() ([]model.User, error) {
 	}
 	return users, rows.Err()
 }
-
-// ============ Report methods ============
 
 func (r *Repository) GetReport(id int64, userID int64) (*model.Report, error) {
 	var report model.Report
@@ -719,8 +691,6 @@ func (r *Repository) GetReportsByUser(userID int64) ([]model.Report, error) {
 	return reports, rows.Err()
 }
 
-// ============ Config methods ============
-
 func (r *Repository) GetConfigs(userID int64) ([]model.Config, error) {
 	rows, err := r.db.Query("SELECT id, key, value, updated_at FROM configs WHERE user_id = ? ORDER BY key", userID)
 	if err != nil {
@@ -736,10 +706,7 @@ func (r *Repository) GetConfigs(userID int64) ([]model.Config, error) {
 		}
 		configs = append(configs, c)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return configs, nil
+	return configs, rows.Err()
 }
 
 func (r *Repository) GetConfig(key string, userID int64) (*model.Config, error) {
@@ -764,8 +731,6 @@ func (r *Repository) DeleteConfig(key string, userID int64) error {
 	_, err := r.db.Exec("DELETE FROM configs WHERE key = ? AND user_id = ?", key, userID)
 	return err
 }
-
-// ============ Team methods ============
 
 func (r *Repository) CreateTeam(name, description string, createdBy int64) (*model.Team, error) {
 	result, err := r.db.Exec(
@@ -843,12 +808,10 @@ func (r *Repository) DeleteTeam(id int64) error {
 	return tx.Commit()
 }
 
-// ============ Team member methods ============
-
 func (r *Repository) AddTeamMember(teamID, userID int64, role model.TeamRole, roleCode model.RoleCode) (*model.TeamMember, error) {
 	result, err := r.db.Exec(
 		"INSERT INTO team_members (team_id, user_id, role, role_code) VALUES (?, ?, ?, ?)",
-		teamID, userID, string(role), string(roleCode),
+		teamID, userID, role, roleCode,
 	)
 	if err != nil {
 		return nil, err
@@ -858,7 +821,6 @@ func (r *Repository) AddTeamMember(teamID, userID int64, role model.TeamRole, ro
 		return nil, err
 	}
 
-	// Fetch user info for response
 	user, _ := r.GetUserByID(userID)
 	tm := &model.TeamMember{
 		ID:       id,
@@ -914,7 +876,7 @@ func (r *Repository) GetTeamMember(teamID, userID int64) (*model.TeamMember, err
 }
 
 func (r *Repository) UpdateTeamMember(id int64, role model.TeamRole, roleCode model.RoleCode, name string) error {
-	_, err := r.db.Exec("UPDATE team_members SET role = ?, role_code = ? WHERE id = ?", string(role), string(roleCode), id)
+	_, err := r.db.Exec("UPDATE team_members SET role = ?, role_code = ? WHERE id = ?", role, roleCode, id)
 	if err != nil {
 		return err
 	}
@@ -928,8 +890,6 @@ func (r *Repository) RemoveTeamMember(id int64) error {
 	_, err := r.db.Exec("DELETE FROM team_members WHERE id = ?", id)
 	return err
 }
-
-// ============ Report submission methods ============
 
 func (r *Repository) SubmitReport(reportID, teamID, userID int64) (*model.ReportSubmission, error) {
 	result, err := r.db.Exec(
@@ -1027,8 +987,6 @@ func (r *Repository) GetSubmissionsByUser(teamID, userID int64) ([]model.ReportS
 	return results, rows.Err()
 }
 
-// ============ Report by ID (for team leader access) ============
-
 func (r *Repository) GetReportByID(id int64) (*model.Report, error) {
 	var report model.Report
 	var thisWeekJSON, nextWeekJSON string
@@ -1070,8 +1028,6 @@ func (r *Repository) UpdateReportByID(id int64, req model.CreateReportRequest) e
 	)
 	return err
 }
-
-// ============ Team Project methods ============
 
 func (r *Repository) CreateTeamProject(teamID int64, name, client string) (*model.TeamProject, error) {
 	result, err := r.db.Exec(
@@ -1163,7 +1119,6 @@ func (r *Repository) GetOrCreateTeamProject(teamID int64, name string) (*model.T
 		p.IsActive = isActive == 1
 		return &p, nil
 	}
-	// Not found, create
 	return r.CreateTeamProject(teamID, name, "")
 }
 
@@ -1187,8 +1142,6 @@ func (r *Repository) ReorderTeamProjects(teamID int64, ids []int64) error {
 	}
 	return tx.Commit()
 }
-
-// ============ Consolidated Edit methods ============
 
 func (r *Repository) SaveConsolidatedEdit(teamID int64, reportDate, data string, updatedBy int64) error {
 	_, err := r.db.Exec(

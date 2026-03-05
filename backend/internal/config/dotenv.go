@@ -6,8 +6,6 @@ import (
 	"strings"
 )
 
-// LoadEnv reads a .env file and sets environment variables.
-// Existing environment variables are NOT overwritten.
 func LoadEnv(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -19,7 +17,6 @@ func LoadEnv(path string) error {
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
-		// Skip empty lines and comments
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -32,7 +29,6 @@ func LoadEnv(path string) error {
 		key = strings.TrimSpace(key)
 		value = strings.TrimSpace(value)
 
-		// Remove surrounding quotes
 		if len(value) >= 2 {
 			if (value[0] == '"' && value[len(value)-1] == '"') ||
 				(value[0] == '\'' && value[len(value)-1] == '\'') {
@@ -40,7 +36,6 @@ func LoadEnv(path string) error {
 			}
 		}
 
-		// Don't overwrite existing env vars
 		if os.Getenv(key) == "" {
 			os.Setenv(key, value)
 		}

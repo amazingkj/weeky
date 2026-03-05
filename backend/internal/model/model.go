@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// User represents an authenticated user
 type User struct {
 	ID           int64     `json:"id"`
 	Email        string    `json:"email"`
@@ -15,7 +14,6 @@ type User struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
-// InviteCode represents an invitation code for new user registration
 type InviteCode struct {
 	ID        int64      `json:"id"`
 	Code      string     `json:"code"`
@@ -25,7 +23,6 @@ type InviteCode struct {
 	UsedAt    *time.Time `json:"used_at,omitempty"`
 }
 
-// Auth request/response types
 type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -93,7 +90,6 @@ type CreateReportRequest struct {
 	TemplateID int64  `json:"template_id"`
 }
 
-// Config stores encrypted API tokens and settings
 type Config struct {
 	ID        int64     `json:"id"`
 	Key       string    `json:"key"`
@@ -101,7 +97,6 @@ type Config struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// SyncItem represents a single item from external services
 type SyncItem struct {
 	Title   string `json:"title"`
 	Content string `json:"content,omitempty"` // 메일 본문 등 상세 내용
@@ -111,14 +106,12 @@ type SyncItem struct {
 	Source  string `json:"source,omitempty"`   // 출처 프로젝트명 (e.g., "group/project")
 }
 
-// SyncResult contains results from external service sync
 type SyncResult struct {
 	Source   string     `json:"source"` // github, jira, gmail
 	Items    []SyncItem `json:"items"`
 	SyncedAt time.Time  `json:"synced_at"`
 }
 
-// GitHub sync request
 type GitHubSyncRequest struct {
 	Token     string `json:"token"`
 	Owner     string `json:"owner"`
@@ -127,7 +120,6 @@ type GitHubSyncRequest struct {
 	EndDate   string `json:"end_date"`
 }
 
-// GitLab sync request
 type GitLabSyncRequest struct {
 	Token     string `json:"token"`
 	BaseURL   string `json:"base_url"`   // e.g., https://gitlab.com or self-hosted
@@ -137,7 +129,6 @@ type GitLabSyncRequest struct {
 	EndDate   string `json:"end_date"`
 }
 
-// Jira sync request
 type JiraSyncRequest struct {
 	BaseURL   string `json:"base_url"`
 	Email     string `json:"email"`
@@ -146,7 +137,6 @@ type JiraSyncRequest struct {
 	EndDate   string `json:"end_date"`
 }
 
-// Hiworks sync request (web scraping)
 type HiworksSyncRequest struct {
 	OfficeID  string `json:"office_id"`  // 회사 ID (xxx.hiworks.com의 xxx)
 	UserID    string `json:"user_id"`    // 사용자 ID
@@ -155,7 +145,6 @@ type HiworksSyncRequest struct {
 	EndDate   string `json:"end_date"`
 }
 
-// GitLabProject represents a GitLab project for multi-project selection
 type GitLabProject struct {
 	ID        int    `json:"id"`
 	Name      string `json:"name"`
@@ -165,12 +154,9 @@ type GitLabProject struct {
 	WebURL    string `json:"web_url"`
 }
 
-// ConfigUpdateRequest for updating config
 type ConfigUpdateRequest struct {
 	Configs map[string]string `json:"configs"`
 }
-
-// ============ Team types ============
 
 type TeamRole string
 
@@ -205,7 +191,6 @@ type TeamMember struct {
 	Role     TeamRole `json:"role"`
 	RoleCode RoleCode `json:"role_code"`
 	JoinedAt time.Time `json:"joined_at"`
-	// Joined fields from users table
 	UserName  string `json:"user_name,omitempty"`
 	UserEmail string `json:"user_email,omitempty"`
 }
@@ -218,13 +203,11 @@ type ReportSubmission struct {
 	Status      string     `json:"status"`
 	SubmittedAt *time.Time `json:"submitted_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
-	// Joined fields
 	UserName   string `json:"user_name,omitempty"`
 	UserEmail  string `json:"user_email,omitempty"`
 	ReportDate string `json:"report_date,omitempty"`
 }
 
-// Request types for team operations
 type CreateTeamRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -246,7 +229,6 @@ type SubmitReportRequest struct {
 	ReportID int64 `json:"report_id"`
 }
 
-// Consolidated report data for team PPT generation
 type MemberReportData struct {
 	UserID   int64    `json:"user_id"`
 	UserName string   `json:"user_name"`
@@ -259,8 +241,6 @@ type ConsolidatedReport struct {
 	ReportDate string             `json:"report_date"`
 	Members    []MemberReportData `json:"members"`
 }
-
-// ============ Team Project types ============
 
 type TeamProject struct {
 	ID        int64     `json:"id"`
@@ -287,8 +267,6 @@ type ReorderProjectsRequest struct {
 	IDs []int64 `json:"ids"`
 }
 
-// ============ Consolidated Edit types ============
-
 type ConsolidatedEdit struct {
 	ID         int64     `json:"id"`
 	TeamID     int64     `json:"team_id"`
@@ -307,8 +285,6 @@ type SaveConsolidatedEditRequest struct {
 	NextIssues string          `json:"next_issues"`
 	NextNotes  string          `json:"next_notes"`
 }
-
-// ============ Team History types ============
 
 type WeekSummary struct {
 	WeekDate       string   `json:"week_date"`

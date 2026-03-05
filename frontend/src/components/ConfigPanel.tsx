@@ -189,11 +189,11 @@ export default function ConfigPanel() {
     }
   };
 
-  const isConfigured = useCallback((key: string) => {
+  const isConfigured = (key: string): boolean => {
     const val = config[key];
     return val !== undefined && val !== '';
-  }, [config]);
-  const getConfiguredCount = useCallback((keys: string[]) => keys.filter(key => isConfigured(key)).length, [isConfigured]);
+  };
+  const getConfiguredCount = (keys: string[]): number => keys.filter(key => isConfigured(key)).length;
 
   if (isLoading) return <div className="py-16"><Loading text="설정을 불러오는 중..." size="lg" /></div>;
   if (error) return <Alert type="error">{error}</Alert>;
@@ -202,9 +202,9 @@ export default function ConfigPanel() {
 
   return (
     <div className="space-y-4">
-      {message ? (
+      {message && (
         <Alert type={message.type} onClose={() => setMessage(null)}>{message.text}</Alert>
-      ) : null}
+      )}
 
       <ConfigSection
         title="GitLab" description="커밋, MR 정보를 가져옵니다"
@@ -374,9 +374,43 @@ interface ConfigSectionProps {
   children: React.ReactNode;
 }
 
-function ConfigSection({ title, description, expanded, onToggle, configuredCount, totalCount, verified, children }: ConfigSectionProps) {
-  const isFullySaved = configuredCount === totalCount;
+function getStatusBadge(verified: boolean | null | undefined, configuredCount: number, totalCount: number): React.ReactNode {
+  if (verified === true) {
+    return (
+      <span className="flex items-center gap-1 px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] font-medium rounded">
+        {checkIcon} 연결 확인
+      </span>
+    );
+  }
+  if (verified === false) {
+    return (
+      <span className="flex items-center gap-1 px-1.5 py-0.5 bg-red-100 text-red-600 text-[10px] font-medium rounded">
+        {warnIcon} 연결 실패
+      </span>
+    );
+  }
+  if (configuredCount === totalCount) {
+    return (
+      <span className="flex items-center gap-1 px-1.5 py-0.5 bg-neutral-100 text-neutral-500 text-[10px] font-medium rounded">
+        {savedIcon} 저장됨
+      </span>
+    );
+  }
+  if (configuredCount > 0) {
+    return (
+      <span className="px-1.5 py-0.5 bg-neutral-100 text-neutral-500 text-[10px] font-medium rounded">
+        {configuredCount}/{totalCount}
+      </span>
+    );
+  }
+  return (
+    <span className="px-1.5 py-0.5 bg-neutral-50 text-neutral-400 text-[10px] font-medium rounded">
+      미설정
+    </span>
+  );
+}
 
+function ConfigSection({ title, description, expanded, onToggle, configuredCount, totalCount, verified, children }: ConfigSectionProps) {
   return (
     <section className="bg-white rounded-xl border border-neutral-200 shadow-sm overflow-hidden">
       <button
@@ -386,27 +420,7 @@ function ConfigSection({ title, description, expanded, onToggle, configuredCount
         <div className="text-left">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
-            {verified === true ? (
-              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] font-medium rounded">
-                {checkIcon} 연결 확인
-              </span>
-            ) : verified === false ? (
-              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-red-100 text-red-600 text-[10px] font-medium rounded">
-                {warnIcon} 연결 실패
-              </span>
-            ) : isFullySaved ? (
-              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-neutral-100 text-neutral-500 text-[10px] font-medium rounded">
-                {savedIcon} 저장됨
-              </span>
-            ) : configuredCount > 0 ? (
-              <span className="px-1.5 py-0.5 bg-neutral-100 text-neutral-500 text-[10px] font-medium rounded">
-                {configuredCount}/{totalCount}
-              </span>
-            ) : (
-              <span className="px-1.5 py-0.5 bg-neutral-50 text-neutral-400 text-[10px] font-medium rounded">
-                미설정
-              </span>
-            )}
+            {getStatusBadge(verified, configuredCount, totalCount)}
           </div>
           <p className="text-xs text-neutral-400 mt-0.5">{description}</p>
         </div>
@@ -415,11 +429,11 @@ function ConfigSection({ title, description, expanded, onToggle, configuredCount
         </span>
       </button>
 
-      {expanded ? (
+      {expanded && (
         <div className="px-5 pb-5 pt-1 border-t border-neutral-100">
           <div className="space-y-3">{children}</div>
         </div>
-      ) : null}
+      )}
     </section>
   );
 }
@@ -442,23 +456,23 @@ function ConfigInput({ label, type = 'text', value, onChange, placeholder, confi
     <div>
       <label className="flex items-center gap-2 text-xs font-medium text-neutral-500 mb-1.5">
         {label}
-        {configured ? (
+        {configured && (
           <span className="flex items-center gap-0.5 text-neutral-400 text-[10px]">{savedIcon} 저장됨</span>
-        ) : null}
+        )}
       </label>
       <div className="relative">
         <input
           type={inputType} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
           className="input pr-9"
         />
-        {type === 'password' ? (
+        {type === 'password' && (
           <button type="button" onClick={() => setShowPassword(!showPassword)}
             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600">
             {showPassword ? eyeOffIcon : eyeIcon}
           </button>
-        ) : null}
+        )}
       </div>
-      {helpText ? <p className="text-[10px] text-neutral-400 mt-1">{helpText}</p> : null}
+      {helpText && <p className="text-[10px] text-neutral-400 mt-1">{helpText}</p>}
     </div>
   );
 }

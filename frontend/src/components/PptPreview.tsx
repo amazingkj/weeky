@@ -14,7 +14,9 @@ const COLORS = {
   border: '#E5E5E5',
 };
 
-// Reusable cell component
+const ALIGN_CLASS = { left: 'text-left', center: 'text-center', right: 'text-right' } as const;
+const VALIGN_CLASS = { top: 'align-top', middle: 'align-middle', bottom: 'align-bottom' } as const;
+
 function Cell({
   children,
   header = false,
@@ -34,8 +36,8 @@ function Cell({
   compact?: boolean;
   className?: string;
 }) {
-  const alignClass = align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left';
-  const valignClass = valign === 'top' ? 'align-top' : valign === 'bottom' ? 'align-bottom' : 'align-middle';
+  const alignClass = ALIGN_CLASS[align];
+  const valignClass = VALIGN_CLASS[valign];
   const paddingClass = compact ? 'px-1 py-0' : 'px-2 py-1';
   const textSize = compact ? 'text-[10px]' : 'text-xs';
 

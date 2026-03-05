@@ -46,18 +46,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshUser();
   }, [refreshUser]);
 
-  // Listen for 401 auth expired events from apiFetch
   useEffect(() => {
-    const handleAuthExpired = () => {
-      setUser(null);
-    };
+    const handleAuthExpired = () => setUser(null);
     window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
   }, []);
 
-  const handleLogin = useCallback((user: User) => {
-    setUser(user);
-    localStorage.setItem('user', JSON.stringify(user));
+  const handleLogin = useCallback((loggedInUser: User) => {
+    setUser(loggedInUser);
+    localStorage.setItem('user', JSON.stringify(loggedInUser));
   }, []);
 
   const handleLogout = useCallback(() => {
@@ -79,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useAuth() {
+export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');

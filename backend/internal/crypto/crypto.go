@@ -22,13 +22,10 @@ var (
 	ErrKeyNotSet       = errors.New("ENCRYPTION_KEY environment variable is not set")
 )
 
-// Encryptor provides encryption/decryption functionality
 type Encryptor struct {
 	key []byte
 }
 
-// NewEncryptor creates a new Encryptor with the key from environment.
-// Returns an error if ENCRYPTION_KEY is not set.
 func NewEncryptor() (*Encryptor, error) {
 	key, err := getKey()
 	if err != nil {
@@ -37,9 +34,7 @@ func NewEncryptor() (*Encryptor, error) {
 	return &Encryptor{key: key}, nil
 }
 
-// NewEncryptorWithKey creates an Encryptor with a custom key
 func NewEncryptorWithKey(key []byte) *Encryptor {
-	// Ensure key is exactly 32 bytes
 	if len(key) < keySize {
 		padded := make([]byte, keySize)
 		copy(padded, key)
@@ -65,7 +60,6 @@ func getKey() ([]byte, error) {
 	return keyBytes[:keySize], nil
 }
 
-// Encrypt encrypts plaintext and returns base64-encoded ciphertext
 func (e *Encryptor) Encrypt(plaintext string) (string, error) {
 	block, err := aes.NewCipher(e.key)
 	if err != nil {
@@ -86,7 +80,6 @@ func (e *Encryptor) Encrypt(plaintext string) (string, error) {
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
-// Decrypt decrypts base64-encoded ciphertext
 func (e *Encryptor) Decrypt(ciphertext string) (string, error) {
 	if ciphertext == "" {
 		return "", ErrEmptyCiphertext
@@ -121,8 +114,6 @@ func (e *Encryptor) Decrypt(ciphertext string) (string, error) {
 	return string(plaintext), nil
 }
 
-// InitDefault initializes the package-level default encryptor.
-// Must be called before using Encrypt/Decrypt package-level functions.
 func InitDefault() error {
 	enc, err := NewEncryptor()
 	if err != nil {
@@ -134,7 +125,6 @@ func InitDefault() error {
 
 var defaultEncryptor *Encryptor
 
-// Encrypt encrypts using the default encryptor
 func Encrypt(plaintext string) (string, error) {
 	if defaultEncryptor == nil {
 		return "", ErrKeyNotSet
@@ -142,7 +132,6 @@ func Encrypt(plaintext string) (string, error) {
 	return defaultEncryptor.Encrypt(plaintext)
 }
 
-// Decrypt decrypts using the default encryptor
 func Decrypt(ciphertext string) (string, error) {
 	if defaultEncryptor == nil {
 		return "", ErrKeyNotSet

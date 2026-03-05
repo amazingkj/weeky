@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Team, TeamMember, TeamProject, ReportSubmission, Report, TEAM_ROLE_LABELS, ROLE_CODE_LABELS } from '../types';
+import { Team, TeamMember, TeamProject, ReportSubmission, Report, TEAM_ROLE_LABELS, ROLE_CODE_LABELS, TeamRole } from '../types';
 import { getMyTeams, getTeamMembers, getMySubmission, getMySubmissions, getReports, deleteTeam, updateTeam, getTeamProjects, createTeamProject, updateTeamProject, deleteTeamProject, reorderTeamProjects } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import TeamCreateModal from './TeamCreateModal';
@@ -7,6 +7,12 @@ import TeamMemberManager from './TeamMemberManager';
 import TeamSubmissionPanel from './TeamSubmissionPanel';
 import WeeklyHistoryPanel from './WeeklyHistoryPanel';
 import Loading from './ui/Loading';
+
+const ROLE_DISPLAY: Record<TeamRole, string> = {
+  leader: '팀장',
+  group_leader: '그룹장',
+  member: '팀원',
+};
 
 export default function TeamPanel() {
   const { user } = useAuth();
@@ -115,14 +121,14 @@ export default function TeamPanel() {
     if (!selectedTeam) return;
     const newIndex = direction === 'up' ? index - 1 : index + 1;
     if (newIndex < 0 || newIndex >= teamProjects.length) return;
-    const newList = [...teamProjects];
+    const prev = teamProjects;
+    const newList = [...prev];
     [newList[index], newList[newIndex]] = [newList[newIndex], newList[index]];
     setTeamProjects(newList);
     try {
       await reorderTeamProjects(selectedTeam.id, newList.map(p => p.id));
     } catch (err: any) {
-      // Revert on error
-      setTeamProjects(teamProjects);
+      setTeamProjects(prev);
       alert(err.message || '순서 변경에 실패했습니다.');
     }
   };
@@ -265,7 +271,7 @@ export default function TeamPanel() {
             <div className="flex items-center gap-2">
               {myRole && (
                 <span className="px-2 py-0.5 bg-neutral-100 text-neutral-600 rounded text-[10px] font-medium">
-                  {myRole === 'leader' ? '팀장' : myRole === 'group_leader' ? '그룹장' : '팀원'}
+                  {ROLE_DISPLAY[myRole as TeamRole] || myRole}
                 </span>
               )}
               {(myRole === 'leader' || user?.is_admin) && !editingTeamName && (
@@ -305,46 +311,26 @@ export default function TeamPanel() {
           {/* Sub-tabs for leader/group_leader */}
           {isLeaderOrGroupLeader && (
             <div className="px-5 pt-3 flex gap-0 border-b border-neutral-100">
-              <button
-                onClick={() => setActiveView('submissions')}
-                className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
-                  activeView === 'submissions'
-                    ? 'border-neutral-900 text-neutral-900'
-                    : 'border-transparent text-neutral-500 hover:text-neutral-700'
-                }`}>
-                취합 현황
-              </button>
-              <button
-                onClick={() => setActiveView('history')}
-                className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
-                  activeView === 'history'
-                    ? 'border-neutral-900 text-neutral-900'
-                    : 'border-transparent text-neutral-500 hover:text-neutral-700'
-                }`}>
-                히스토리
-              </button>
-              {(myRole === 'leader' || user?.is_admin) && (
-                <>
+              {[
+                { key: 'submissions' as const, label: '취합 현황', leaderOnly: false },
+                { key: 'history' as const, label: '히스토리', leaderOnly: false },
+                { key: 'projects' as const, label: '프로젝트 관리', leaderOnly: true },
+                { key: 'members' as const, label: '멤버 관리', leaderOnly: true },
+              ]
+                .filter(tab => !tab.leaderOnly || myRole === 'leader' || user?.is_admin)
+                .map(tab => (
                   <button
-                    onClick={() => setActiveView('projects')}
+                    key={tab.key}
+                    onClick={() => setActiveView(tab.key)}
                     className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
-                      activeView === 'projects'
+                      activeView === tab.key
                         ? 'border-neutral-900 text-neutral-900'
                         : 'border-transparent text-neutral-500 hover:text-neutral-700'
                     }`}>
-                    프로젝트 관리
+                    {tab.label}
                   </button>
-                  <button
-                    onClick={() => setActiveView('members')}
-                    className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
-                      activeView === 'members'
-                        ? 'border-neutral-900 text-neutral-900'
-                        : 'border-transparent text-neutral-500 hover:text-neutral-700'
-                    }`}>
-                    멤버 관리
-                  </button>
-                </>
-              )}
+                ))
+              }
             </div>
           )}
 

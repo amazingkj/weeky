@@ -86,7 +86,7 @@ export default function Alert({ type, children, onClose, className = '', autoClo
     >
       <span className="flex-shrink-0 mt-0.5">{styles.icon}</span>
       <div className="flex-1 min-w-0 text-sm">{children}</div>
-      {onClose ? (
+      {onClose && (
         <button
           onClick={handleClose}
           className="flex-shrink-0 p-0.5 text-neutral-400 hover:text-neutral-600 transition-colors"
@@ -96,7 +96,7 @@ export default function Alert({ type, children, onClose, className = '', autoClo
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
-      ) : null}
+      )}
     </div>
   );
 }

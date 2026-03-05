@@ -9,7 +9,6 @@ import (
 	"github.com/jiin/weeky/internal/model"
 )
 
-// CheckSetup returns whether the system has been initialized (has any users)
 func (h *Handler) CheckSetup(c *fiber.Ctx) error {
 	count, err := h.repo.CountUsers()
 	if err != nil {
@@ -20,7 +19,6 @@ func (h *Handler) CheckSetup(c *fiber.Ctx) error {
 	})
 }
 
-// Register creates a new user account
 func (h *Handler) Register(c *fiber.Ctx) error {
 	var req model.RegisterRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -35,25 +33,21 @@ func (h *Handler) Register(c *fiber.Ctx) error {
 		return badRequest(c, "비밀번호는 6자 이상이어야 합니다")
 	}
 
-	// Check if email is already taken
 	if existing, _ := h.repo.GetUserByEmail(req.Email); existing != nil {
 		return badRequest(c, "이미 사용 중인 이메일입니다")
 	}
 
-	// Hash password
 	passwordHash, err := auth.HashPassword(req.Password)
 	if err != nil {
 		return internalError(c, err)
 	}
 
-	// Try atomic first-admin creation (handles race condition)
 	user, err := h.repo.CreateFirstAdmin(req.Email, passwordHash, req.Name)
 	if err != nil {
 		return internalError(c, err)
 	}
 
 	if user != nil {
-		// Successfully created the first admin - reassign legacy data
 		h.repo.ReassignLegacyData(user.ID)
 
 		token, err := auth.GenerateToken(user.ID, user.Email, user.IsAdmin)
@@ -71,7 +65,6 @@ func (h *Handler) Register(c *fiber.Ctx) error {
 		})
 	}
 
-	// Not the first user - require invite code
 	if req.InviteCode == "" {
 		return badRequest(c, "초대 코드가 필요합니다")
 	}
@@ -84,13 +77,11 @@ func (h *Handler) Register(c *fiber.Ctx) error {
 		return badRequest(c, "이미 사용된 초대 코드입니다")
 	}
 
-	// Create regular user
 	user, err = h.repo.CreateUser(req.Email, passwordHash, req.Name, false)
 	if err != nil {
 		return internalError(c, err)
 	}
 
-	// Mark invite code as used - fail registration if this fails
 	if err := h.repo.UseInviteCode(req.InviteCode, user.ID); err != nil {
 		return internalError(c, err)
 	}
@@ -111,7 +102,6 @@ func (h *Handler) Register(c *fiber.Ctx) error {
 	})
 }
 
-// Login authenticates a user and returns a JWT
 func (h *Handler) Login(c *fiber.Ctx) error {
 	var req model.LoginRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -147,7 +137,6 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 	})
 }
 
-// GetMe returns the current authenticated user's info
 func (h *Handler) GetMe(c *fiber.Ctx) error {
 	userID := getUserID(c)
 	user, err := h.repo.GetUserByID(userID)
@@ -157,11 +146,9 @@ func (h *Handler) GetMe(c *fiber.Ctx) error {
 	return c.JSON(user)
 }
 
-// CreateInviteCode generates a new invite code (admin only, verified from DB)
 func (h *Handler) CreateInviteCode(c *fiber.Ctx) error {
 	userID := getUserID(c)
 
-	// Verify admin status from DB (not just JWT claim)
 	user, err := h.repo.GetUserByID(userID)
 	if err != nil || !user.IsAdmin {
 		return respondError(c, fiber.StatusForbidden, "관리자 권한이 필요합니다")
@@ -180,7 +167,6 @@ func (h *Handler) CreateInviteCode(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(ic)
 }
 
-// GetInviteCodes returns all invite codes created by the admin
 func (h *Handler) GetInviteCodes(c *fiber.Ctx) error {
 	userID := getUserID(c)
 
@@ -196,7 +182,6 @@ func (h *Handler) GetInviteCodes(c *fiber.Ctx) error {
 	return c.JSON(codes)
 }
 
-// RefreshToken issues a new access token using a valid refresh token
 func (h *Handler) RefreshToken(c *fiber.Ctx) error {
 	var req struct {
 		RefreshToken string `json:"refresh_token"`
@@ -214,13 +199,11 @@ func (h *Handler) RefreshToken(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusUnauthorized, "잘못된 토큰 유형입니다")
 	}
 
-	// Verify user still exists
 	user, err := h.repo.GetUserByID(claims.UserID)
 	if err != nil {
 		return respondError(c, fiber.StatusUnauthorized, "사용자를 찾을 수 없습니다")
 	}
 
-	// Issue new access token with fresh user data (admin status may have changed)
 	newToken, err := auth.GenerateToken(user.ID, user.Email, user.IsAdmin)
 	if err != nil {
 		return internalError(c, err)
@@ -231,13 +214,11 @@ func (h *Handler) RefreshToken(c *fiber.Ctx) error {
 	})
 }
 
-// getUserID extracts the user ID from the Fiber context (set by auth middleware)
 func getUserID(c *fiber.Ctx) int64 {
 	id, _ := c.Locals("userID").(int64)
 	return id
 }
 
-// generateInviteCode creates a random 16-character hex code (8 bytes)
 func generateInviteCode() (string, error) {
 	bytes := make([]byte, 8)
 	if _, err := rand.Read(bytes); err != nil {

@@ -15,7 +15,6 @@ var (
 	secretMu  sync.RWMutex
 )
 
-// SetSecret sets the JWT secret. Must be called before any token operations.
 func SetSecret(secret string) {
 	secretMu.Lock()
 	defer secretMu.Unlock()
@@ -30,10 +29,8 @@ func getSecret() []byte {
 	}
 	secretMu.RUnlock()
 
-	// Fallback: read from env (lazy init after .env load)
 	secretMu.Lock()
 	defer secretMu.Unlock()
-	// Double-check after acquiring write lock
 	if len(jwtSecret) > 0 {
 		return jwtSecret
 	}
@@ -41,24 +38,20 @@ func getSecret() []byte {
 		jwtSecret = []byte(s)
 		return jwtSecret
 	}
-	// Default secret for development only
 	jwtSecret = []byte("weeky-dev-secret-change-in-production")
 	return jwtSecret
 }
 
-// HashPassword hashes a plaintext password using bcrypt
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	return string(bytes), err
 }
 
-// CheckPassword compares a plaintext password with a bcrypt hash
 func CheckPassword(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
 }
 
-// TokenType distinguishes access tokens from refresh tokens
 type TokenType string
 
 const (
@@ -66,7 +59,6 @@ const (
 	RefreshToken TokenType = "refresh"
 )
 
-// Claims represents JWT claims
 type Claims struct {
 	UserID    int64     `json:"user_id"`
 	Email     string    `json:"email"`
@@ -75,7 +67,6 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// GenerateToken creates a new access token (1 hour)
 func GenerateToken(userID int64, email string, isAdmin bool) (string, error) {
 	claims := Claims{
 		UserID:    userID,
@@ -92,7 +83,6 @@ func GenerateToken(userID int64, email string, isAdmin bool) (string, error) {
 	return token.SignedString(getSecret())
 }
 
-// GenerateRefreshToken creates a new refresh token (30 days)
 func GenerateRefreshToken(userID int64, email string, isAdmin bool) (string, error) {
 	claims := Claims{
 		UserID:    userID,
@@ -109,7 +99,6 @@ func GenerateRefreshToken(userID int64, email string, isAdmin bool) (string, err
 	return token.SignedString(getSecret())
 }
 
-// ValidateToken parses and validates a JWT token
 func ValidateToken(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {

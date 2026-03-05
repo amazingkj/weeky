@@ -1,20 +1,18 @@
 import { useState, useEffect } from 'react';
-import { TeamHistoryResponse, ConsolidatedReport, defaultTemplateStyle } from '../types';
+import { TeamHistoryResponse, ConsolidatedReport } from '../types';
 import { getTeamHistory, getConsolidatedReport } from '../services/api';
 import { generateConsolidatedPPT } from '../utils/pptGenerator';
 import { useAuth } from '../contexts/AuthContext';
 import Loading from './ui/Loading';
 
-interface WeeklyHistoryPanelProps {
-  teamId: number;
+function getSubmissionBadgeClass(submitted: number, total: number): string {
+  if (submitted === total) return 'bg-green-100 text-green-700';
+  if (submitted > 0) return 'bg-amber-100 text-amber-700';
+  return 'bg-neutral-100 text-neutral-400';
 }
 
-function formatFriday(dateStr: string): string {
-  const d = new Date(dateStr);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+interface WeeklyHistoryPanelProps {
+  teamId: number;
 }
 
 export default function WeeklyHistoryPanel({ teamId }: WeeklyHistoryPanelProps) {
@@ -36,7 +34,7 @@ export default function WeeklyHistoryPanel({ teamId }: WeeklyHistoryPanelProps) 
     setDownloadingWeek(weekDate);
     try {
       const consolidated: ConsolidatedReport = await getConsolidatedReport(teamId, weekDate);
-      await generateConsolidatedPPT(consolidated, defaultTemplateStyle, user?.name);
+      await generateConsolidatedPPT(consolidated, user?.name);
     } catch {
       alert('PPT 생성에 실패했습니다.');
     } finally {
@@ -93,16 +91,10 @@ export default function WeeklyHistoryPanel({ teamId }: WeeklyHistoryPanelProps) 
                 return (
                   <tr key={w.week_date} className={hasSubmissions ? '' : 'opacity-40'}>
                     <td className="px-3 py-2.5 font-medium text-neutral-900">
-                      {formatFriday(w.friday_date)}
+                      {w.friday_date}
                     </td>
                     <td className="px-3 py-2.5 text-center">
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                        w.submitted_count === w.total_members
-                          ? 'bg-green-100 text-green-700'
-                          : w.submitted_count > 0
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-neutral-100 text-neutral-400'
-                      }`}>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getSubmissionBadgeClass(w.submitted_count, w.total_members)}`}>
                         {w.submitted_count}/{w.total_members}
                       </span>
                     </td>

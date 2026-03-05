@@ -18,12 +18,10 @@ func New(repo repository.IRepository) *Handler {
 	return &Handler{repo: repo, services: service.DefaultServices()}
 }
 
-// NewWithServices creates a Handler with custom services (for testing)
 func NewWithServices(repo repository.IRepository, svc *service.Services) *Handler {
 	return &Handler{repo: repo, services: svc}
 }
 
-// Template handlers
 func (h *Handler) GetTemplates(c *fiber.Ctx) error {
 	templates, err := h.repo.GetTemplates()
 	if err != nil {
@@ -88,7 +86,6 @@ func (h *Handler) DeleteTemplate(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 
-// User list handler (for team member selection)
 func (h *Handler) GetUsers(c *fiber.Ctx) error {
 	users, err := h.repo.GetAllUsers()
 	if err != nil {
@@ -100,7 +97,6 @@ func (h *Handler) GetUsers(c *fiber.Ctx) error {
 	return c.JSON(users)
 }
 
-// Report handlers
 func (h *Handler) GetReport(c *fiber.Ctx) error {
 	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
 	if err != nil {
@@ -147,7 +143,6 @@ func (h *Handler) UpdateReport(c *fiber.Ctx) error {
 		return internalError(c, err)
 	}
 
-	// Return the updated report
 	report, err := h.repo.GetReport(id, userID)
 	if err != nil {
 		return internalError(c, err)
@@ -163,10 +158,8 @@ func (h *Handler) SaveReport(c *fiber.Ctx) error {
 
 	userID := getUserID(c)
 
-	// Check if report already exists for this date
 	existing, _ := h.repo.GetReportByDateAndUser(req.ReportDate, userID)
 	if existing != nil {
-		// Update existing
 		if err := h.repo.UpdateReport(existing.ID, req, userID); err != nil {
 			return internalError(c, err)
 		}
@@ -177,7 +170,6 @@ func (h *Handler) SaveReport(c *fiber.Ctx) error {
 		return c.JSON(report)
 	}
 
-	// Create new
 	report, err := h.repo.CreateReport(req, userID)
 	if err != nil {
 		return internalError(c, err)

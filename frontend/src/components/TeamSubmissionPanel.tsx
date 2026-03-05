@@ -8,6 +8,8 @@ import Loading from './ui/Loading';
 
 const ConsolidatedPptPreview = lazy(() => import('./ConsolidatedPptPreview'));
 
+const TEXTAREA_CLASS = 'w-full px-2.5 py-1.5 bg-white border border-neutral-200 rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-400 text-xs text-neutral-700 resize-y';
+
 interface TeamSubmissionPanelProps {
   team: Team;
 }
@@ -29,10 +31,9 @@ function getRecentFridays(count = 8): string[] {
   return fridays;
 }
 
-const getDefaultDate = (): string => {
-  const fridays = getRecentFridays(1);
-  return fridays[0];
-};
+function getDefaultDate(): string {
+  return getRecentFridays(1)[0];
+}
 
 export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) {
   const { user } = useAuth();
@@ -249,13 +250,17 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
     }
   };
 
+  // UI 전용 필드 제거 후 저장용 태스크 반환
+  const stripUiFields = (tasks: Task[]): Task[] =>
+    tasks.map(({ _memberName, _roleCode, _carriedForward, ...rest }) => rest);
+
   const handleSaveConsolidatedEdit = async () => {
     setEditSaving(true);
     try {
       await saveConsolidatedEdit(team.id, {
         report_date: reportDate,
-        this_week: flatThisWeek,
-        next_week: flatNextWeek,
+        this_week: stripUiFields(flatThisWeek),
+        next_week: stripUiFields(flatNextWeek),
         issues: flatIssues,
         notes: flatNotes,
         next_issues: flatNextIssues,
@@ -299,14 +304,13 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
         data = consolidated || await getConsolidatedReport(team.id, reportDate);
         if (!consolidated) setConsolidated(data);
       }
-      await generateConsolidatedPPT(data, defaultTemplateStyle, user?.name);
+      await generateConsolidatedPPT(data, user?.name);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setPptLoading(false);
     }
   };
-
 
   const handleTogglePreview = async () => {
     if (!showPreview && !consolidated) {
@@ -316,7 +320,6 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
         setConsolidated(data);
       } catch (err: any) {
         setError(err.message);
-        setPptLoading(false);
         return;
       } finally {
         setPptLoading(false);
@@ -487,14 +490,14 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                           <label className="block text-xs font-medium text-neutral-700 mb-1">이슈/위험사항</label>
                           <textarea value={editedReport.issues}
                             onChange={(e) => setEditedReport(prev => prev ? { ...prev, issues: e.target.value } : prev)}
-                            rows={2} className="w-full px-2.5 py-1.5 bg-white border border-neutral-200 rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-400 text-xs text-neutral-700 resize-y"
+                            rows={2} className={TEXTAREA_CLASS}
                             placeholder="이슈 사항" />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-neutral-700 mb-1">특이사항</label>
                           <textarea value={editedReport.notes}
                             onChange={(e) => setEditedReport(prev => prev ? { ...prev, notes: e.target.value } : prev)}
-                            rows={2} className="w-full px-2.5 py-1.5 bg-white border border-neutral-200 rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-400 text-xs text-neutral-700 resize-y"
+                            rows={2} className={TEXTAREA_CLASS}
                             placeholder="특이사항" />
                         </div>
                       </div>
@@ -509,14 +512,14 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                           <label className="block text-xs font-medium text-neutral-700 mb-1">차주 이슈</label>
                           <textarea value={editedReport.next_issues}
                             onChange={(e) => setEditedReport(prev => prev ? { ...prev, next_issues: e.target.value } : prev)}
-                            rows={2} className="w-full px-2.5 py-1.5 bg-white border border-neutral-200 rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-400 text-xs text-neutral-700 resize-y"
+                            rows={2} className={TEXTAREA_CLASS}
                             placeholder="차주 이슈" />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-neutral-700 mb-1">차주 특이사항</label>
                           <textarea value={editedReport.next_notes}
                             onChange={(e) => setEditedReport(prev => prev ? { ...prev, next_notes: e.target.value } : prev)}
-                            rows={2} className="w-full px-2.5 py-1.5 bg-white border border-neutral-200 rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-400 text-xs text-neutral-700 resize-y"
+                            rows={2} className={TEXTAREA_CLASS}
                             placeholder="차주 특이사항" />
                         </div>
                       </div>
@@ -705,13 +708,13 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                   <div>
                     <label className="block text-xs font-medium text-neutral-700 mb-1">이슈/위험사항</label>
                     <textarea value={flatIssues} onChange={(e) => setFlatIssues(e.target.value)}
-                      rows={3} className="w-full px-2.5 py-1.5 bg-white border border-neutral-200 rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-400 text-xs text-neutral-700 resize-y"
+                      rows={3} className={TEXTAREA_CLASS}
                       placeholder="이슈/위험사항" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-neutral-700 mb-1">특이사항</label>
                     <textarea value={flatNotes} onChange={(e) => setFlatNotes(e.target.value)}
-                      rows={3} className="w-full px-2.5 py-1.5 bg-white border border-neutral-200 rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-400 text-xs text-neutral-700 resize-y"
+                      rows={3} className={TEXTAREA_CLASS}
                       placeholder="특이사항" />
                   </div>
                 </div>
@@ -728,13 +731,13 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                   <div>
                     <label className="block text-xs font-medium text-neutral-700 mb-1">차주 이슈</label>
                     <textarea value={flatNextIssues} onChange={(e) => setFlatNextIssues(e.target.value)}
-                      rows={3} className="w-full px-2.5 py-1.5 bg-white border border-neutral-200 rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-400 text-xs text-neutral-700 resize-y"
+                      rows={3} className={TEXTAREA_CLASS}
                       placeholder="차주 이슈" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-neutral-700 mb-1">차주 특이사항</label>
                     <textarea value={flatNextNotes} onChange={(e) => setFlatNextNotes(e.target.value)}
-                      rows={3} className="w-full px-2.5 py-1.5 bg-white border border-neutral-200 rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-400 text-xs text-neutral-700 resize-y"
+                      rows={3} className={TEXTAREA_CLASS}
                       placeholder="차주 특이사항" />
                   </div>
                 </div>

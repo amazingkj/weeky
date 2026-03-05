@@ -9,7 +9,6 @@ import (
 	"github.com/jiin/weeky/internal/model"
 )
 
-// MockRepository is an in-memory implementation for testing
 type MockRepository struct {
 	mu          sync.RWMutex
 	users       map[int64]model.User
@@ -21,7 +20,6 @@ type MockRepository struct {
 	nextID      int64
 }
 
-// NewMock creates a new mock repository
 func NewMock() *MockRepository {
 	return &MockRepository{
 		users:       make(map[int64]model.User),
@@ -38,13 +36,10 @@ func (m *MockRepository) Close() error {
 	return nil
 }
 
-// ============ User methods ============
-
 func (m *MockRepository) CreateUser(email, passwordHash, name string, isAdmin bool) (*model.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Check unique email
 	for _, u := range m.users {
 		if u.Email == email {
 			return nil, errors.New("email already exists")
@@ -119,7 +114,6 @@ func (m *MockRepository) CountUsers() (int64, error) {
 func (m *MockRepository) ReassignLegacyData(userID int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	// Mock: reassign configs with userID=0
 	for k, c := range m.configs {
 		expected := configKey(0, c.Key)
 		if k == expected {
@@ -128,7 +122,6 @@ func (m *MockRepository) ReassignLegacyData(userID int64) error {
 			m.configs[newKey] = c
 		}
 	}
-	// Mock: reassign reports with userID=0
 	for id, ownerID := range m.reportOwner {
 		if ownerID == 0 {
 			m.reportOwner[id] = userID
@@ -136,8 +129,6 @@ func (m *MockRepository) ReassignLegacyData(userID int64) error {
 	}
 	return nil
 }
-
-// ============ Invite code methods ============
 
 func (m *MockRepository) CreateInviteCode(code string, createdBy int64) (*model.InviteCode, error) {
 	m.mu.Lock()
@@ -197,8 +188,6 @@ func (m *MockRepository) GetInviteCodes(createdBy int64) ([]model.InviteCode, er
 	return codes, nil
 }
 
-// ============ Template methods ============
-
 func (m *MockRepository) GetTemplates() ([]model.Template, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -247,8 +236,6 @@ func (m *MockRepository) DeleteTemplate(id int64) error {
 	delete(m.templates, id)
 	return nil
 }
-
-// ============ Report methods ============
 
 func (m *MockRepository) GetReport(id int64, userID int64) (*model.Report, error) {
 	m.mu.RLock()
@@ -303,8 +290,6 @@ func (m *MockRepository) GetReportsByUser(userID int64) ([]model.Report, error) 
 	return reports, nil
 }
 
-// ============ Config methods ============
-
 func configKey(userID int64, key string) string {
 	return fmt.Sprintf("%d:%s", userID, key)
 }
@@ -357,8 +342,6 @@ func (m *MockRepository) DeleteConfig(key string, userID int64) error {
 	delete(m.configs, ck)
 	return nil
 }
-
-// ============ Team methods (stub) ============
 
 func (m *MockRepository) CreateTeam(name, description string, createdBy int64) (*model.Team, error) {
 	m.mu.Lock()
@@ -442,8 +425,6 @@ func (m *MockRepository) UpdateReportByID(id int64, req model.CreateReportReques
 	return nil
 }
 
-// ============ Additional methods ============
-
 func (m *MockRepository) GetAllUsers() ([]model.User, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -489,8 +470,6 @@ func (m *MockRepository) GetReportByDateAndUser(reportDate string, userID int64)
 	return nil, errors.New("report not found")
 }
 
-// ============ Team Project methods (stub) ============
-
 func (m *MockRepository) CreateTeamProject(teamID int64, name, client string) (*model.TeamProject, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -535,5 +514,4 @@ func (m *MockRepository) DeleteConsolidatedEdit(teamID int64, reportDate string)
 	return nil
 }
 
-// Ensure MockRepository implements IRepository
 var _ IRepository = (*MockRepository)(nil)

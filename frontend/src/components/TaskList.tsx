@@ -77,15 +77,15 @@ export default function TaskList({
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
-            {tasks.length > 0 ? (
+            {tasks.length > 0 && (
               <span className="px-1.5 py-0.5 bg-neutral-100 text-neutral-600 text-xs font-medium rounded">
                 {tasks.length}
               </span>
-            ) : null}
+            )}
           </div>
-          {description ? (
+          {description && (
             <p className="text-xs text-neutral-400 mt-0.5">{description}</p>
-          ) : null}
+          )}
           {projectSuggestions && projectSuggestions.length > 0 && (
             <p className="text-[11px] text-neutral-400 mt-0.5">업무 제목을 클릭하면 등록된 프로젝트를 선택할 수 있습니다</p>
           )}
@@ -137,6 +137,16 @@ export default function TaskList({
   );
 }
 
+function ProgressBadge({ progress }: { progress: number }) {
+  if (progress === 100) {
+    return <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-neutral-900 text-white">완료</span>;
+  }
+  if (progress > 0) {
+    return <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-neutral-200 text-neutral-700">진행중</span>;
+  }
+  return <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-neutral-100 text-neutral-500">예정</span>;
+}
+
 interface TaskItemProps {
   task: Task;
   index: number;
@@ -166,11 +176,9 @@ const TaskItem = memo(function TaskItem({
 }: TaskItemProps) {
   const [showDescription, setShowDescription] = useState(() => !!task.description);
 
-  const progressColor = task.progress === 100
-    ? 'bg-neutral-900'
-    : task.progress >= 50
-      ? 'bg-neutral-500'
-      : 'bg-neutral-300';
+  let progressColor = 'bg-neutral-300';
+  if (task.progress === 100) progressColor = 'bg-neutral-900';
+  else if (task.progress >= 50) progressColor = 'bg-neutral-500';
 
   return (
     <div className="group bg-neutral-50 hover:bg-neutral-100/80 p-4 rounded-lg border border-neutral-200 shadow-sm transition-colors">
@@ -190,17 +198,9 @@ const TaskItem = memo(function TaskItem({
               {task._memberName}{task._roleCode ? ` (${task._roleCode})` : ''}
             </span>
           )}
-          {showProgress ? (
-            <span className={`px-1.5 py-0.5 text-xs font-medium rounded ${
-              task.progress === 100
-                ? 'bg-neutral-900 text-white'
-                : task.progress >= 50
-                  ? 'bg-neutral-200 text-neutral-700'
-                  : 'bg-neutral-100 text-neutral-500'
-            }`}>
-              {task.progress === 100 ? '완료' : task.progress > 0 ? '진행중' : '예정'}
-            </span>
-          ) : null}
+          {showProgress && (
+            <ProgressBadge progress={task.progress} />
+          )}
         </div>
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
           <button type="button" onClick={onMoveUp} disabled={index === 0}
@@ -274,7 +274,7 @@ const TaskItem = memo(function TaskItem({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
           상세내용
-          {task.description ? <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full" /> : null}
+          {task.description && <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full" />}
         </button>
         {showDescription && (
           <textarea
@@ -302,7 +302,7 @@ const TaskItem = memo(function TaskItem({
           />
         </div>
 
-        {showProgress ? (
+        {showProgress && (
           <div className="flex items-center gap-2 flex-1">
             <span className="text-xs text-neutral-400">진척률</span>
             <div className="flex-1 max-w-[160px] flex items-center gap-2">
@@ -323,7 +323,7 @@ const TaskItem = memo(function TaskItem({
               </span>
             </div>
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );

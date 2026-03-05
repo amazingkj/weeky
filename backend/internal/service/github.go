@@ -46,14 +46,12 @@ func (s *GitHubService) Sync(req model.GitHubSyncRequest) (*model.SyncResult, er
 		SyncedAt: time.Now(),
 	}
 
-	// Fetch commits
 	commits, err := s.fetchCommits(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch commits: %w", err)
 	}
 	result.Items = append(result.Items, commits...)
 
-	// Fetch PRs
 	prs, err := s.fetchPRs(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch PRs: %w", err)
@@ -95,7 +93,6 @@ func (s *GitHubService) fetchCommits(req model.GitHubSyncRequest) ([]model.SyncI
 
 	items := make([]model.SyncItem, 0, len(commits))
 	for _, c := range commits {
-		// Extract first line of commit message
 		message := c.Commit.Message
 		if idx := len(message); idx > 80 {
 			message = message[:80] + "..."

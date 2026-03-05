@@ -144,7 +144,11 @@ function buildAlignedPreviewRows(
 // Same pagination as pptGenerator with balanced distribution
 function calcPagination(leftCount: number, rightCount: number, bodyH: number) {
   const maxLines = Math.max(leftCount, rightCount, 1);
-  const getRowH = (fs: number) => fs >= 9 ? 0.21 : fs >= 8 ? 0.19 : 0.17;
+  const getRowH = (fs: number) => {
+    if (fs >= 9) return 0.21;
+    if (fs >= 8) return 0.19;
+    return 0.17;
+  };
 
   for (const fs of [9, 8, 7]) {
     const rh = getRowH(fs);
@@ -201,7 +205,7 @@ export default function ConsolidatedPptPreview({ data }: ConsolidatedPptPreviewP
     const noteH = Math.max(0.28, Math.min(0.55, noteLineCount * 0.14 + 0.05));
     const bodyH = 6.9 - (0.35 + 0.30 + 0.40 + issueH + noteH);
 
-    const { pages, linesPerPage } = calcPagination(leftRows.length, leftRows.length, bodyH);
+    const { pages, linesPerPage } = calcPagination(leftRows.length, rightRows.length, bodyH);
 
     const slideList: { title: string; content: React.ReactNode }[] = [];
 

@@ -46,7 +46,6 @@ type jiraIssue struct {
 }
 
 func (s *JiraService) Sync(req model.JiraSyncRequest) (*model.SyncResult, error) {
-	// Validate base URL to prevent SSRF
 	if err := ValidateExternalURL(req.BaseURL); err != nil {
 		return nil, fmt.Errorf("invalid Jira URL: %w", err)
 	}
@@ -60,7 +59,6 @@ func (s *JiraService) Sync(req model.JiraSyncRequest) (*model.SyncResult, error)
 	auth := base64.StdEncoding.EncodeToString([]byte(req.Email + ":" + req.Token))
 	searchURL := fmt.Sprintf("%s/rest/api/3/search/jql", req.BaseURL)
 
-	// Fetch completed issues (금주실적)
 	doneJQL := fmt.Sprintf(
 		`assignee = currentUser() AND status = Done AND updated >= "%s" AND updated <= "%s" ORDER BY updated DESC`,
 		req.StartDate, req.EndDate,
@@ -82,7 +80,6 @@ func (s *JiraService) Sync(req model.JiraSyncRequest) (*model.SyncResult, error)
 		})
 	}
 
-	// Fetch in-progress issues (차주계획)
 	todoJQL := fmt.Sprintf(
 		`assignee = currentUser() AND status != Done AND updated >= "%s" AND updated <= "%s" ORDER BY updated DESC`,
 		req.StartDate, req.EndDate,

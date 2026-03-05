@@ -504,7 +504,6 @@ function calcPagination(leftRows: BodyRow[], rightRows: BodyRow[], bodyH: number
 
 export async function generateConsolidatedPPT(
   data: ConsolidatedReport,
-  _style: TemplateStyle = defaultTemplateStyle,
   leaderName?: string
 ): Promise<void> {
   const pptx = new PptxGenJS();

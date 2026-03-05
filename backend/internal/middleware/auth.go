@@ -7,7 +7,6 @@ import (
 	"github.com/jiin/weeky/internal/auth"
 )
 
-// RequireAuth validates JWT token and sets user info in context
 func RequireAuth() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		authHeader := c.Get("Authorization")
@@ -31,7 +30,6 @@ func RequireAuth() fiber.Handler {
 			})
 		}
 
-		// Store user info in context locals
 		c.Locals("userID", claims.UserID)
 		c.Locals("email", claims.Email)
 		c.Locals("isAdmin", claims.IsAdmin)
@@ -40,7 +38,6 @@ func RequireAuth() fiber.Handler {
 	}
 }
 
-// RequireAdmin checks if the authenticated user is an admin
 func RequireAdmin() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		isAdmin, ok := c.Locals("isAdmin").(bool)

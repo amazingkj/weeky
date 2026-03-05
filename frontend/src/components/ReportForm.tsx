@@ -33,6 +33,13 @@ const setCachedValue = (key: string, value: string): void => {
   }
 };
 
+function findPreviousWeekReport(reports: Report[], currentDate: string): Report | null {
+  const prevDate = new Date(currentDate);
+  prevDate.setDate(prevDate.getDate() - 7);
+  const prevDateStr = prevDate.toISOString().split('T')[0];
+  return reports.find(r => isSameWeek(r.report_date, prevDateStr)) || null;
+}
+
 interface ReportFormProps {
   onNavigateToConfig?: () => void;
 }
@@ -66,13 +73,6 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
   const [carriedForward, setCarriedForward] = useState(false);
   const [teamProjects, setTeamProjects] = useState<TeamProject[]>([]);
   const successTimerRef = useRef<ReturnType<typeof setTimeout>>();
-
-  const findPreviousWeekReport = useCallback((reports: Report[], currentDate: string): Report | null => {
-    const prevDate = new Date(currentDate);
-    prevDate.setDate(prevDate.getDate() - 7);
-    const prevDateStr = prevDate.toISOString().split('T')[0];
-    return reports.find(r => isSameWeek(r.report_date, prevDateStr)) || null;
-  }, []);
 
   // Load teams, config, existing reports on mount
   useEffect(() => {
@@ -195,7 +195,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
     if (field === 'author_name' && typeof value === 'string') {
       setCachedValue(STORAGE_KEYS.authorName, value);
     }
-  }, [existingReports, findPreviousWeekReport]);
+  }, [existingReports]);
 
   const handleAutoCreateProject = useCallback(async (name: string) => {
     if (!selectedTeamId || !name.trim()) return;
@@ -351,12 +351,12 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
   return (
     <div className="space-y-6">
       {/* Alerts */}
-      {error ? (
+      {error && (
         <Alert type="error" onClose={() => setError(null)}>{error}</Alert>
-      ) : null}
-      {success ? (
+      )}
+      {success && (
         <Alert type="success" onClose={() => setSuccess(null)}>{success}</Alert>
-      ) : null}
+      )}
 
       {/* Setup Guide Banner */}
       {hasConfiguredServices === false && (
@@ -401,7 +401,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
       </div>
 
       {/* AI Generate Panel */}
-      {showAIPanel ? (
+      {showAIPanel && (
         <div className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm animate-fadeIn">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-neutral-900">AI 자동 생성</h3>
@@ -414,7 +414,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
           </div>
           <SyncPanel onAIGenerate={handleAIGenerate} projectNames={teamProjects.map(p => p.client ? `${p.name} (고객사: ${p.client})` : p.name)} />
         </div>
-      ) : null}
+      )}
 
       {/* Form */}
       <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
@@ -641,7 +641,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
       </form>
 
       {/* PPT Preview */}
-      {showPreview ? (
+      {showPreview && (
         <section className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm animate-fadeIn">
           <div className="flex items-center justify-between mb-4">
             <SectionHeader title="PPT 미리보기" />
@@ -654,7 +654,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
           </div>
           <PptPreview report={report} style={defaultTemplateStyle} />
         </section>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -665,9 +665,9 @@ function SectionHeader({ title, optional }: { title: string; optional?: boolean 
   return (
     <div className="flex items-center gap-2 mb-3">
       <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
-      {optional ? (
+      {optional && (
         <span className="text-xs text-neutral-400">(선택)</span>
-      ) : null}
+      )}
     </div>
   );
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/jiin/weeky/internal/model"
 )
 
-// sensitiveKeys are encrypted and masked in API responses
 var sensitiveKeys = map[string]bool{
 	"gitlab_token":     true,
 	"jira_email":       true,
@@ -19,15 +18,11 @@ var sensitiveKeys = map[string]bool{
 }
 
 func isSensitiveKey(key string) bool {
-	if sensitiveKeys[key] {
-		return true
-	}
-	return strings.HasSuffix(key, "_token") || strings.HasSuffix(key, "_password") ||
+	return sensitiveKeys[key] ||
+		strings.HasSuffix(key, "_token") || strings.HasSuffix(key, "_password") ||
 		strings.HasSuffix(key, "_secret") || strings.HasSuffix(key, "_api_key")
 }
 
-// GetConfig returns all config key-value pairs
-// Sensitive values are masked, non-sensitive values are returned as-is
 func (h *Handler) GetConfig(c *fiber.Ctx) error {
 	userID := getUserID(c)
 	configs, err := h.repo.GetConfigs(userID)
@@ -41,15 +36,12 @@ func (h *Handler) GetConfig(c *fiber.Ctx) error {
 
 	result := make(map[string]interface{})
 	for _, cfg := range configs {
-		if cfg.Value == "" {
+		switch {
+		case cfg.Value == "":
 			result[cfg.Key] = ""
-			continue
-		}
-
-		if isSensitiveKey(cfg.Key) {
+		case isSensitiveKey(cfg.Key):
 			result[cfg.Key] = "***configured***"
-		} else {
-			// Non-sensitive: return actual value (stored as plaintext)
+		default:
 			result[cfg.Key] = cfg.Value
 		}
 	}
@@ -57,8 +49,6 @@ func (h *Handler) GetConfig(c *fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-// UpdateConfig updates config values
-// Sensitive values are encrypted, non-sensitive values are stored as plaintext
 func (h *Handler) UpdateConfig(c *fiber.Ctx) error {
 	userID := getUserID(c)
 	var req model.ConfigUpdateRequest
@@ -88,7 +78,6 @@ func (h *Handler) UpdateConfig(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "Config updated"})
 }
 
-// GetConfigValue retrieves a config value (decrypts if sensitive)
 func (h *Handler) GetConfigValue(key string, userID int64) (string, error) {
 	cfg, err := h.repo.GetConfig(key, userID)
 	if err != nil {

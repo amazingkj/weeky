@@ -9,14 +9,12 @@ import (
 	"github.com/jiin/weeky/internal/service"
 )
 
-// SyncGitHub fetches commits and PRs from GitHub
 func (h *Handler) SyncGitHub(c *fiber.Ctx) error {
 	var req model.GitHubSyncRequest
 	if err := c.BodyParser(&req); err != nil {
 		return badRequest(c, "Invalid request body")
 	}
 
-	// Validate required fields
 	if req.Owner == "" || req.Repo == "" {
 		return badRequest(c, "Owner와 Repo를 입력해주세요.")
 	}
@@ -27,7 +25,6 @@ func (h *Handler) SyncGitHub(c *fiber.Ctx) error {
 
 	userID := getUserID(c)
 
-	// Use token from request or try to get from config
 	if req.Token == "" {
 		token, err := h.GetConfigValue("github_token", userID)
 		if err != nil || token == "" {
@@ -44,14 +41,12 @@ func (h *Handler) SyncGitHub(c *fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-// SyncJira fetches completed issues from Jira
 func (h *Handler) SyncJira(c *fiber.Ctx) error {
 	var req model.JiraSyncRequest
 	if err := c.BodyParser(&req); err != nil {
 		return badRequest(c, "Invalid request body")
 	}
 
-	// Validate required fields
 	if req.BaseURL == "" {
 		return badRequest(c, "Jira Base URL을 입력해주세요.")
 	}
@@ -62,7 +57,6 @@ func (h *Handler) SyncJira(c *fiber.Ctx) error {
 
 	userID := getUserID(c)
 
-	// Use credentials from request or try to get from config
 	if req.Email == "" {
 		email, err := h.GetConfigValue("jira_email", userID)
 		if err != nil || email == "" {
@@ -87,14 +81,12 @@ func (h *Handler) SyncJira(c *fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-// SyncGitLab fetches commits and MRs from GitLab
 func (h *Handler) SyncGitLab(c *fiber.Ctx) error {
 	var req model.GitLabSyncRequest
 	if err := c.BodyParser(&req); err != nil {
 		return badRequest(c, "Invalid request body")
 	}
 
-	// Validate required fields
 	if req.Namespace == "" || req.Project == "" {
 		return badRequest(c, "Namespace와 Project를 입력해주세요.")
 	}
@@ -103,14 +95,12 @@ func (h *Handler) SyncGitLab(c *fiber.Ctx) error {
 		return badRequest(c, "조회 기간을 설정해주세요.")
 	}
 
-	// Default to self-hosted GitLab if no base URL provided
 	if req.BaseURL == "" {
 		req.BaseURL = "https://gitlab.direa.synology.me"
 	}
 
 	userID := getUserID(c)
 
-	// Use token from request or try to get from config
 	if req.Token == "" {
 		token, err := h.GetConfigValue("gitlab_token", userID)
 		if err != nil || token == "" {
@@ -127,7 +117,6 @@ func (h *Handler) SyncGitLab(c *fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-// SyncHiworks fetches sent emails from Hiworks via web scraping
 func (h *Handler) SyncHiworks(c *fiber.Ctx) error {
 	var req model.HiworksSyncRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -140,7 +129,6 @@ func (h *Handler) SyncHiworks(c *fiber.Ctx) error {
 
 	userID := getUserID(c)
 
-	// Get credentials from request or config
 	if req.OfficeID == "" {
 		officeID, err := h.GetConfigValue("hiworks_office_id", userID)
 		if err != nil {
@@ -175,7 +163,6 @@ func (h *Handler) SyncHiworks(c *fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-// TestHiworks verifies Hiworks login credentials without fetching mails
 func (h *Handler) TestHiworks(c *fiber.Ctx) error {
 	userID := getUserID(c)
 
@@ -194,7 +181,6 @@ func (h *Handler) TestHiworks(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"status": "ok", "message": "Hiworks 연결 성공"})
 }
 
-// ListGitLabProjects fetches available GitLab projects using stored token
 func (h *Handler) ListGitLabProjects(c *fiber.Ctx) error {
 	userID := getUserID(c)
 
@@ -204,7 +190,6 @@ func (h *Handler) ListGitLabProjects(c *fiber.Ctx) error {
 	}
 
 	baseURL := "https://gitlab.direa.synology.me"
-	// Check if user has a custom base URL
 	if customURL, err := h.GetConfigValue("gitlab_base_url", userID); err == nil && customURL != "" {
 		baseURL = customURL
 	}
@@ -217,7 +202,6 @@ func (h *Handler) ListGitLabProjects(c *fiber.Ctx) error {
 	return c.JSON(projects)
 }
 
-// GenerateAIReport uses Claude to generate a report from synced items
 func (h *Handler) GenerateAIReport(c *fiber.Ctx) error {
 	var req service.GenerateReportRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -234,7 +218,6 @@ func (h *Handler) GenerateAIReport(c *fiber.Ctx) error {
 
 	userID := getUserID(c)
 
-	// Get Claude API key from config
 	apiKey, err := h.GetConfigValue("claude_api_key", userID)
 	if err != nil || apiKey == "" {
 		return badRequest(c, "Claude API 키가 설정되지 않았습니다. 연동 설정에서 API 키를 입력해주세요.")

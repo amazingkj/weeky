@@ -1,10 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Task } from '../types';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Task, SyncResult } from '../types';
 import { syncGitLab, syncJira, syncHiworks, getConfig, generateAIReport } from '../services/api';
-import { SyncResult } from '../types';
 
 interface SyncPanelProps {
-  onAddItems?: (items: never[]) => void;
   onAIGenerate?: (thisWeek: Task[], nextWeek: Task[]) => void;
   projectNames?: string[];
 }
@@ -24,6 +22,18 @@ const getWeekRange = () => {
 };
 
 type ReportStyle = 'concise' | 'detailed' | 'very_detailed';
+
+const REPORT_STYLE_OPTIONS: { value: ReportStyle; label: string }[] = [
+  { value: 'concise', label: '간단하게' },
+  { value: 'detailed', label: '상세하게' },
+  { value: 'very_detailed', label: '완전상세' },
+];
+
+const REPORT_STYLE_DESCRIPTIONS: Record<ReportStyle, string> = {
+  concise: '한 줄 요약 스타일',
+  detailed: '세부 항목 포함 상세 스타일',
+  very_detailed: '모든 작업을 빠짐없이 기술하는 완전 상세 스타일',
+};
 
 export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps) {
   const [dateRange, setDateRange] = useState(() => getWeekRange());
@@ -51,12 +61,12 @@ export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps
     loadConfig();
   }, []);
 
-  const configuredServices = useCallback(() => {
-    const services: string[] = [];
-    if (config.gitlab_token === '***configured***') services.push('GitLab');
-    if (config.jira_token === '***configured***') services.push('Jira');
-    if (config.hiworks_password === '***configured***') services.push('Hiworks');
-    return services;
+  const services = useMemo(() => {
+    const list: string[] = [];
+    if (config.gitlab_token === '***configured***') list.push('GitLab');
+    if (config.jira_token === '***configured***') list.push('Jira');
+    if (config.hiworks_password === '***configured***') list.push('Hiworks');
+    return list;
   }, [config]);
 
   const handleGenerate = useCallback(async () => {
@@ -150,8 +160,6 @@ export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps
     }
   }, [config, dateRange, reportStyle, onAIGenerate, projectNames]);
 
-  const services = configuredServices();
-
   return (
     <div className="space-y-4">
       {/* Date Range */}
@@ -178,47 +186,28 @@ export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps
       <div className="flex items-center gap-3 pb-4 border-b border-neutral-100">
         <span className="text-xs font-medium text-neutral-500">보고서 스타일</span>
         <div className="flex gap-1.5">
-          <button
-            type="button"
-            onClick={() => { setReportStyle('concise'); localStorage.setItem('reportStyle', 'concise'); }}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-              reportStyle === 'concise'
-                ? 'bg-neutral-900 text-white border-neutral-900'
-                : 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-300'
-            }`}
-          >
-            간단하게
-          </button>
-          <button
-            type="button"
-            onClick={() => { setReportStyle('detailed'); localStorage.setItem('reportStyle', 'detailed'); }}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-              reportStyle === 'detailed'
-                ? 'bg-neutral-900 text-white border-neutral-900'
-                : 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-300'
-            }`}
-          >
-            상세하게
-          </button>
-          <button
-            type="button"
-            onClick={() => { setReportStyle('very_detailed'); localStorage.setItem('reportStyle', 'very_detailed'); }}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-              reportStyle === 'very_detailed'
-                ? 'bg-neutral-900 text-white border-neutral-900'
-                : 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-300'
-            }`}
-          >
-            완전상세
-          </button>
+          {REPORT_STYLE_OPTIONS.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => { setReportStyle(value); localStorage.setItem('reportStyle', value); }}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                reportStyle === value
+                  ? 'bg-neutral-900 text-white border-neutral-900'
+                  : 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-300'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
         <span className="text-[10px] text-neutral-400">
-          {reportStyle === 'concise' ? '한 줄 요약 스타일' : reportStyle === 'detailed' ? '세부 항목 포함 상세 스타일' : '모든 작업을 빠짐없이 기술하는 완전 상세 스타일'}
+          {REPORT_STYLE_DESCRIPTIONS[reportStyle]}
         </span>
       </div>
 
       {/* Configured Services Info */}
-      {configLoaded ? (
+      {configLoaded && (
         <div className="flex items-center gap-2 flex-wrap">
           {services.length > 0 ? (
             services.map((name) => (
@@ -233,7 +222,7 @@ export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps
             <span className="text-xs text-neutral-400">설정 탭에서 서비스를 등록해주세요.</span>
           )}
         </div>
-      ) : null}
+      )}
 
       {/* AI Generate Button */}
       <button
@@ -248,9 +237,9 @@ export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps
       </button>
 
       {/* Error */}
-      {error ? (
+      {error && (
         <p className="text-sm text-red-600 p-3 bg-red-50 rounded-lg border border-red-200">{error}</p>
-      ) : null}
+      )}
     </div>
   );
 }

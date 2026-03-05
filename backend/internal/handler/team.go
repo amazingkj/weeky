@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -16,8 +17,6 @@ func isAdmin(c *fiber.Ctx) bool {
 	v, _ := c.Locals("isAdmin").(bool)
 	return v
 }
-
-// ============ Team CRUD ============
 
 func (h *Handler) CreateTeam(c *fiber.Ctx) error {
 	var req model.CreateTeamRequest
@@ -34,7 +33,6 @@ func (h *Handler) CreateTeam(c *fiber.Ctx) error {
 		return internalError(c, err)
 	}
 
-	// Auto-add creator as leader
 	_, err = h.repo.AddTeamMember(team.ID, userID, model.TeamRoleLeader, model.RoleCodeS)
 	if err != nil {
 		return internalError(c, err)
@@ -113,8 +111,6 @@ func (h *Handler) DeleteTeam(c *fiber.Ctx) error {
 	}
 	return c.SendStatus(204)
 }
-
-// ============ Team Members ============
 
 func (h *Handler) AddTeamMember(c *fiber.Ctx) error {
 	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
@@ -226,8 +222,6 @@ func (h *Handler) RemoveTeamMember(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 
-// ============ Report Submissions ============
-
 func (h *Handler) GetMySubmission(c *fiber.Ctx) error {
 	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
 	if err != nil {
@@ -291,7 +285,6 @@ func (h *Handler) SubmitReport(c *fiber.Ctx) error {
 		return badRequest(c, "보고서 ID는 필수입니다")
 	}
 
-	// Verify the report belongs to the user
 	report, err := h.repo.GetReport(req.ReportID, userID)
 	if err != nil || report == nil {
 		return notFound(c, "보고서를 찾을 수 없습니다")
@@ -484,8 +477,6 @@ func (h *Handler) GetConsolidatedReport(c *fiber.Ctx) error {
 	})
 }
 
-// ============ AI Summarization for Consolidated Report ============
-
 func (h *Handler) SummarizeConsolidatedReport(c *fiber.Ctx) error {
 	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
 	if err != nil {
@@ -508,13 +499,11 @@ func (h *Handler) SummarizeConsolidatedReport(c *fiber.Ctx) error {
 		return badRequest(c, "report_date는 필수입니다")
 	}
 
-	// Get Claude API key
 	apiKey, err := h.GetConfigValue("claude_api_key", userID)
 	if err != nil || apiKey == "" {
 		return badRequest(c, "Claude API 키가 설정되지 않았습니다. 설정에서 API 키를 입력해주세요.")
 	}
 
-	// Get consolidated data
 	team, err := h.repo.GetTeam(teamID)
 	if err != nil {
 		return notFound(c, "팀을 찾을 수 없습니다")
@@ -535,7 +524,6 @@ func (h *Handler) SummarizeConsolidatedReport(c *fiber.Ctx) error {
 		subMap[s.UserID] = s
 	}
 
-	// Build a text summary of all members' reports
 	var reportText strings.Builder
 	fmt.Fprintf(&reportText, "팀: %s\n보고일: %s\n\n", team.Name, req.ReportDate)
 
@@ -571,7 +559,6 @@ func (h *Handler) SummarizeConsolidatedReport(c *fiber.Ctx) error {
 		reportText.WriteString("\n")
 	}
 
-	// Convert consolidated report text into SyncItems for the AI generator
 	items := []model.SyncItem{
 		{
 			Title:   "팀 취합 보고서",
@@ -581,8 +568,10 @@ func (h *Handler) SummarizeConsolidatedReport(c *fiber.Ctx) error {
 		},
 	}
 
-	// Get team projects for AI prompt context
-	projects, _ := h.repo.GetTeamProjects(teamID, true)
+	projects, projErr := h.repo.GetTeamProjects(teamID, true)
+	if projErr != nil {
+		slog.Warn("Failed to get team projects for AI context", "teamID", teamID, "error", projErr)
+	}
 	var projectNames []string
 	for _, p := range projects {
 		if p.Client != "" {
@@ -606,8 +595,6 @@ func (h *Handler) SummarizeConsolidatedReport(c *fiber.Ctx) error {
 
 	return c.JSON(result)
 }
-
-// ============ Team Projects ============
 
 func (h *Handler) GetTeamProjects(c *fiber.Ctx) error {
 	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
@@ -702,7 +689,6 @@ func (h *Handler) UpdateTeamProject(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusForbidden, "팀장 권한이 필요합니다")
 	}
 
-	// Verify project belongs to this team
 	project, err := h.repo.GetTeamProject(pid)
 	if err != nil {
 		return notFound(c, "프로젝트를 찾을 수 없습니다")
@@ -738,7 +724,6 @@ func (h *Handler) DeleteTeamProject(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusForbidden, "팀장 권한이 필요합니다")
 	}
 
-	// Verify project belongs to this team
 	project, err := h.repo.GetTeamProject(pid)
 	if err != nil {
 		return notFound(c, "프로젝트를 찾을 수 없습니다")
@@ -779,8 +764,6 @@ func (h *Handler) ReorderTeamProjects(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 
-// ============ Consolidated Edit ============
-
 func (h *Handler) SaveConsolidatedEdit(c *fiber.Ctx) error {
 	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
 	if err != nil {
@@ -801,16 +784,14 @@ func (h *Handler) SaveConsolidatedEdit(c *fiber.Ctx) error {
 		return badRequest(c, "보고일자가 필요합니다")
 	}
 
-	// Serialize the edit data as JSON
-	dataMap := map[string]interface{}{
+	dataBytes, err := json.Marshal(map[string]interface{}{
 		"this_week":   req.ThisWeek,
 		"next_week":   req.NextWeek,
 		"issues":      req.Issues,
 		"notes":       req.Notes,
 		"next_issues": req.NextIssues,
 		"next_notes":  req.NextNotes,
-	}
-	dataBytes, err := json.Marshal(dataMap)
+	})
 	if err != nil {
 		return internalError(c, err)
 	}
@@ -840,16 +821,15 @@ func (h *Handler) GetConsolidatedEdit(c *fiber.Ctx) error {
 
 	edit, err := h.repo.GetConsolidatedEdit(teamID, reportDate)
 	if err != nil {
-		return c.JSON(fiber.Map{"exists": false})
+		if strings.Contains(err.Error(), "no rows") {
+			return c.JSON(fiber.Map{"exists": false})
+		}
+		return internalError(c, err)
 	}
-
-	// Parse the stored JSON data and include it directly
-	var data json.RawMessage
-	data = json.RawMessage(edit.Data)
 
 	return c.JSON(fiber.Map{
 		"exists":     true,
-		"data":       data,
+		"data":       json.RawMessage(edit.Data),
 		"updated_at": edit.UpdatedAt,
 	})
 }
@@ -876,8 +856,6 @@ func (h *Handler) DeleteConsolidatedEdit(c *fiber.Ctx) error {
 	}
 	return c.SendStatus(204)
 }
-
-// ============ Team History ============
 
 func (h *Handler) GetTeamHistory(c *fiber.Ctx) error {
 	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
@@ -906,7 +884,6 @@ func (h *Handler) GetTeamHistory(c *fiber.Ctx) error {
 		return internalError(c, err)
 	}
 
-	// Calculate week dates (Monday of each week)
 	now := time.Now()
 	daysSinceMonday := int(now.Weekday()) - 1
 	if now.Weekday() == time.Sunday {

@@ -63,14 +63,12 @@ func (s *ClaudeService) GenerateReport(req GenerateReportRequest) (*GenerateRepo
 		return nil, fmt.Errorf("Claude API 키가 설정되지 않았습니다")
 	}
 
-	// Build prompt with synced items
 	style := req.Style
 	if style == "" {
 		style = "concise"
 	}
 	prompt := buildPrompt(req.Items, req.StartDate, req.EndDate, style, req.ProjectNames)
 
-	// Call Claude API
 	maxTokens := 2000
 	if style == "detailed" {
 		maxTokens = 4000
@@ -124,7 +122,6 @@ func (s *ClaudeService) GenerateReport(req GenerateReportRequest) (*GenerateRepo
 		return nil, fmt.Errorf("Claude 응답이 비어있습니다")
 	}
 
-	// Parse Claude's response
 	return parseClaudeResponse(claudeResp.Content[0].Text)
 }
 
@@ -137,7 +134,6 @@ func buildPrompt(items []model.SyncItem, startDate, endDate, style string, proje
 
 `, startDate, endDate)
 
-	// Group items by type, then by source project
 	type sourceGroup struct {
 		commits []model.SyncItem
 		mrs     []model.SyncItem
@@ -328,7 +324,6 @@ func parseClaudeResponse(text string) (*GenerateReportResponse, error) {
 		Summary  string     `json:"summary"`
 	}
 
-	// Find JSON in response (might be wrapped in markdown code blocks)
 	jsonStr := text
 	if start := findJSONStart(text); start >= 0 {
 		if end := findJSONEnd(text, start); end > start {
@@ -340,7 +335,6 @@ func parseClaudeResponse(text string) (*GenerateReportResponse, error) {
 		return nil, fmt.Errorf("Claude 응답 파싱 실패: %w\n응답: %s", err, text)
 	}
 
-	// Support both old "tasks" format and new "this_week"/"next_week" format
 	thisWeekTasks := result.ThisWeek
 	if len(thisWeekTasks) == 0 {
 		thisWeekTasks = result.Tasks

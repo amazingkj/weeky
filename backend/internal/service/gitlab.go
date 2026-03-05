@@ -48,7 +48,6 @@ type gitlabMR struct {
 	MergedAt  *string   `json:"merged_at"`
 }
 
-// ListProjects fetches all projects accessible by the token
 func (s *GitLabService) ListProjects(baseURL, token string) ([]model.GitLabProject, error) {
 	if err := ValidateExternalURL(baseURL); err != nil {
 		return nil, fmt.Errorf("invalid GitLab URL: %w", err)
@@ -84,7 +83,6 @@ func (s *GitLabService) ListProjects(baseURL, token string) ([]model.GitLabProje
 		}
 
 		for _, p := range projects {
-			// Split path_with_namespace into namespace and project
 			namespace := p.Namespace.FullPath
 			projectName := p.Name
 			parts := splitLast(p.PathWithNamespace, "/")
@@ -112,7 +110,6 @@ func (s *GitLabService) ListProjects(baseURL, token string) ([]model.GitLabProje
 	return allProjects, nil
 }
 
-// splitLast splits string by last occurrence of separator
 func splitLast(s, sep string) []string {
 	idx := -1
 	for i := len(s) - 1; i >= 0; i-- {
@@ -128,7 +125,6 @@ func splitLast(s, sep string) []string {
 }
 
 func (s *GitLabService) Sync(req model.GitLabSyncRequest) (*model.SyncResult, error) {
-	// Validate base URL to prevent SSRF
 	if err := ValidateExternalURL(req.BaseURL); err != nil {
 		return nil, fmt.Errorf("invalid GitLab URL: %w", err)
 	}
@@ -139,14 +135,12 @@ func (s *GitLabService) Sync(req model.GitLabSyncRequest) (*model.SyncResult, er
 		SyncedAt: time.Now(),
 	}
 
-	// Fetch commits
 	commits, err := s.fetchCommits(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch commits: %w", err)
 	}
 	result.Items = append(result.Items, commits...)
 
-	// Fetch MRs (Merge Requests)
 	mrs, err := s.fetchMRs(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch MRs: %w", err)
@@ -157,7 +151,6 @@ func (s *GitLabService) Sync(req model.GitLabSyncRequest) (*model.SyncResult, er
 }
 
 func (s *GitLabService) fetchCommits(req model.GitLabSyncRequest) ([]model.SyncItem, error) {
-	// URL encode the project path
 	projectPath := url.PathEscape(fmt.Sprintf("%s/%s", req.Namespace, req.Project))
 
 	apiURL := fmt.Sprintf(

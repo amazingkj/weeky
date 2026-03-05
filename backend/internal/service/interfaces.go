@@ -2,34 +2,28 @@ package service
 
 import "github.com/jiin/weeky/internal/model"
 
-// GitHubSyncer syncs data from GitHub
 type GitHubSyncer interface {
 	Sync(req model.GitHubSyncRequest) (*model.SyncResult, error)
 }
 
-// GitLabSyncer syncs data from GitLab
 type GitLabSyncer interface {
 	Sync(req model.GitLabSyncRequest) (*model.SyncResult, error)
 	ListProjects(baseURL, token string) ([]model.GitLabProject, error)
 }
 
-// JiraSyncer syncs data from Jira
 type JiraSyncer interface {
 	Sync(req model.JiraSyncRequest) (*model.SyncResult, error)
 }
 
-// HiworksSyncer syncs data from Hiworks
 type HiworksSyncer interface {
 	Sync(req model.HiworksSyncRequest) (*model.SyncResult, error)
 	TestLogin(officeID, userID, password string) error
 }
 
-// AIReportGenerator generates reports using AI
 type AIReportGenerator interface {
 	GenerateReport(req GenerateReportRequest) (*GenerateReportResponse, error)
 }
 
-// Services holds all external service dependencies
 type Services struct {
 	GitHub         GitHubSyncer
 	GitLab         GitLabSyncer
@@ -38,7 +32,6 @@ type Services struct {
 	NewAIGenerator func(apiKey string) AIReportGenerator
 }
 
-// DefaultServices creates Services with real implementations
 func DefaultServices() *Services {
 	return &Services{
 		GitHub:  NewGitHubService(),
