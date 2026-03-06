@@ -138,7 +138,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
     const nextWeek: Task[] = [];
     const mergeField = (field: 'issues' | 'notes' | 'next_issues' | 'next_notes') =>
       data.members
-        .filter(m => m.report && m.report[field])
+        .filter(m => m.report && m.report[field]?.trim())
         .map(m => `[${m.user_name}] ${m.report![field]}`)
         .join('\n');
 
@@ -562,7 +562,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                           {editedReport.this_week.map((t, i) => (
                             <div key={i} className="bg-white rounded-md px-3 py-2 border border-neutral-200">
                               <div className="flex items-center justify-between">
-                                <span className="font-semibold text-neutral-900">{t.title}</span>
+                                <span className="font-semibold text-neutral-900">{t.title}{t.client ? ` - ${t.client}` : ''}</span>
                                 <span className="text-neutral-500 text-xs font-medium">{t.progress}%</span>
                               </div>
                               {t.details && <div className="text-neutral-700 mt-1 whitespace-pre-line">{t.details}</div>}
@@ -594,7 +594,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                         <div className="space-y-2">
                           {editedReport.next_week.map((t, i) => (
                             <div key={i} className="bg-white rounded-md px-3 py-2 border border-neutral-200">
-                              <div className="font-semibold text-neutral-900">{t.title}</div>
+                              <div className="font-semibold text-neutral-900">{t.title}{t.client ? ` - ${t.client}` : ''}</div>
                               {t.details && <div className="text-neutral-700 mt-1 whitespace-pre-line">{t.details}</div>}
                               {t.description && <div className="text-neutral-500 mt-1 whitespace-pre-line">{t.description}</div>}
                               {t.due_date && <div className="text-neutral-500 mt-1">완료예정일: {t.due_date}</div>}

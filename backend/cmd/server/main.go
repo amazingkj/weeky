@@ -32,12 +32,7 @@ func main() {
 		auth.SetSecret(secret)
 	}
 
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath == "" {
-		dbPath = "./jugan.db"
-	}
-
-	repo, err := repository.New(dbPath)
+	repo, err := repository.NewFromEnv()
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}

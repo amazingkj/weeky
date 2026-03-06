@@ -44,7 +44,7 @@ function groupTasksByTitle(
 
 function mergeText(members: MemberReportData[], field: 'issues' | 'notes' | 'next_issues' | 'next_notes'): string {
   return members
-    .filter(m => m.report && m.report[field])
+    .filter(m => m.report && m.report[field]?.trim())
     .map(m => m.user_name ? `[${m.user_name}] ${m.report![field]}` : m.report![field])
     .join('\n');
 }
@@ -71,16 +71,12 @@ function buildItemPreviewRows(items: ConsolidatedTask['items']): PreviewRow[] {
   const rows: PreviewRow[] = [];
   for (const item of items) {
     const memberTag = item.memberName ? ` ( ${item.memberName} )` : '';
-    let detail = item.task.details || '-';
-    if (item.task.description) detail += '\n' + item.task.description;
-    const lines = detail.split('\n');
-    lines.forEach((line, li) => {
-      rows.push({
-        body: li === 0 ? `- ${line}${memberTag}` : line,
-        date: li === 0 ? formatDateMMDD(item.task.due_date) : '',
-        progress: li === 0 ? `${item.task.progress}%` : '',
-        bold: false,
-      });
+    const detail = item.task.details || '-';
+    rows.push({
+      body: `- ${detail}${memberTag}`,
+      date: formatDateMMDD(item.task.due_date),
+      progress: `${item.task.progress}%`,
+      bold: false,
     });
   }
   return rows;
@@ -192,17 +188,19 @@ export default function ConsolidatedPptPreview({ data }: ConsolidatedPptPreviewP
     const nextWeekGroups = groupTasksByTitle(data.members, 'next_week');
     const { leftRows, rightRows } = buildAlignedPreviewRows(thisWeekGroups, nextWeekGroups);
 
-    const issues = mergeText(data.members, 'issues');
-    const notes = mergeText(data.members, 'notes');
-    const nextIssues = mergeText(data.members, 'next_issues');
-    const nextNotes = mergeText(data.members, 'next_notes');
+    const issuesLeft = mergeText(data.members, 'issues');
+    const issuesRight = mergeText(data.members, 'next_issues');
+    const notesLeft = mergeText(data.members, 'notes');
+    const notesRight = mergeText(data.members, 'next_notes');
     const dateRange = getWeekRange(data.report_date);
     const nextDateRange = getNextWeekRange(data.report_date);
 
-    const issueLineCount = (issues || nextIssues || '-').split('\n').length;
-    const noteLineCount = (notes || nextNotes || '-').split('\n').length;
-    const issueH = Math.max(0.28, Math.min(0.55, issueLineCount * 0.14 + 0.05));
-    const noteH = Math.max(0.28, Math.min(0.55, noteLineCount * 0.14 + 0.05));
+    const issueText = issuesLeft || issuesRight || '-';
+    const issueLineCount = issueText.split('\n').length;
+    const noteText = notesRight || notesLeft || '-';
+    const noteLineCount = noteText.split('\n').length;
+    const issueH = Math.max(0.28, Math.min(1.5, issueLineCount * 0.14 + 0.05));
+    const noteH = Math.max(0.28, Math.min(1.5, noteLineCount * 0.14 + 0.05));
     const bodyH = 6.9 - (0.35 + 0.30 + 0.40 + issueH + noteH);
 
     const { pages, linesPerPage } = calcPagination(leftRows.length, rightRows.length, bodyH);
@@ -295,17 +293,24 @@ export default function ConsolidatedPptPreview({ data }: ConsolidatedPptPreviewP
               </tbody>
             </table>
 
-            {/* Footer: issues + notes (last page only) */}
+            {/* Footer: issues + notes (last page only, 3-column: header | 금주 | 차주) */}
             {isLastPage && (
               <table className="w-full border-collapse -mt-px">
+                <colgroup>
+                  <col style={{ width: '15%' }} />
+                  <col style={{ width: '42.5%' }} />
+                  <col style={{ width: '42.5%' }} />
+                </colgroup>
                 <tbody>
                   <tr>
-                    <HCell className="w-[15%]">이슈/위험사항</HCell>
-                    <DCell className="whitespace-pre-line">{issues || nextIssues || '-'}</DCell>
+                    <HCell>이슈/위험사항</HCell>
+                    <DCell className="whitespace-pre-line">{issuesLeft || '-'}</DCell>
+                    <DCell className="whitespace-pre-line">{issuesRight || '-'}</DCell>
                   </tr>
                   <tr>
-                    <HCell className="w-[15%]">특이사항</HCell>
-                    <DCell className="whitespace-pre-line">{notes || nextNotes || '-'}</DCell>
+                    <HCell>특이사항</HCell>
+                    <DCell className="whitespace-pre-line">{notesLeft || '-'}</DCell>
+                    <DCell className="whitespace-pre-line">{notesRight || '-'}</DCell>
                   </tr>
                 </tbody>
               </table>

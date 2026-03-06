@@ -165,38 +165,40 @@ function createTaskSlide(pptx: PptxGenJS, report: Report, config: TaskSlideConfi
 
   // Row 1: Header (프로젝트명, 보고일자, 작성자)
   slide.addTable(
-    [[
-      { text: '프로젝트명', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
-      { text: report.team_name, options: { align: 'center' } },
-      { text: '보고일자', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
-      { text: formatDateShort(report.report_date), options: { align: 'center' } },
-      { text: '작성자', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
-      { text: report.author_name, options: { align: 'center' } },
-    ]],
-    {
-      x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.header,
-      colW: HEADER_COL_W, rowH: [ROW_H.header],
-      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
-      fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
-    }
+      [[
+        { text: '프로젝트명', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+        { text: report.team_name, options: { align: 'center' } },
+        { text: '보고일자', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+        { text: formatDateShort(report.report_date), options: { align: 'center' } },
+        { text: '작성자', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+        { text: report.author_name, options: { align: 'center' } },
+      ]],
+      {
+        x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.header,
+        colW: HEADER_COL_W, rowH: [ROW_H.header],
+        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+        fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+        autoPage: false,
+      }
   );
   currentY += ROW_H.header;
 
   // Row 2: Section title
   slide.addTable(
-    [[
-      { text: config.sectionTitle, options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
-    ]],
-    {
-      x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.section,
-      colW: [LAYOUT.w], rowH: [ROW_H.section],
-      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
-      fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
-    }
+      [[
+        { text: config.sectionTitle, options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+      ]],
+      {
+        x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.section,
+        colW: [LAYOUT.w], rowH: [ROW_H.section],
+        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+        fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+        autoPage: false,
+      }
   );
   currentY += ROW_H.section;
 
-  // Row 3-4: Body (column headers + task content) — grouped by title
+  // Row 3-4: Body (column headers + task content) — grouped by title, sub-grouped by client
   const bodyFontSize = getBodyFontSize(config.tasks);
   const groups = groupTasksByTitle(config.tasks);
 
@@ -206,28 +208,44 @@ function createTaskSlide(pptx: PptxGenJS, report: Report, config: TaskSlideConfi
     const dateParts: string[] = [];
     const progressParts: string[] = [];
 
-    g.items.forEach((t, ii) => {
-      const detailText = getTaskDetailText(t);
-      const detailLines = detailText.split('\n');
-      const lineCount = detailLines.length;
+    // Project title (own line)
+    titleParts.push(`${gi + 1}. ${g.title}`);
+    detailParts.push('');
+    dateParts.push('');
+    progressParts.push('');
 
-      // Title only on the first line of the first item in the group
-      if (ii === 0) {
-        titleParts.push(`${gi + 1}. ${g.title}`);
-      } else {
-        titleParts.push('');
+    // Sub-group by client
+    const clientMap = new Map<string, Task[]>();
+    for (const t of g.items) {
+      const key = (t.client || '').trim();
+      if (!clientMap.has(key)) clientMap.set(key, []);
+      clientMap.get(key)!.push(t);
+    }
+
+    for (const [client, tasks] of clientMap) {
+      if (client) {
+        titleParts.push(`  • ${client}`);
+        detailParts.push('');
+        dateParts.push('');
+        progressParts.push('');
       }
-      // Pad remaining lines for this item
-      for (let l = 1; l < lineCount; l++) titleParts.push('');
 
-      detailParts.push(...detailLines);
+      for (const t of tasks) {
+        const detailText = getTaskDetailText(t);
+        const detailLines = detailText.split('\n');
 
-      dateParts.push(t.due_date || '-');
-      for (let l = 1; l < lineCount; l++) dateParts.push('');
+        titleParts.push('');
+        for (let l = 1; l < detailLines.length; l++) titleParts.push('');
 
-      progressParts.push(`${t.progress}%`);
-      for (let l = 1; l < lineCount; l++) progressParts.push('');
-    });
+        detailParts.push(...detailLines);
+
+        dateParts.push(t.due_date || '-');
+        for (let l = 1; l < detailLines.length; l++) dateParts.push('');
+
+        progressParts.push(`${t.progress}%`);
+        for (let l = 1; l < detailLines.length; l++) progressParts.push('');
+      }
+    }
 
     return {
       titleLines: titleParts,
@@ -274,49 +292,54 @@ function createTaskSlide(pptx: PptxGenJS, report: Report, config: TaskSlideConfi
     ];
   }
 
+  // Row 3: Column header — 별도 테이블 (rowH 최소높이 확장이 body에 영향 안 줌)
   slide.addTable(
-    [bodyHeaderRow, bodyContentRow],
-    {
-      x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.colHeader + ROW_H.body,
-      colW: bodyColW, rowH: [ROW_H.colHeader, ROW_H.body],
-      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
-      fontFace: FONT.face, fontSize: bodyFontSize, valign: 'middle',
-    }
+      [bodyHeaderRow],
+      {
+        x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.colHeader,
+        colW: bodyColW, rowH: [ROW_H.colHeader],
+        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+        fontFace: FONT.face, fontSize: bodyFontSize, valign: 'middle',
+        autoPage: false,
+      }
   );
-  currentY += ROW_H.colHeader + ROW_H.body;
+  currentY += ROW_H.colHeader;
 
-  // Row 5: Issues (use same colW as body for aligned borders)
+  // Row 4: Body — 단일 행, footerY까지 정확히 채움
+  const footerY = LAYOUT.y + LAYOUT.h - ROW_H.issue - ROW_H.note;
+  const bodyH = footerY - currentY;
+
+  slide.addTable(
+      [bodyContentRow],
+      {
+        x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: bodyH,
+        colW: bodyColW, rowH: [bodyH],
+        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+        fontFace: FONT.face, fontSize: bodyFontSize, valign: 'top',
+        autoPage: false,
+      }
+  );
+
+  // Row 5+6: Issues + Notes — 슬라이드 하단 절대 고정
   const footerCols = config.showProgress ? 4 : 3;
-  const issueRow: PptxGenJS.TableCell[] = [
-    { text: '이슈/위험 사항', options: { fill: { color: COLORS.headerBg }, bold: true } },
-    { text: config.issuesText, options: { colspan: footerCols - 1 } },
-  ];
-
   slide.addTable(
-    [issueRow],
-    {
-      x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.issue,
-      colW: bodyColW, rowH: [ROW_H.issue],
-      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
-      fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
-    }
-  );
-  currentY += ROW_H.issue;
-
-  // Row 6: Notes (use same colW as body for aligned borders)
-  const noteRow: PptxGenJS.TableCell[] = [
-    { text: '특이 사항', options: { fill: { color: COLORS.headerBg }, bold: true } },
-    { text: config.notesText, options: { colspan: footerCols - 1 } },
-  ];
-
-  slide.addTable(
-    [noteRow],
-    {
-      x: LAYOUT.x, y: currentY, w: LAYOUT.w, h: ROW_H.note,
-      colW: bodyColW, rowH: [ROW_H.note],
-      border: { type: 'solid', color: COLORS.border, pt: 0.5 },
-      fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
-    }
+      [
+        [
+          { text: '이슈/위험 사항', options: { fill: { color: COLORS.headerBg }, bold: true } },
+          { text: config.issuesText, options: { colspan: footerCols - 1 } },
+        ],
+        [
+          { text: '특이 사항', options: { fill: { color: COLORS.headerBg }, bold: true } },
+          { text: config.notesText, options: { colspan: footerCols - 1 } },
+        ],
+      ],
+      {
+        x: LAYOUT.x, y: footerY, w: LAYOUT.w, h: ROW_H.issue + ROW_H.note,
+        colW: bodyColW, rowH: [ROW_H.issue, ROW_H.note],
+        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+        fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+        autoPage: false,
+      }
   );
 }
 
@@ -339,8 +362,8 @@ interface ConsolidatedGroup {
 }
 
 function groupConsolidatedTasks(
-  members: MemberReportData[],
-  section: 'this_week' | 'next_week'
+    members: MemberReportData[],
+    section: 'this_week' | 'next_week'
 ): ConsolidatedGroup[] {
   const groups: ConsolidatedGroup[] = [];
   const indexMap = new Map<string, number>();
@@ -367,13 +390,13 @@ function groupConsolidatedTasks(
 }
 
 function mergeIssuesNotes(
-  members: MemberReportData[],
-  field: 'issues' | 'notes' | 'next_issues' | 'next_notes'
+    members: MemberReportData[],
+    field: 'issues' | 'notes' | 'next_issues' | 'next_notes'
 ): string {
   return members
-    .filter(m => m.report && m.report[field])
-    .map(m => m.user_name ? `[${m.user_name}] ${m.report![field]}` : m.report![field])
-    .join('\n');
+      .filter(m => m.report && m.report[field]?.trim())
+      .map(m => m.user_name ? `[${m.user_name}] ${m.report![field]}` : m.report![field])
+      .join('\n');
 }
 
 // Row data for row-aligned body tables
@@ -406,16 +429,12 @@ function buildItemRows(items: ConsolidatedTaskItem[], indent: string): BodyRow[]
   const rows: BodyRow[] = [];
   for (const item of items) {
     const memberTag = item.memberName ? ` ( ${item.memberName} )` : '';
-    let detail = item.task.details || '-';
-    if (item.task.description) detail += '\n' + item.task.description;
-    const lines = detail.split('\n');
-    lines.forEach((line, li) => {
-      rows.push({
-        body: li === 0 ? `${indent}- ${line}${memberTag}` : `${indent}  ${line}`,
-        date: li === 0 ? formatDateShortMMDD(item.task.due_date) : '',
-        progress: li === 0 ? `${item.task.progress}%` : '',
-        bold: false,
-      });
+    const detail = item.task.details || '-';
+    rows.push({
+      body: `${indent}- ${detail}${memberTag}`,
+      date: formatDateShortMMDD(item.task.due_date),
+      progress: `${item.task.progress}%`,
+      bold: false,
     });
   }
   return rows;
@@ -423,8 +442,8 @@ function buildItemRows(items: ConsolidatedTaskItem[], indent: string): BodyRow[]
 
 // Build left/right rows aligned by project+client
 function buildAlignedRows(
-  leftGroups: ConsolidatedGroup[],
-  rightGroups: ConsolidatedGroup[]
+    leftGroups: ConsolidatedGroup[],
+    rightGroups: ConsolidatedGroup[]
 ): { leftRows: BodyRow[]; rightRows: BodyRow[] } {
   const emptyRow: BodyRow = { body: '', date: '', progress: '', bold: false };
   const leftRows: BodyRow[] = [];
@@ -497,14 +516,13 @@ function calcPagination(leftRows: BodyRow[], rightRows: BodyRow[], bodyH: number
   const rh = getConsolidatedRowH(7);
   const perPage = Math.floor(bodyH / rh);
   const pages = Math.ceil(maxRows / perPage);
-  // Balance rows evenly across pages instead of packing page 1
   const balancedPerPage = Math.ceil(maxRows / pages);
   return { fontSize: 7, rowH: rh, pages, rowsPerPage: balancedPerPage };
 }
 
 export async function generateConsolidatedPPT(
-  data: ConsolidatedReport,
-  leaderName?: string
+    data: ConsolidatedReport,
+    leaderName?: string
 ): Promise<void> {
   const pptx = new PptxGenJS();
   pptx.author = leaderName || data.team.name;
@@ -515,32 +533,56 @@ export async function generateConsolidatedPPT(
   const thisWeekGroups = groupConsolidatedTasks(data.members, 'this_week');
   const nextWeekGroups = groupConsolidatedTasks(data.members, 'next_week');
 
-  const issues = mergeIssuesNotes(data.members, 'issues') || mergeIssuesNotes(data.members, 'next_issues');
-  const notes = mergeIssuesNotes(data.members, 'notes') || mergeIssuesNotes(data.members, 'next_notes');
+  const issuesLeft = mergeIssuesNotes(data.members, 'issues');
+  const issuesRight = mergeIssuesNotes(data.members, 'next_issues');
+  const notesLeft = mergeIssuesNotes(data.members, 'notes');
+  const notesRight = mergeIssuesNotes(data.members, 'next_notes');
 
   const dateRange = getWeekRange(data.report_date);
   const nextDateRange = getNextWeekRange(data.report_date);
   const displayAuthor = leaderName || data.team.name;
   const halfW = LAYOUT.w / 2;
-  const leftColW = [2.8, 1.0, 0.9];
-  const rightColW = [3.2, 1.5];
+  const leftColW = [3.2, 0.7, 0.7];   // 계획업무 | 완료일 | 실적%
+  const rightColW = [3.7, 1.1];        // 계획업무 | 완료예정일
 
   // Build row-aligned data (left/right aligned by project+client)
   const { leftRows, rightRows } = buildAlignedRows(thisWeekGroups, nextWeekGroups);
 
-  // Issues/notes auto-fit: smaller font + dynamic height
-  const issueLineCount = (issues || '-').split('\n').length;
-  const noteLineCount = (notes || '-').split('\n').length;
-  const issueFontSize = issueLineCount > 2 ? 7 : 8;
-  const noteFontSize = noteLineCount > 2 ? 7 : 8;
-  const issueH = Math.max(0.28, Math.min(0.55, issueLineCount * 0.14 + 0.05));
-  const noteH = Math.max(0.28, Math.min(0.55, noteLineCount * 0.14 + 0.05));
+  // Footer: 3-column layout [header | 금주 | 차주] matching left/right body split
+  // footer는 unifiedColW + colspan으로 처리하므로 별도 footerColW 불필요
 
-  // Calculate available body height (reserve space for footer on all pages for simplicity)
+  // ✅ FIX: 이슈/특이사항 높이 — 텍스트 길이 기반으로 wrap 줄 수 추정
+  // 셀 너비 = LAYOUT.w - 헤더열(1.5) = 7.9inch, 폰트 8pt 기준 한 줄 약 110자
+  const ISSUE_CELL_W = LAYOUT.w - 1.5;
+  const CHARS_PER_LINE = Math.floor(ISSUE_CELL_W * 14); // 1inch당 약 14자 (8pt 기준)
+  const LINE_H = 0.22;
+
+  function calcWrappedLineCount(text: string, baseFontSize: number): number {
+    const lines = (text || '-').split('\n');
+    const charsPerLine = Math.floor(CHARS_PER_LINE * (8 / baseFontSize));
+    return lines.reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
+  }
+
+  const issueLineCount = Math.max(
+      calcWrappedLineCount(issuesLeft, 8),
+      calcWrappedLineCount(issuesRight, 8)
+  );
+  const issueFontSize = issueLineCount > 3 ? 7 : 8;
+  const issueH = Math.max(0.50, Math.min(1.5, issueLineCount * LINE_H + 0.15));
+
+  const noteLineCount = Math.max(
+      calcWrappedLineCount(notesLeft, 8),
+      calcWrappedLineCount(notesRight, 8)
+  );
+  const noteFontSize = noteLineCount > 3 ? 7 : 8;
+  const noteH = Math.max(0.50, Math.min(1.5, noteLineCount * LINE_H + 0.15));
+
+  // ✅ FIX: footer 높이를 먼저 확보하고 body 높이 계산
+  // (LAYOUT.y + LAYOUT.h) - LAYOUT.y - fixedH = LAYOUT.h - fixedH
   const fixedH = ROW_H.header + ROW_H.section + ROW_H.colHeader + issueH + noteH;
   const bodyH = LAYOUT.h - fixedH;
 
-  const { fontSize, rowH, pages, rowsPerPage } = calcPagination(leftRows, rightRows, bodyH);
+  const { fontSize, pages, rowsPerPage } = calcPagination(leftRows, rightRows, bodyH);
 
   for (let page = 0; page < pages; page++) {
     const slide = pptx.addSlide();
@@ -549,157 +591,137 @@ export async function generateConsolidatedPPT(
     // Row 1: Header
     const pageLabel = pages > 1 ? ` (${page + 1}/${pages})` : '';
     slide.addTable(
-      [[
-        { text: '프로젝트명', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
-        { text: data.team.name, options: { align: 'center' } },
-        { text: '보고일자', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
-        { text: formatDateShort(data.report_date), options: { align: 'center' } },
-        { text: '작성자', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
-        { text: displayAuthor + pageLabel, options: { align: 'center' } },
-      ]],
-      {
-        x: LAYOUT.x, y: curY, w: LAYOUT.w, h: ROW_H.header,
-        colW: HEADER_COL_W, rowH: [ROW_H.header],
-        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
-        fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
-      }
+        [[
+          { text: '프로젝트명', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+          { text: data.team.name, options: { align: 'center' } },
+          { text: '보고일자', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+          { text: formatDateShort(data.report_date), options: { align: 'center' } },
+          { text: '작성자', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+          { text: displayAuthor + pageLabel, options: { align: 'center' } },
+        ]],
+        {
+          x: LAYOUT.x, y: curY, w: LAYOUT.w, h: ROW_H.header,
+          colW: HEADER_COL_W, rowH: [ROW_H.header],
+          border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+          fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+          autoPage: false,
+        }
     );
     curY += ROW_H.header;
 
     // Row 2: Section headers
     slide.addTable(
-      [[
-        { text: '금주실적', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
-        { text: '차주계획', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
-      ]],
-      {
-        x: LAYOUT.x, y: curY, w: LAYOUT.w, h: ROW_H.section,
-        colW: [halfW, halfW], rowH: [ROW_H.section],
-        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
-        fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
-      }
+        [[
+          { text: '금주실적', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+          { text: '차주계획', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+        ]],
+        {
+          x: LAYOUT.x, y: curY, w: LAYOUT.w, h: ROW_H.section,
+          colW: [halfW, halfW], rowH: [ROW_H.section],
+          border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+          fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+          autoPage: false,
+        }
     );
     curY += ROW_H.section;
 
     // Row 3: Column headers (unified 5-column table)
-    const unifiedColW = [...leftColW, ...rightColW]; // [2.8, 1.0, 0.9, 3.2, 1.5] = 9.4
+    const unifiedColW = [...leftColW, ...rightColW];
     slide.addTable(
-      [[
-        { text: `계획업무\n(${dateRange})`, options: { fill: { color: COLORS.headerBg }, bold: true, valign: 'middle' } },
-        { text: '완료일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
-        { text: '실적(%)', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
-        { text: `계획업무\n(${nextDateRange})`, options: { fill: { color: COLORS.headerBg }, bold: true, valign: 'middle' } },
-        { text: '완료\n예정일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
-      ]],
-      {
-        x: LAYOUT.x, y: curY, w: LAYOUT.w, h: ROW_H.colHeader,
-        colW: unifiedColW, rowH: [ROW_H.colHeader],
-        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
-        fontFace: FONT.face, fontSize, valign: 'middle',
-      }
+        [[
+          { text: `계획업무\n(${dateRange})`, options: { fill: { color: COLORS.headerBg }, bold: true, valign: 'middle' } },
+          { text: '완료일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+          { text: '실적(%)', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+          { text: `계획업무\n(${nextDateRange})`, options: { fill: { color: COLORS.headerBg }, bold: true, valign: 'middle' } },
+          { text: '완료\n예정일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+        ]],
+        {
+          x: LAYOUT.x, y: curY, w: LAYOUT.w, h: ROW_H.colHeader,
+          colW: unifiedColW, rowH: [ROW_H.colHeader],
+          border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+          fontFace: FONT.face, fontSize, valign: 'middle',
+          autoPage: false,
+        }
     );
     curY += ROW_H.colHeader;
 
-    // Body rows for this page
+    // Body — 단일 행 방식 (rowH는 최소높이이므로, 행이 하나면 확장 없음)
     const isLastPage = page === pages - 1;
     const startIdx = page * rowsPerPage;
     const maxSide = Math.max(leftRows.length, rightRows.length, 1);
     const endIdx = Math.min(startIdx + rowsPerPage, maxSide);
-    const contentRowCount = Math.max(endIdx - startIdx, 1);
-    const emptyRow = { body: '', date: '', progress: '', bold: false };
+    const emptyRow: BodyRow = { body: '', date: '', progress: '', bold: false };
 
     const pLeft = leftRows.slice(startIdx, endIdx);
     const pRight = rightRows.slice(startIdx, endIdx);
-    while (pLeft.length < contentRowCount) pLeft.push(emptyRow);
-    while (pRight.length < contentRowCount) pRight.push(emptyRow);
+    while (pLeft.length < pRight.length) pLeft.push(emptyRow);
+    while (pRight.length < pLeft.length) pRight.push(emptyRow);
 
-    // Non-last pages: filler row to fill full page (no issues/notes on these pages)
-    // Last page: no filler, issues/notes go right after body
+    const footerY = LAYOUT.y + LAYOUT.h - issueH - noteH;
     const headerFixedH = ROW_H.header + ROW_H.section + ROW_H.colHeader;
     const fullPageBodyH = LAYOUT.h - headerFixedH;
-    const contentH = contentRowCount * rowH;
-    const rowHeights: number[] = Array(contentRowCount).fill(rowH);
+    const bodyHeight = isLastPage ? (footerY - curY) : fullPageBodyH;
 
-    let hasFiller = false;
-    if (!isLastPage) {
-      const fillerH = fullPageBodyH - contentH;
-      if (fillerH > 0.02) {
-        hasFiller = true;
-        rowHeights.push(fillerH);
-      }
-    }
+    // 텍스트 배열: breakLine으로 줄 구분, bold 개별 적용
+    const mkText = (rows: BodyRow[], getField: (r: BodyRow) => string, bold?: (r: BodyRow) => boolean): PptxGenJS.TextProps[] =>
+        rows.map(r => ({
+          text: getField(r),
+          options: {
+            breakLine: true as const,
+            fontSize,
+            paraSpaceBefore: 0,
+            paraSpaceAfter: 0,
+            ...(bold?.(r) ? { bold: true } : {}),
+          },
+        }));
 
-    const totalRows = contentRowCount + (hasFiller ? 1 : 0);
-    const bodyHeight = isLastPage ? contentH : fullPageBodyH;
+    const cellMargin: [number, number, number, number] = [1, 3, 1, 3];
 
-    // Border helpers: outer border + vertical column separators only (no internal horizontal lines)
-    const bSolid = { type: 'solid' as const, color: COLORS.border, pt: 0.5 };
-    const bNone = { type: 'none' as const };
-    const cellBrd = (ri: number) => [
-      ri === 0 ? bSolid : bNone,                   // top: first row only
-      bSolid,                                        // right: column separator
-      ri === totalRows - 1 ? bSolid : bNone,        // bottom: last row only
-      bSolid,                                        // left: column separator
-    ] as [typeof bSolid, typeof bSolid, typeof bSolid, typeof bSolid];
-
-    // Cell margin: minimize vertical padding to prevent row overflow
-    const cellMargin: [number, number, number, number] = [1, 3, 1, 3]; // [top, right, bottom, left] in points
-
-    // Unified body table (left 3 cols + right 2 cols in same rows)
-    const unifiedBodyRows: PptxGenJS.TableRow[] = [];
-    for (let i = 0; i < contentRowCount; i++) {
-      const lr = pLeft[i];
-      const rr = pRight[i];
-      const brd = cellBrd(i);
-      unifiedBodyRows.push([
-        { text: lr.body, options: { valign: 'middle' as const, bold: lr.bold, border: brd, margin: cellMargin } },
-        { text: lr.date, options: { valign: 'middle' as const, align: 'center' as const, border: brd, margin: cellMargin } },
-        { text: lr.progress, options: { valign: 'middle' as const, align: 'center' as const, border: brd, margin: cellMargin } },
-        { text: rr.body, options: { valign: 'middle' as const, bold: rr.bold, border: brd, margin: cellMargin } },
-        { text: rr.date, options: { valign: 'middle' as const, align: 'center' as const, border: brd, margin: cellMargin } },
-      ]);
-    }
-    if (hasFiller) {
-      const brd = cellBrd(contentRowCount);
-      unifiedBodyRows.push(
-        [0, 1, 2, 3, 4].map(() => ({ text: '', options: { border: brd, margin: cellMargin } }))
-      );
-    }
-
-    slide.addTable(unifiedBodyRows, {
-      x: LAYOUT.x, y: curY, w: LAYOUT.w, h: bodyHeight,
-      colW: unifiedColW, rowH: rowHeights,
-      fontFace: FONT.face, fontSize,
-    });
+    slide.addTable(
+        [[
+          { text: mkText(pLeft, r => r.body, r => r.bold), options: { valign: 'top' as const, margin: cellMargin } },
+          { text: mkText(pLeft, r => r.date), options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
+          { text: mkText(pLeft, r => r.progress), options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
+          { text: mkText(pRight, r => r.body, r => r.bold), options: { valign: 'top' as const, margin: cellMargin } },
+          { text: mkText(pRight, r => r.date), options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
+        ]],
+        {
+          x: LAYOUT.x, y: curY, w: LAYOUT.w, h: bodyHeight,
+          colW: unifiedColW, rowH: [bodyHeight],
+          border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+          fontFace: FONT.face, fontSize,
+          autoPage: false,
+        }
+    );
     curY += bodyHeight;
 
-    // Issues/Notes — last page only, right after body
+    // Issues/Notes — 마지막 페이지에만, body 바로 아래
+    // ✅ FIX: body와 동일한 unifiedColW 사용 → 경계선 정렬
+    // footer: 이슈/특이사항을 하나의 테이블로 합쳐서 curY 누적 오차 제거
     if (isLastPage) {
+      const footerFontSize = Math.min(issueFontSize, noteFontSize);
+      // 이슈/특이사항: 금주+차주 내용을 하나의 셀로 합침 (colspan=4)
+      const issuesMerged = [issuesLeft, issuesRight].filter(Boolean).join('  /  ') || '-';
+      const notesMerged = [notesLeft, notesRight].filter(Boolean).join('  /  ') || '-';
+      // footer y = 슬라이드 하단 절대 고정 (body와 동일한 footerY 사용)
       slide.addTable(
-        [[
-          { text: '이슈/위험사항', options: { fill: { color: COLORS.headerBg }, bold: true, fontSize: 9 } },
-          { text: issues || '-', options: { fontSize: issueFontSize } },
-        ]],
-        {
-          x: LAYOUT.x, y: curY, w: LAYOUT.w, h: issueH,
-          colW: [1.5, LAYOUT.w - 1.5], rowH: [issueH],
-          border: { type: 'solid', color: COLORS.border, pt: 0.5 },
-          fontFace: FONT.face, fontSize: issueFontSize, valign: 'middle',
-        }
-      );
-      curY += issueH;
-
-      slide.addTable(
-        [[
-          { text: '특이사항', options: { fill: { color: COLORS.headerBg }, bold: true, fontSize: 9 } },
-          { text: notes || '-', options: { fontSize: noteFontSize } },
-        ]],
-        {
-          x: LAYOUT.x, y: curY, w: LAYOUT.w, h: noteH,
-          colW: [1.5, LAYOUT.w - 1.5], rowH: [noteH],
-          border: { type: 'solid', color: COLORS.border, pt: 0.5 },
-          fontFace: FONT.face, fontSize: noteFontSize, valign: 'middle',
-        }
+          [
+            [
+              { text: '이슈/위험사항', options: { fill: { color: COLORS.headerBg }, bold: true, fontSize: 9, valign: 'middle' } },
+              { text: issuesMerged, options: { fontSize: issueFontSize, colspan: 4, valign: 'middle' } },
+            ],
+            [
+              { text: '특이사항', options: { fill: { color: COLORS.headerBg }, bold: true, fontSize: 9, valign: 'middle' } },
+              { text: notesMerged, options: { fontSize: noteFontSize, colspan: 4, valign: 'middle' } },
+            ],
+          ],
+          {
+            x: LAYOUT.x, y: footerY, w: LAYOUT.w, h: issueH + noteH,
+            colW: unifiedColW, rowH: [issueH, noteH],
+            border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+            fontFace: FONT.face, fontSize: footerFontSize, valign: 'middle',
+            autoPage: false,
+          }
       );
     }
   }

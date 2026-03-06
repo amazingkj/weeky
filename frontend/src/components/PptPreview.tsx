@@ -164,7 +164,7 @@ function TaskRows({ tasks, maxItems, dateRange, showProgress }: {
           <Cell valign="top" className="whitespace-pre-line">
             {groups.slice(0, maxItems).map((g, gi) => (
               <div key={gi} className="mb-2">
-                <div>{gi + 1}. {g.title}</div>
+                <div>{gi + 1}. {g.title}{g.items[0]?.client ? ` - ${g.items[0].client}` : ''}</div>
                 {/* Spacer lines for all sub-items' detail lines (except first line of first item) */}
                 {g.items.map((t, ii) => {
                   const lines = getFullDetails(t).split('\n');
