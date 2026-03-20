@@ -537,6 +537,26 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
           {/* 차주 컬럼 */}
           <div className="space-y-5">
             <section className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm">
+              {report.this_week.some(t => t.progress < 100) && (
+                <div className="flex items-center justify-end mb-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const incomplete = report.this_week.filter(t => t.progress < 100);
+                      const existing = report.next_week;
+                      const newTasks = incomplete.filter(
+                        inc => !existing.some(ex => ex.title.trim() === inc.title.trim() && ex.details?.trim() === inc.details?.trim())
+                      ).map(t => ({ ...t }));
+                      if (newTasks.length > 0) {
+                        updateField('next_week', [...existing, ...newTasks]);
+                      }
+                    }}
+                    className="px-2.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
+                  >
+                    미완료 업무 복사 ({report.this_week.filter(t => t.progress < 100).length}건)
+                  </button>
+                </div>
+              )}
               <TaskList
                 title="차주계획"
                 description="다음 주에 예정된 업무를 입력하세요"
@@ -548,20 +568,6 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
                 onAutoCreateProject={handleAutoCreateProject}
               />
             </section>
-            <TextSection
-              title="차주 이슈"
-              icon={issueIcon}
-              value={report.next_issues}
-              onChange={(v) => updateField('next_issues', v)}
-              placeholder="다음 주 예상 이슈가 있다면 입력하세요..."
-            />
-            <TextSection
-              title="차주 특이사항"
-              icon={noteIcon}
-              value={report.next_notes}
-              onChange={(v) => updateField('next_notes', v)}
-              placeholder="다음 주 특이사항이 있다면 입력하세요..."
-            />
           </div>
         </div>
 

@@ -11,6 +11,7 @@ type IRepository interface {
 	GetUserByID(id int64) (*model.User, error)
 	CountUsers() (int64, error)
 	ReassignLegacyData(userID int64) error
+	UpdateUserPassword(userID int64, passwordHash string) error
 
 	CreateInviteCode(code string, createdBy int64) (*model.InviteCode, error)
 	GetInviteCodeByCode(code string) (*model.InviteCode, error)

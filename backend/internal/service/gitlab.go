@@ -71,16 +71,18 @@ func (s *GitLabService) ListProjects(baseURL, token string) ([]model.GitLabProje
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
 			return nil, fmt.Errorf("GitLab API returned status %d", resp.StatusCode)
 		}
 
 		var projects []gitlabProject
 		if err := json.NewDecoder(resp.Body).Decode(&projects); err != nil {
+			resp.Body.Close()
 			return nil, err
 		}
+		resp.Body.Close()
 
 		for _, p := range projects {
 			namespace := p.Namespace.FullPath
@@ -124,9 +126,46 @@ func splitLast(s, sep string) []string {
 	return []string{s[:idx], s[idx+1:]}
 }
 
+type gitlabUser struct {
+	ID       int    `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Name     string `json:"name"`
+}
+
+func (s *GitLabService) fetchCurrentUser(baseURL, token string) (*gitlabUser, error) {
+	httpReq, err := http.NewRequest("GET", baseURL+"/api/v4/user", nil)
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("PRIVATE-TOKEN", token)
+
+	resp, err := s.client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitLab user API returned status %d", resp.StatusCode)
+	}
+
+	var u gitlabUser
+	if err := json.NewDecoder(resp.Body).Decode(&u); err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
 func (s *GitLabService) Sync(req model.GitLabSyncRequest) (*model.SyncResult, error) {
 	if err := ValidateExternalURL(req.BaseURL); err != nil {
 		return nil, fmt.Errorf("invalid GitLab URL: %w", err)
+	}
+
+	// 토큰 사용자 정보 → 본인 커밋/MR만 필터
+	currentUser, err := s.fetchCurrentUser(req.BaseURL, req.Token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch GitLab user: %w", err)
 	}
 
 	result := &model.SyncResult{
@@ -135,13 +174,13 @@ func (s *GitLabService) Sync(req model.GitLabSyncRequest) (*model.SyncResult, er
 		SyncedAt: time.Now(),
 	}
 
-	commits, err := s.fetchCommits(req)
+	commits, err := s.fetchCommits(req, currentUser.Email)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch commits: %w", err)
 	}
 	result.Items = append(result.Items, commits...)
 
-	mrs, err := s.fetchMRs(req)
+	mrs, err := s.fetchMRs(req, currentUser.Username)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch MRs: %w", err)
 	}
@@ -150,12 +189,12 @@ func (s *GitLabService) Sync(req model.GitLabSyncRequest) (*model.SyncResult, er
 	return result, nil
 }
 
-func (s *GitLabService) fetchCommits(req model.GitLabSyncRequest) ([]model.SyncItem, error) {
+func (s *GitLabService) fetchCommits(req model.GitLabSyncRequest, authorEmail string) ([]model.SyncItem, error) {
 	projectPath := url.PathEscape(fmt.Sprintf("%s/%s", req.Namespace, req.Project))
 
 	apiURL := fmt.Sprintf(
-		"%s/api/v4/projects/%s/repository/commits?since=%sT00:00:00Z&until=%sT23:59:59Z",
-		req.BaseURL, projectPath, req.StartDate, req.EndDate,
+		"%s/api/v4/projects/%s/repository/commits?since=%sT00:00:00Z&until=%sT23:59:59Z&author=%s",
+		req.BaseURL, projectPath, req.StartDate, req.EndDate, url.QueryEscape(authorEmail),
 	)
 
 	httpReq, err := http.NewRequest("GET", apiURL, nil)
@@ -208,12 +247,12 @@ func (s *GitLabService) fetchCommits(req model.GitLabSyncRequest) ([]model.SyncI
 	return items, nil
 }
 
-func (s *GitLabService) fetchMRs(req model.GitLabSyncRequest) ([]model.SyncItem, error) {
+func (s *GitLabService) fetchMRs(req model.GitLabSyncRequest, authorUsername string) ([]model.SyncItem, error) {
 	projectPath := url.PathEscape(fmt.Sprintf("%s/%s", req.Namespace, req.Project))
 
 	apiURL := fmt.Sprintf(
-		"%s/api/v4/projects/%s/merge_requests?state=all&order_by=updated_at&sort=desc&created_after=%sT00:00:00Z&created_before=%sT23:59:59Z",
-		req.BaseURL, projectPath, req.StartDate, req.EndDate,
+		"%s/api/v4/projects/%s/merge_requests?state=all&order_by=updated_at&sort=desc&created_after=%sT00:00:00Z&created_before=%sT23:59:59Z&author_username=%s",
+		req.BaseURL, projectPath, req.StartDate, req.EndDate, url.QueryEscape(authorUsername),
 	)
 
 	httpReq, err := http.NewRequest("GET", apiURL, nil)

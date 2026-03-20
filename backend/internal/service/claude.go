@@ -103,7 +103,10 @@ func (s *ClaudeService) GenerateReport(req GenerateReportRequest) (*GenerateRepo
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("응답 읽기 실패: %w", err)
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("Claude API 오류: status %d, %s", resp.StatusCode, string(body))

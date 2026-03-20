@@ -8,6 +8,7 @@ const ReportForm = lazy(() => import('./components/ReportForm'));
 const TeamPanel = lazy(() => import('./components/TeamPanel'));
 const ConfigPanel = lazy(() => import('./components/ConfigPanel'));
 const InviteCodeManager = lazy(() => import('./components/InviteCodeManager'));
+const AdminUserManager = lazy(() => import('./components/AdminUserManager'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 
@@ -96,9 +97,14 @@ function ConfigWithInvite() {
     <div className="space-y-8">
       <ConfigPanel />
       {user?.is_admin && (
-        <div className="bg-white rounded-xl border border-neutral-200 p-5">
-          <InviteCodeManager />
-        </div>
+        <>
+          <div className="bg-white rounded-xl border border-neutral-200 p-5">
+            <AdminUserManager />
+          </div>
+          <div className="bg-white rounded-xl border border-neutral-200 p-5">
+            <InviteCodeManager />
+          </div>
+        </>
       )}
     </div>
   );

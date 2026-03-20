@@ -7,8 +7,17 @@ import { useAuth } from '../contexts/AuthContext';
 import Loading from './ui/Loading';
 
 const ConsolidatedPptPreview = lazy(() => import('./ConsolidatedPptPreview'));
+const PptPreview = lazy(() => import('./PptPreview'));
 
 const TEXTAREA_CLASS = 'w-full px-2.5 py-1.5 bg-white border border-neutral-200 rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-400 text-xs text-neutral-700 resize-y';
+
+const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
+function withDayOfWeek(dateStr: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d.getTime())) return dateStr;
+  return `${dateStr} (${DAY_NAMES[d.getDay()]})`;
+}
 
 interface TeamSubmissionPanelProps {
   team: Team;
@@ -52,6 +61,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
   const [fullscreen, setFullscreen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showMemberPreview, setShowMemberPreview] = useState(false);
 
   const [showPreview, setShowPreview] = useState(false);
   const [consolidated, setConsolidated] = useState<ConsolidatedReport | null>(null);
@@ -121,6 +131,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
     setSelectedMemberId(member.id);
     setEditingMember(false);
     setFullscreen(false);
+    setShowMemberPreview(false);
     setSelectedMemberName(member.user_name || '');
     try {
       const report = await getTeamMemberReport(team.id, member.submission.report_id);
@@ -347,7 +358,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
         <div className="flex items-center gap-2 flex-wrap">
           {getRecentFridays(8).map(friday => {
             const d = new Date(friday + 'T00:00:00');
-            const label = `${d.getMonth() + 1}/${d.getDate()}`;
+            const label = `${d.getMonth() + 1}/${d.getDate()}(${DAY_NAMES[d.getDay()]})`;
             const isSelected = reportDate === friday;
             return (
               <button key={friday}
@@ -425,6 +436,19 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                   {!fullscreen && (
                     <>
                       <button
+                        onClick={() => setShowMemberPreview(!showMemberPreview)}
+                        className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
+                          showMemberPreview
+                            ? 'bg-neutral-900 text-white border-neutral-900'
+                            : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
+                        }`}>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        미리보기
+                      </button>
+                      <button
                         onClick={() => generatePPT(editedReport, defaultTemplateStyle)}
                         className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -472,7 +496,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                 <div className={`grid grid-cols-3 gap-2 mb-3 ${fullscreen ? 'text-sm' : ''}`}>
                   <div><span className="text-neutral-500">팀명:</span> {editedReport.team_name}</div>
                   <div><span className="text-neutral-500">작성자:</span> {editedReport.author_name}</div>
-                  <div><span className="text-neutral-500">일자:</span> {editedReport.report_date}</div>
+                  <div><span className="text-neutral-500">일자:</span> {withDayOfWeek(editedReport.report_date)}</div>
                 </div>
 
                 {editingMember && !fullscreen ? (
@@ -508,20 +532,6 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                           onChange={(tasks) => setEditedReport(prev => prev ? { ...prev, next_week: tasks } : prev)}
                           showProgress={false}
                         />
-                        <div>
-                          <label className="block text-xs font-medium text-neutral-700 mb-1">차주 이슈</label>
-                          <textarea value={editedReport.next_issues}
-                            onChange={(e) => setEditedReport(prev => prev ? { ...prev, next_issues: e.target.value } : prev)}
-                            rows={2} className={TEXTAREA_CLASS}
-                            placeholder="차주 이슈" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-neutral-700 mb-1">차주 특이사항</label>
-                          <textarea value={editedReport.next_notes}
-                            onChange={(e) => setEditedReport(prev => prev ? { ...prev, next_notes: e.target.value } : prev)}
-                            rows={2} className={TEXTAREA_CLASS}
-                            placeholder="차주 특이사항" />
-                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 pt-2">
@@ -567,7 +577,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                               </div>
                               {t.details && <div className="text-neutral-700 mt-1 whitespace-pre-line">{t.details}</div>}
                               {t.description && <div className="text-neutral-500 mt-1 whitespace-pre-line">{t.description}</div>}
-                              {t.due_date && <div className="text-neutral-500 mt-1">완료일: {t.due_date}</div>}
+                              {t.due_date && <div className="text-neutral-500 mt-1">완료일: {withDayOfWeek(t.due_date)}</div>}
                             </div>
                           ))}
                         </div>
@@ -597,21 +607,9 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                               <div className="font-semibold text-neutral-900">{t.title}{t.client ? ` - ${t.client}` : ''}</div>
                               {t.details && <div className="text-neutral-700 mt-1 whitespace-pre-line">{t.details}</div>}
                               {t.description && <div className="text-neutral-500 mt-1 whitespace-pre-line">{t.description}</div>}
-                              {t.due_date && <div className="text-neutral-500 mt-1">완료예정일: {t.due_date}</div>}
+                              {t.due_date && <div className="text-neutral-500 mt-1">완료예정일: {withDayOfWeek(t.due_date)}</div>}
                             </div>
                           ))}
-                        </div>
-                      )}
-                      {editedReport.next_issues && (
-                        <div className="mt-3">
-                          <div className="text-neutral-600 text-xs font-semibold mb-1">차주 이슈</div>
-                          <p className="text-neutral-800 whitespace-pre-line">{editedReport.next_issues}</p>
-                        </div>
-                      )}
-                      {editedReport.next_notes && (
-                        <div>
-                          <div className="text-neutral-600 text-xs font-semibold mb-1">차주 특이사항</div>
-                          <p className="text-neutral-800 whitespace-pre-line">{editedReport.next_notes}</p>
                         </div>
                       )}
                     </div>
@@ -619,6 +617,13 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                 )}
               </div>
             </div>
+          )}
+
+          {/* Individual member PPT preview */}
+          {showMemberPreview && editedReport && !reportLoading && (
+            <Suspense fallback={<Loading text="미리보기 로딩 중..." />}>
+              <PptPreview report={editedReport} />
+            </Suspense>
           )}
 
           {/* Action buttons */}
@@ -728,18 +733,6 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                     showProgress={false}
                     projectSuggestions={teamProjects}
                   />
-                  <div>
-                    <label className="block text-xs font-medium text-neutral-700 mb-1">차주 이슈</label>
-                    <textarea value={flatNextIssues} onChange={(e) => setFlatNextIssues(e.target.value)}
-                      rows={3} className={TEXTAREA_CLASS}
-                      placeholder="차주 이슈" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-neutral-700 mb-1">차주 특이사항</label>
-                    <textarea value={flatNextNotes} onChange={(e) => setFlatNextNotes(e.target.value)}
-                      rows={3} className={TEXTAREA_CLASS}
-                      placeholder="차주 특이사항" />
-                  </div>
                 </div>
               </div>
 
@@ -749,7 +742,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
           {/* Consolidated preview */}
           {showPreview && consolidated && (
             <Suspense fallback={<Loading text="미리보기 로딩 중..." />}>
-              <ConsolidatedPptPreview data={editingConsolidated ? buildEditedConsolidated(consolidated) : consolidated} />
+              <ConsolidatedPptPreview data={editingConsolidated ? buildEditedConsolidated(consolidated) : consolidated} leaderName={user?.name} />
             </Suspense>
           )}
         </>

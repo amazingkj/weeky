@@ -56,7 +56,6 @@ const ROW_H = {
   header: 0.35,
   section: 0.30,
   colHeader: 0.40,
-  body: 5.00,
   issue: 0.40,
   note: 0.45,
 };
@@ -134,24 +133,13 @@ export async function generatePPT(report: Report, style: TemplateStyle = default
     notesText: report.notes || '',
   });
 
-  // 금주실적 중 진척률 100% 미만 → 차주계획에 자동 복사
-  const nextWeekTasks = [...report.next_week];
-  for (const task of report.this_week) {
-    if (task.progress < 100) {
-      const alreadyExists = nextWeekTasks.some(t => t.title.trim() === task.title.trim());
-      if (!alreadyExists) {
-        nextWeekTasks.push({ ...task, progress: 0 });
-      }
-    }
-  }
-
   createTaskSlide(pptx, report, {
     sectionTitle: '차주계획',
     dateRange: getNextWeekRange(report.report_date),
-    tasks: nextWeekTasks,
+    tasks: report.next_week,
     showProgress: false,
-    issuesText: report.next_issues || '',
-    notesText: report.next_notes || '',
+    issuesText: '',
+    notesText: '',
   });
 
   const filename = generateFilename(report);
@@ -428,7 +416,7 @@ function subGroupByClient(items: ConsolidatedTaskItem[]): Map<string, Consolidat
 function buildItemRows(items: ConsolidatedTaskItem[], indent: string): BodyRow[] {
   const rows: BodyRow[] = [];
   for (const item of items) {
-    const memberTag = item.memberName ? ` ( ${item.memberName} )` : '';
+    const memberTag = item.memberName ? ` (${item.memberName})` : '';
     const detail = item.task.details || '-';
     rows.push({
       body: `${indent}- ${detail}${memberTag}`,
@@ -500,24 +488,120 @@ function buildAlignedRows(
   return { leftRows, rightRows };
 }
 
+// lineSpacing = fontSize + 2 (pt) 기준 줄 높이 (inch = pt/72)
 function getConsolidatedRowH(fontSize: number): number {
-  if (fontSize >= 9) return 0.21;
-  if (fontSize >= 8) return 0.19;
-  return 0.17;
+  return (fontSize + 2) / 72;
+  // 9pt → 11pt → 0.153", 8pt → 10pt → 0.139", 7pt → 9pt → 0.125", 6pt → 8pt → 0.111"
 }
 
-function calcPagination(leftRows: BodyRow[], rightRows: BodyRow[], bodyH: number) {
-  const maxRows = Math.max(leftRows.length, rightRows.length, 1);
-  for (const fs of [9, 8, 7]) {
+// 한글/CJK 문자는 폭이 2배 → 2글자로 카운트
+function measureTextWidth(text: string): number {
+  let w = 0;
+  for (const ch of text) {
+    w += /[\u3000-\u9fff\uac00-\ud7af\uff01-\uff60]/.test(ch) ? 2 : 1;
+  }
+  return w;
+}
+
+// 단어 단위로 텍스트를 셀 폭에 맞게 분할 (word-wrap 대체)
+function splitTextToFit(text: string, charsPerLine: number): string[] {
+  if (!text || measureTextWidth(text) <= charsPerLine) return [text || ''];
+  const segments = text.split(' ');
+  const lines: string[] = [];
+  let current = '';
+  for (const seg of segments) {
+    const test = current ? `${current} ${seg}` : seg;
+    if (measureTextWidth(test) <= charsPerLine) {
+      current = test;
+    } else {
+      if (current) lines.push(current);
+      current = seg;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length > 0 ? lines : [''];
+}
+
+function getCharsPerInch(fs: number): number {
+  if (fs >= 9) return 14;
+  if (fs >= 8) return 16;
+  if (fs >= 7) return 18;
+  return 21;
+}
+
+// 좌우 BodyRow를 visual line 단위로 확장 (left/right 정렬 유지)
+function expandAlignedRows(
+    leftRows: BodyRow[], rightRows: BodyRow[],
+    leftCPL: number, rightCPL: number
+): { leftRows: BodyRow[]; rightRows: BodyRow[] } {
+  const expandedLeft: BodyRow[] = [];
+  const expandedRight: BodyRow[] = [];
+  const empty: BodyRow = { body: '', date: '', progress: '', bold: false };
+  const count = Math.max(leftRows.length, rightRows.length);
+
+  for (let i = 0; i < count; i++) {
+    const lr = i < leftRows.length ? leftRows[i] : empty;
+    const rr = i < rightRows.length ? rightRows[i] : empty;
+    const leftLines = splitTextToFit(lr.body, leftCPL);
+    const rightLines = splitTextToFit(rr.body, rightCPL);
+    const maxLines = Math.max(leftLines.length, rightLines.length);
+
+    for (let j = 0; j < maxLines; j++) {
+      expandedLeft.push({
+        body: j < leftLines.length ? leftLines[j] : '',
+        date: j === 0 ? lr.date : '',
+        progress: j === 0 ? lr.progress : '',
+        bold: j === 0 && lr.bold,
+      });
+      expandedRight.push({
+        body: j < rightLines.length ? rightLines[j] : '',
+        date: j === 0 ? rr.date : '',
+        progress: j === 0 ? rr.progress : '',
+        bold: j === 0 && rr.bold,
+      });
+    }
+  }
+  return { leftRows: expandedLeft, rightRows: expandedRight };
+}
+
+// 각 폰트 크기별로 텍스트 확장 후 페이지 수 결정
+function calcPagination(
+    leftRows: BodyRow[], rightRows: BodyRow[], bodyH: number,
+    leftColW0: number, rightColW0: number, marginW: number
+) {
+  const fontSizes = [9, 8, 7, 6] as const;
+
+  function tryFont(fs: number) {
+    const cpi = getCharsPerInch(fs);
+    const leftCPL = Math.floor((leftColW0 - marginW) * cpi);
+    const rightCPL = Math.floor((rightColW0 - marginW) * cpi);
+    const { leftRows: eL, rightRows: eR } = expandAlignedRows(leftRows, rightRows, leftCPL, rightCPL);
+    const maxRows = Math.max(eL.length, eR.length, 1);
     const rh = getConsolidatedRowH(fs);
     const perPage = Math.floor(bodyH / rh);
-    if (maxRows <= perPage) return { fontSize: fs, rowH: rh, pages: 1, rowsPerPage: perPage };
+    return { eL, eR, maxRows, rh, perPage };
   }
-  const rh = getConsolidatedRowH(7);
-  const perPage = Math.floor(bodyH / rh);
-  const pages = Math.ceil(maxRows / perPage);
-  const balancedPerPage = Math.ceil(maxRows / pages);
-  return { fontSize: 7, rowH: rh, pages, rowsPerPage: balancedPerPage };
+
+  // 1페이지에 들어가면 가장 큰 폰트 사용
+  for (const fs of fontSizes) {
+    const { eL, eR, maxRows, rh, perPage } = tryFont(fs);
+    if (maxRows <= perPage) {
+      return { fontSize: fs, rowH: rh, pages: 1, rowsPerPage: perPage, expandedLeft: eL, expandedRight: eR };
+    }
+  }
+
+  // 여러 페이지: 최소 폰트로 최소 페이지 수 → 같은 페이지 수에서 가장 큰 폰트
+  const res6 = tryFont(6);
+  const minPages = Math.ceil(res6.maxRows / res6.perPage);
+
+  for (const fs of fontSizes) {
+    const { eL, eR, maxRows, rh, perPage } = tryFont(fs);
+    if (Math.ceil(maxRows / perPage) <= minPages) {
+      return { fontSize: fs, rowH: rh, pages: minPages, rowsPerPage: perPage, expandedLeft: eL, expandedRight: eR };
+    }
+  }
+
+  return { fontSize: 6, rowH: res6.rh, pages: minPages, rowsPerPage: res6.perPage, expandedLeft: res6.eL, expandedRight: res6.eR };
 }
 
 export async function generateConsolidatedPPT(
@@ -541,9 +625,10 @@ export async function generateConsolidatedPPT(
   const dateRange = getWeekRange(data.report_date);
   const nextDateRange = getNextWeekRange(data.report_date);
   const displayAuthor = leaderName || data.team.name;
-  const halfW = LAYOUT.w / 2;
-  const leftColW = [3.2, 0.7, 0.7];   // 계획업무 | 완료일 | 실적%
-  const rightColW = [3.7, 1.1];        // 계획업무 | 완료예정일
+  const leftW = 4.6;                    // 헤더 "보고일자 | 날짜" 경계에 맞춤
+  const rightW = LAYOUT.w - leftW;      // 4.8
+  const leftColW = [3.0, 0.8, 0.8];    // 계획업무 | 완료일 | 실적%  (합 = 4.6)
+  const rightColW = [3.8, 1.0];         // 계획업무 | 완료예정일      (합 = 4.8)
 
   // Build row-aligned data (left/right aligned by project+client)
   const { leftRows, rightRows } = buildAlignedRows(thisWeekGroups, nextWeekGroups);
@@ -582,7 +667,13 @@ export async function generateConsolidatedPPT(
   const fixedH = ROW_H.header + ROW_H.section + ROW_H.colHeader + issueH + noteH;
   const bodyH = LAYOUT.h - fixedH;
 
-  const { fontSize, pages, rowsPerPage } = calcPagination(leftRows, rightRows, bodyH);
+  const cellMargin: [number, number, number, number] = [1, 3, 1, 3];
+  const marginW = (cellMargin[1] + cellMargin[3]) / 72;
+
+  const { fontSize, pages, rowsPerPage, expandedLeft, expandedRight } =
+      calcPagination(leftRows, rightRows, bodyH, leftColW[0], rightColW[0], marginW);
+
+  const unifiedColW = [...leftColW, ...rightColW];
 
   for (let page = 0; page < pages; page++) {
     const slide = pptx.addSlide();
@@ -617,7 +708,7 @@ export async function generateConsolidatedPPT(
         ]],
         {
           x: LAYOUT.x, y: curY, w: LAYOUT.w, h: ROW_H.section,
-          colW: [halfW, halfW], rowH: [ROW_H.section],
+          colW: [leftW, rightW], rowH: [ROW_H.section],
           border: { type: 'solid', color: COLORS.border, pt: 0.5 },
           fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
           autoPage: false,
@@ -626,7 +717,6 @@ export async function generateConsolidatedPPT(
     curY += ROW_H.section;
 
     // Row 3: Column headers (unified 5-column table)
-    const unifiedColW = [...leftColW, ...rightColW];
     slide.addTable(
         [[
           { text: `계획업무\n(${dateRange})`, options: { fill: { color: COLORS.headerBg }, bold: true, valign: 'middle' } },
@@ -645,15 +735,15 @@ export async function generateConsolidatedPPT(
     );
     curY += ROW_H.colHeader;
 
-    // Body — 단일 행 방식 (rowH는 최소높이이므로, 행이 하나면 확장 없음)
+    // Body — 확장된 visual line 사용 (텍스트 미리 분할 → word-wrap 불일치 제거)
     const isLastPage = page === pages - 1;
     const startIdx = page * rowsPerPage;
-    const maxSide = Math.max(leftRows.length, rightRows.length, 1);
+    const maxSide = Math.max(expandedLeft.length, expandedRight.length, 1);
     const endIdx = Math.min(startIdx + rowsPerPage, maxSide);
     const emptyRow: BodyRow = { body: '', date: '', progress: '', bold: false };
 
-    const pLeft = leftRows.slice(startIdx, endIdx);
-    const pRight = rightRows.slice(startIdx, endIdx);
+    const pLeft = expandedLeft.slice(startIdx, endIdx);
+    const pRight = expandedRight.slice(startIdx, endIdx);
     while (pLeft.length < pRight.length) pLeft.push(emptyRow);
     while (pRight.length < pLeft.length) pRight.push(emptyRow);
 
@@ -662,28 +752,32 @@ export async function generateConsolidatedPPT(
     const fullPageBodyH = LAYOUT.h - headerFixedH;
     const bodyHeight = isLastPage ? (footerY - curY) : fullPageBodyH;
 
-    // 텍스트 배열: breakLine으로 줄 구분, bold 개별 적용
-    const mkText = (rows: BodyRow[], getField: (r: BodyRow) => string, bold?: (r: BodyRow) => boolean): PptxGenJS.TextProps[] =>
-        rows.map(r => ({
-          text: getField(r),
-          options: {
-            breakLine: true as const,
-            fontSize,
-            paraSpaceBefore: 0,
-            paraSpaceAfter: 0,
-            ...(bold?.(r) ? { bold: true } : {}),
-          },
-        }));
+    // 1:1 TextProps — lineSpacing 고정으로 셀 간 줄 높이 통일
+    const lineH = fontSize + 2; // 고정 줄 높이 (pt)
+    const baseOpts = { breakLine: true as const, fontSize, paraSpaceBefore: 0, paraSpaceAfter: 0, lineSpacing: lineH };
+    const leftBody: PptxGenJS.TextProps[] = [];
+    const leftDate: PptxGenJS.TextProps[] = [];
+    const leftProgress: PptxGenJS.TextProps[] = [];
+    const rightBody: PptxGenJS.TextProps[] = [];
+    const rightDate: PptxGenJS.TextProps[] = [];
 
-    const cellMargin: [number, number, number, number] = [1, 3, 1, 3];
+    for (const r of pLeft) {
+      leftBody.push({ text: r.body, options: { ...baseOpts, ...(r.bold ? { bold: true } : {}) } });
+      leftDate.push({ text: r.date || ' ', options: baseOpts });
+      leftProgress.push({ text: r.progress || ' ', options: baseOpts });
+    }
+    for (const r of pRight) {
+      rightBody.push({ text: r.body || ' ', options: { ...baseOpts, ...(r.bold ? { bold: true } : {}) } });
+      rightDate.push({ text: r.date || ' ', options: baseOpts });
+    }
 
     slide.addTable(
         [[
-          { text: mkText(pLeft, r => r.body, r => r.bold), options: { valign: 'top' as const, margin: cellMargin } },
-          { text: mkText(pLeft, r => r.date), options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
-          { text: mkText(pLeft, r => r.progress), options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
-          { text: mkText(pRight, r => r.body, r => r.bold), options: { valign: 'top' as const, margin: cellMargin } },
-          { text: mkText(pRight, r => r.date), options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
+          { text: leftBody, options: { valign: 'top' as const, margin: cellMargin } },
+          { text: leftDate, options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
+          { text: leftProgress, options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
+          { text: rightBody, options: { valign: 'top' as const, margin: cellMargin } },
+          { text: rightDate, options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
         ]],
         {
           x: LAYOUT.x, y: curY, w: LAYOUT.w, h: bodyHeight,
@@ -700,24 +794,23 @@ export async function generateConsolidatedPPT(
     // footer: 이슈/특이사항을 하나의 테이블로 합쳐서 curY 누적 오차 제거
     if (isLastPage) {
       const footerFontSize = Math.min(issueFontSize, noteFontSize);
-      // 이슈/특이사항: 금주+차주 내용을 하나의 셀로 합침 (colspan=4)
       const issuesMerged = [issuesLeft, issuesRight].filter(Boolean).join('  /  ') || '-';
       const notesMerged = [notesLeft, notesRight].filter(Boolean).join('  /  ') || '-';
-      // footer y = 슬라이드 하단 절대 고정 (body와 동일한 footerY 사용)
+      const footerColW = [HEADER_COL_W[0], LAYOUT.w - HEADER_COL_W[0]]; // [1.3, 8.1] 프로젝트명 너비에 맞춤
       slide.addTable(
           [
             [
               { text: '이슈/위험사항', options: { fill: { color: COLORS.headerBg }, bold: true, fontSize: 9, valign: 'middle' } },
-              { text: issuesMerged, options: { fontSize: issueFontSize, colspan: 4, valign: 'middle' } },
+              { text: issuesMerged, options: { fontSize: issueFontSize, valign: 'middle' } },
             ],
             [
               { text: '특이사항', options: { fill: { color: COLORS.headerBg }, bold: true, fontSize: 9, valign: 'middle' } },
-              { text: notesMerged, options: { fontSize: noteFontSize, colspan: 4, valign: 'middle' } },
+              { text: notesMerged, options: { fontSize: noteFontSize, valign: 'middle' } },
             ],
           ],
           {
             x: LAYOUT.x, y: footerY, w: LAYOUT.w, h: issueH + noteH,
-            colW: unifiedColW, rowH: [issueH, noteH],
+            colW: footerColW, rowH: [issueH, noteH],
             border: { type: 'solid', color: COLORS.border, pt: 0.5 },
             fontFace: FONT.face, fontSize: footerFontSize, valign: 'middle',
             autoPage: false,

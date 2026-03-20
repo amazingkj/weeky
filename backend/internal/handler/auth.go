@@ -3,6 +3,8 @@ package handler
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"log/slog"
+	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/jiin/weeky/internal/auth"
@@ -212,6 +214,41 @@ func (h *Handler) RefreshToken(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"token": newToken,
 	})
+}
+
+func (h *Handler) AdminResetPassword(c *fiber.Ctx) error {
+	targetID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 사용자 ID입니다")
+	}
+
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return badRequest(c, "잘못된 요청입니다")
+	}
+	if len(req.Password) < 6 {
+		return badRequest(c, "비밀번호는 6자 이상이어야 합니다")
+	}
+
+	if _, err := h.repo.GetUserByID(targetID); err != nil {
+		return notFound(c, "사용자를 찾을 수 없습니다")
+	}
+
+	passwordHash, err := auth.HashPassword(req.Password)
+	if err != nil {
+		return internalError(c, err)
+	}
+
+	if err := h.repo.UpdateUserPassword(targetID, passwordHash); err != nil {
+		return internalError(c, err)
+	}
+
+	adminID := getUserID(c)
+	slog.Info("admin password reset", "admin_id", adminID, "target_user_id", targetID)
+
+	return c.JSON(fiber.Map{"message": "비밀번호가 초기화되었습니다"})
 }
 
 func getUserID(c *fiber.Ctx) int64 {

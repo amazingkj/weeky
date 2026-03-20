@@ -4,6 +4,7 @@ import { formatDateShort, getWeekRange, getNextWeekRange } from '../utils/date';
 
 interface ConsolidatedPptPreviewProps {
   data: ConsolidatedReport;
+  leaderName?: string;
 }
 
 interface ConsolidatedTask {
@@ -70,7 +71,7 @@ function subGroupByClient(items: ConsolidatedTask['items']): Map<string, Consoli
 function buildItemPreviewRows(items: ConsolidatedTask['items']): PreviewRow[] {
   const rows: PreviewRow[] = [];
   for (const item of items) {
-    const memberTag = item.memberName ? ` ( ${item.memberName} )` : '';
+    const memberTag = item.memberName ? ` (${item.memberName})` : '';
     const detail = item.task.details || '-';
     rows.push({
       body: `- ${detail}${memberTag}`,
@@ -137,25 +138,30 @@ function buildAlignedPreviewRows(
   return { leftRows, rightRows };
 }
 
-// Same pagination as pptGenerator with balanced distribution
+// Same pagination as pptGenerator — breakLine 실측 줄 높이 기반
 function calcPagination(leftCount: number, rightCount: number, bodyH: number) {
   const maxLines = Math.max(leftCount, rightCount, 1);
-  const getRowH = (fs: number) => {
-    if (fs >= 9) return 0.21;
-    if (fs >= 8) return 0.19;
-    return 0.17;
-  };
+  const getRowH = (fs: number) => (fs + 2) / 72;
 
-  for (const fs of [9, 8, 7]) {
+  for (const fs of [9, 8, 7, 6]) {
     const rh = getRowH(fs);
     const perPage = Math.floor(bodyH / rh);
     if (maxLines <= perPage) return { fontSize: fs, pages: 1, linesPerPage: perPage };
   }
-  const rh = getRowH(7);
-  const perPage = Math.floor(bodyH / rh);
-  const pages = Math.ceil(maxLines / perPage);
-  const balancedPerPage = Math.ceil(maxLines / pages);
-  return { fontSize: 7, pages, linesPerPage: balancedPerPage };
+
+  const minRh = getRowH(6);
+  const minPages = Math.ceil(maxLines / Math.floor(bodyH / minRh));
+
+  for (const fs of [9, 8, 7, 6]) {
+    const rh = getRowH(fs);
+    const perPage = Math.floor(bodyH / rh);
+    if (Math.ceil(maxLines / perPage) <= minPages) {
+      return { fontSize: fs, pages: minPages, linesPerPage: perPage };
+    }
+  }
+
+  const perPage = Math.floor(bodyH / minRh);
+  return { fontSize: 6, pages: minPages, linesPerPage: perPage };
 }
 
 const emptyRow: PreviewRow = { body: '', date: '', progress: '', bold: false };
@@ -182,8 +188,8 @@ function DCell({ children, className = '', colSpan = 1 }: {
   );
 }
 
-export default function ConsolidatedPptPreview({ data }: ConsolidatedPptPreviewProps) {
-  const slides = useMemo(() => {
+export default function ConsolidatedPptPreview({ data, leaderName }: ConsolidatedPptPreviewProps) {
+  const slides = useMemo<{ title: string; content: React.ReactNode }[]>(() => {
     const thisWeekGroups = groupTasksByTitle(data.members, 'this_week');
     const nextWeekGroups = groupTasksByTitle(data.members, 'next_week');
     const { leftRows, rightRows } = buildAlignedPreviewRows(thisWeekGroups, nextWeekGroups);
@@ -195,12 +201,19 @@ export default function ConsolidatedPptPreview({ data }: ConsolidatedPptPreviewP
     const dateRange = getWeekRange(data.report_date);
     const nextDateRange = getNextWeekRange(data.report_date);
 
-    const issueText = issuesLeft || issuesRight || '-';
-    const issueLineCount = issueText.split('\n').length;
-    const noteText = notesRight || notesLeft || '-';
-    const noteLineCount = noteText.split('\n').length;
-    const issueH = Math.max(0.28, Math.min(1.5, issueLineCount * 0.14 + 0.05));
-    const noteH = Math.max(0.28, Math.min(1.5, noteLineCount * 0.14 + 0.05));
+    // footer 높이 계산 — pptGenerator와 동일 로직
+    const ISSUE_CELL_W = 9.4 - 1.5;
+    const CHARS_PER_LINE = Math.floor(ISSUE_CELL_W * 14);
+    const LINE_H = 0.22;
+    function calcWrappedLineCount(text: string): number {
+      const lines = (text || '-').split('\n');
+      const charsPerLine = Math.floor(CHARS_PER_LINE * (8 / 8));
+      return lines.reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
+    }
+    const issueLineCount = Math.max(calcWrappedLineCount(issuesLeft), calcWrappedLineCount(issuesRight));
+    const noteLineCount = Math.max(calcWrappedLineCount(notesLeft), calcWrappedLineCount(notesRight));
+    const issueH = Math.max(0.50, Math.min(1.5, issueLineCount * LINE_H + 0.15));
+    const noteH = Math.max(0.50, Math.min(1.5, noteLineCount * LINE_H + 0.15));
     const bodyH = 6.9 - (0.35 + 0.30 + 0.40 + issueH + noteH);
 
     const { pages, linesPerPage } = calcPagination(leftRows.length, rightRows.length, bodyH);
@@ -233,7 +246,7 @@ export default function ConsolidatedPptPreview({ data }: ConsolidatedPptPreviewP
                   <DCell className="w-[12%] text-center">{formatDateShort(data.report_date)}</DCell>
                   <HCell className="w-[10%]" align="center">작성자</HCell>
                   <DCell className="w-[35%] text-center">
-                    {data.members.filter(m => m.report).map(m => `${m.user_name}(${m.role_code})`).join(', ')}
+                    {leaderName || data.team.name}
                     {pageLabel}
                   </DCell>
                 </tr>
@@ -243,11 +256,11 @@ export default function ConsolidatedPptPreview({ data }: ConsolidatedPptPreviewP
             {/* Unified body table: left (3 cols) + right (2 cols) */}
             <table className="w-full border-collapse -mt-px flex-1">
               <colgroup>
-                <col style={{ width: '30%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '35%' }} />
-                <col style={{ width: '15%' }} />
+                <col style={{ width: '32%' }} />
+                <col style={{ width: '8.5%' }} />
+                <col style={{ width: '8.5%' }} />
+                <col style={{ width: '40.5%' }} />
+                <col style={{ width: '10.5%' }} />
               </colgroup>
               <tbody>
                 {/* Section headers */}
@@ -297,9 +310,9 @@ export default function ConsolidatedPptPreview({ data }: ConsolidatedPptPreviewP
             {isLastPage && (
               <table className="w-full border-collapse -mt-px">
                 <colgroup>
-                  <col style={{ width: '15%' }} />
-                  <col style={{ width: '42.5%' }} />
-                  <col style={{ width: '42.5%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '43%' }} />
+                  <col style={{ width: '43%' }} />
                 </colgroup>
                 <tbody>
                   <tr>

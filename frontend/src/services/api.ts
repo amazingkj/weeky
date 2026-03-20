@@ -170,6 +170,20 @@ export async function getInviteCodes(): Promise<InviteCode[]> {
   return res.json();
 }
 
+export async function adminResetPassword(userId: number, password: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/admin/users/${userId}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  });
+  await throwIfNotOk(res, 'Failed to reset password');
+}
+
+export async function adminGetUsers(): Promise<User[]> {
+  const res = await apiFetch(`${API_BASE}/users`);
+  await throwIfNotOk(res, 'Failed to fetch users');
+  return res.json();
+}
+
 export { getToken, clearToken };
 
 export async function getTemplates(): Promise<Template[]> {

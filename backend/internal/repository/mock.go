@@ -111,6 +111,16 @@ func (m *MockRepository) CountUsers() (int64, error) {
 	return int64(len(m.users)), nil
 }
 
+func (m *MockRepository) UpdateUserPassword(userID int64, passwordHash string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if u, ok := m.users[userID]; ok {
+		u.PasswordHash = passwordHash
+		m.users[userID] = u
+	}
+	return nil
+}
+
 func (m *MockRepository) ReassignLegacyData(userID int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

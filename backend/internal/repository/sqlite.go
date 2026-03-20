@@ -422,6 +422,11 @@ func (r *Repository) CreateFirstAdmin(email, passwordHash, name string) (*model.
 	}, nil
 }
 
+func (r *Repository) UpdateUserPassword(userID int64, passwordHash string) error {
+	_, err := r.db.Exec("UPDATE users SET password_hash = ? WHERE id = ?", passwordHash, userID)
+	return err
+}
+
 func (r *Repository) ReassignLegacyData(userID int64) error {
 	_, err := r.db.Exec("UPDATE configs SET user_id = ? WHERE user_id = 0", userID)
 	if err != nil {
@@ -800,8 +805,12 @@ func (r *Repository) DeleteTeam(id int64) error {
 	}
 	defer tx.Rollback()
 
-	tx.Exec("DELETE FROM report_submissions WHERE team_id = ?", id)
-	tx.Exec("DELETE FROM team_members WHERE team_id = ?", id)
+	if _, err := tx.Exec("DELETE FROM report_submissions WHERE team_id = ?", id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM team_members WHERE team_id = ?", id); err != nil {
+		return err
+	}
 	if _, err := tx.Exec("DELETE FROM teams WHERE id = ?", id); err != nil {
 		return err
 	}

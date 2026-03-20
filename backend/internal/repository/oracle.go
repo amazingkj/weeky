@@ -197,7 +197,9 @@ func runOracleMigrations(db *sql.DB) error {
 
 	for _, m := range oracleMigrations {
 		var exists int
-		db.QueryRow("SELECT COUNT(*) FROM migrations_ WHERE version = :1", m.version).Scan(&exists)
+		if err := db.QueryRow("SELECT COUNT(*) FROM migrations_ WHERE version = :1", m.version).Scan(&exists); err != nil {
+			return fmt.Errorf("failed to check migration v%d: %w", m.version, err)
+		}
 		if exists > 0 {
 			continue
 		}
@@ -324,6 +326,11 @@ func (r *OracleRepository) CountUsers() (int64, error) {
 	var count int64
 	err := r.db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
 	return count, err
+}
+
+func (r *OracleRepository) UpdateUserPassword(userID int64, passwordHash string) error {
+	_, err := r.db.Exec("UPDATE users SET password_hash = :1 WHERE id = :2", passwordHash, userID)
+	return err
 }
 
 func (r *OracleRepository) ReassignLegacyData(userID int64) error {
@@ -775,8 +782,12 @@ func (r *OracleRepository) DeleteTeam(id int64) error {
 	}
 	defer tx.Rollback()
 
-	tx.Exec("DELETE FROM report_submissions WHERE team_id = :1", id)
-	tx.Exec("DELETE FROM team_members WHERE team_id = :1", id)
+	if _, err := tx.Exec("DELETE FROM report_submissions WHERE team_id = :1", id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM team_members WHERE team_id = :1", id); err != nil {
+		return err
+	}
 	if _, err := tx.Exec("DELETE FROM teams WHERE id = :1", id); err != nil {
 		return err
 	}

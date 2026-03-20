@@ -255,7 +255,7 @@ export default function PptPreview({ report, style = defaultTemplateStyle }: Ppt
     }
 
     // Slide 2: 차주계획
-    if (report.next_week.length > 0 || report.next_issues || report.next_notes) {
+    if (report.next_week.length > 0) {
       slideList.push({
         title: '차주계획',
         content: (
@@ -263,7 +263,7 @@ export default function PptPreview({ report, style = defaultTemplateStyle }: Ppt
             <SlideHeader report={report} />
             <SectionTitle title="차주계획" />
             <TaskRows tasks={report.next_week} maxItems={8} dateRange={dateRange} />
-            <FooterTables issues={report.next_issues} notes={report.next_notes} showProgress={false} />
+            <FooterTables showProgress={false} />
           </div>
         ),
       });

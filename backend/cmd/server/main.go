@@ -84,6 +84,7 @@ func main() {
 	admin := protected.Group("/admin", middleware.RequireAdmin())
 	admin.Post("/invite-codes", h.CreateInviteCode)
 	admin.Get("/invite-codes", h.GetInviteCodes)
+	admin.Post("/users/:id/reset-password", h.AdminResetPassword)
 
 	protected.Get("/templates", h.GetTemplates)
 	protected.Post("/templates", h.CreateTemplate)
