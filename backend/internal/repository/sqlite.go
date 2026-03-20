@@ -1077,9 +1077,11 @@ func (r *Repository) GetTeamProjects(teamID int64, activeOnly bool) ([]model.Tea
 	for rows.Next() {
 		var p model.TeamProject
 		var isActive int
-		if err := rows.Scan(&p.ID, &p.TeamID, &p.Name, &p.Client, &isActive, &p.SortOrder, &p.CreatedAt); err != nil {
+		var client sql.NullString
+		if err := rows.Scan(&p.ID, &p.TeamID, &p.Name, &client, &isActive, &p.SortOrder, &p.CreatedAt); err != nil {
 			return nil, err
 		}
+		p.Client = client.String
 		p.IsActive = isActive == 1
 		projects = append(projects, p)
 	}
@@ -1089,12 +1091,14 @@ func (r *Repository) GetTeamProjects(teamID int64, activeOnly bool) ([]model.Tea
 func (r *Repository) GetTeamProject(id int64) (*model.TeamProject, error) {
 	var p model.TeamProject
 	var isActive int
+	var client sql.NullString
 	err := r.db.QueryRow(
 		"SELECT id, team_id, name, client, is_active, sort_order, created_at FROM team_projects WHERE id = ?", id,
-	).Scan(&p.ID, &p.TeamID, &p.Name, &p.Client, &isActive, &p.SortOrder, &p.CreatedAt)
+	).Scan(&p.ID, &p.TeamID, &p.Name, &client, &isActive, &p.SortOrder, &p.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
+	p.Client = client.String
 	p.IsActive = isActive == 1
 	return &p, nil
 }
@@ -1120,11 +1124,13 @@ func (r *Repository) DeleteTeamProject(id int64) error {
 func (r *Repository) GetOrCreateTeamProject(teamID int64, name string) (*model.TeamProject, error) {
 	var p model.TeamProject
 	var isActive int
+	var client sql.NullString
 	err := r.db.QueryRow(
 		"SELECT id, team_id, name, client, is_active, sort_order, created_at FROM team_projects WHERE team_id = ? AND name = ?",
 		teamID, name,
-	).Scan(&p.ID, &p.TeamID, &p.Name, &p.Client, &isActive, &p.SortOrder, &p.CreatedAt)
+	).Scan(&p.ID, &p.TeamID, &p.Name, &client, &isActive, &p.SortOrder, &p.CreatedAt)
 	if err == nil {
+		p.Client = client.String
 		p.IsActive = isActive == 1
 		return &p, nil
 	}
