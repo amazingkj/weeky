@@ -23,9 +23,16 @@ export default function ProjectCombobox({
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const filtered = projects.filter(p =>
-    p.is_active && p.name.toLowerCase().includes((filter || value).toLowerCase())
-  );
+  // Deduplicate by name — show each project title only once
+  const seen = new Set<string>();
+  const filtered = projects.filter(p => {
+    if (!p.is_active) return false;
+    if (!p.name.toLowerCase().includes((filter || value).toLowerCase())) return false;
+    const lower = p.name.toLowerCase();
+    if (seen.has(lower)) return false;
+    seen.add(lower);
+    return true;
+  });
 
   const showDropdown = open && (filtered.length > 0 || filter.length > 0);
   const isNew = filter.length > 0 && !projects.some(p => p.name === filter);
@@ -78,14 +85,11 @@ export default function ProjectCombobox({
                 setFilter('');
                 setOpen(false);
               }}
-              className={`w-full text-left px-2.5 py-1.5 text-sm hover:bg-neutral-100 transition-colors flex items-center justify-between ${
-                p.name === value && !p.client ? 'bg-neutral-50 font-medium' : ''
+              className={`w-full text-left px-2.5 py-1.5 text-sm hover:bg-neutral-100 transition-colors ${
+                p.name === value ? 'bg-neutral-50 font-medium' : ''
               }`}
             >
-              <span>{p.name}</span>
-              {p.client && (
-                <span className="text-[10px] text-neutral-400 ml-2">{p.client}</span>
-              )}
+              {p.name}
             </button>
           ))}
           {isNew && (

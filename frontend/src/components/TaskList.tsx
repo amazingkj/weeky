@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, memo } from 'react';
+import { useState, useCallback, useRef, useEffect, memo } from 'react';
 import { Task, TeamProject } from '../types';
 import ProjectCombobox from './ProjectCombobox';
 
@@ -223,7 +223,7 @@ const TaskItem = memo(function TaskItem({
         <ProjectCombobox
           value={task.title}
           onChange={(v) => onUpdate('title', v)}
-          onSelectProject={(p) => onUpdateMulti({ title: p.name, client: p.client || '' })}
+          onSelectProject={(p) => onUpdateMulti({ title: p.name })}
           projects={projectSuggestions}
           onAutoCreate={onAutoCreateProject}
           placeholder="업무 제목"
@@ -241,14 +241,10 @@ const TaskItem = memo(function TaskItem({
       )}
 
       {/* Client */}
-      <input
-        type="text"
-        placeholder="고객사 (선택)"
+      <ClientCombobox
         value={task.client || ''}
-        onChange={(e) => onUpdate('client', e.target.value)}
-        className="w-full mt-1.5 px-2.5 py-1.5 text-xs bg-white border border-neutral-200 rounded-md
-                   focus:outline-none focus:ring-1 focus:ring-neutral-400 focus:border-neutral-400
-                   text-neutral-500 placeholder:text-neutral-300 transition-colors"
+        onChange={(v) => onUpdate('client', v)}
+        projects={projectSuggestions}
       />
 
       {/* Details */}
@@ -328,6 +324,108 @@ const TaskItem = memo(function TaskItem({
     </div>
   );
 });
+
+function ClientCombobox({
+  value,
+  onChange,
+  projects,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  projects?: TeamProject[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState('');
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Deduplicated non-empty client list
+  const clients = (() => {
+    if (!projects) return [];
+    const set = new Set<string>();
+    for (const p of projects) {
+      if (p.is_active && p.client) set.add(p.client);
+    }
+    return Array.from(set).sort();
+  })();
+
+  const query = (filter || value).toLowerCase();
+  const filtered = clients.filter(c => c.toLowerCase().includes(query));
+  const showDropdown = open && filtered.length > 0;
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  if (!projects || clients.length === 0) {
+    return (
+      <input
+        type="text"
+        placeholder="고객사 (선택)"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full mt-1.5 px-2.5 py-1.5 text-xs bg-white border border-neutral-200 rounded-md
+                   focus:outline-none focus:ring-1 focus:ring-neutral-400 focus:border-neutral-400
+                   text-neutral-500 placeholder:text-neutral-300 transition-colors"
+      />
+    );
+  }
+
+  return (
+    <div ref={wrapperRef} className="relative mt-1.5">
+      <input
+        ref={inputRef}
+        type="text"
+        placeholder="고객사 (선택)"
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setFilter(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => {
+          setFilter(value);
+          setOpen(true);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            setOpen(false);
+            inputRef.current?.blur();
+          }
+        }}
+        className="w-full px-2.5 py-1.5 text-xs bg-white border border-neutral-200 rounded-md
+                   focus:outline-none focus:ring-1 focus:ring-neutral-400 focus:border-neutral-400
+                   text-neutral-500 placeholder:text-neutral-300 transition-colors"
+      />
+      {showDropdown && (
+        <div className="absolute z-50 left-0 right-0 mt-0.5 bg-white border border-neutral-200 rounded-md shadow-lg max-h-36 overflow-auto">
+          {filtered.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => {
+                onChange(c);
+                setFilter('');
+                setOpen(false);
+              }}
+              className={`w-full text-left px-2.5 py-1.5 text-xs hover:bg-neutral-100 transition-colors ${
+                c === value ? 'bg-neutral-50 font-medium' : ''
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Hoisted static SVG icons
 const plusIcon = (
