@@ -143,7 +143,7 @@ func buildPrompt(items []model.SyncItem, startDate, endDate, style string, proje
 	}
 	gitlabByProject := make(map[string]*sourceGroup) // key: project source
 	var projectOrder []string                          // preserve insertion order
-	var issuesDone, issuesTodo, emails []model.SyncItem
+	var issues, emails []model.SyncItem
 
 	for _, item := range items {
 		switch item.Type {
@@ -167,10 +167,8 @@ func buildPrompt(items []model.SyncItem, startDate, endDate, style string, proje
 				projectOrder = append(projectOrder, key)
 			}
 			gitlabByProject[key].mrs = append(gitlabByProject[key].mrs, item)
-		case "issue_done", "issue":
-			issuesDone = append(issuesDone, item)
-		case "issue_todo":
-			issuesTodo = append(issuesTodo, item)
+		case "issue_done", "issue_todo", "issue":
+			issues = append(issues, item)
 		case "email":
 			emails = append(emails, item)
 		}
@@ -194,18 +192,14 @@ func buildPrompt(items []model.SyncItem, startDate, endDate, style string, proje
 		b.WriteString("\n")
 	}
 
-	if len(issuesDone) > 0 {
-		b.WriteString("## Jira 완료 이슈:\n")
-		for _, i := range issuesDone {
-			fmt.Fprintf(&b, "- [%s] %s\n", i.Date, i.Title)
-		}
-		b.WriteString("\n")
-	}
-
-	if len(issuesTodo) > 0 {
-		b.WriteString("## Jira 미완료 이슈 (진행중/대기):\n")
-		for _, i := range issuesTodo {
-			fmt.Fprintf(&b, "- [%s] %s\n", i.Date, i.Title)
+	if len(issues) > 0 {
+		b.WriteString("## Jira 이슈:\n")
+		for _, i := range issues {
+			status := i.Content
+			if status == "" {
+				status = "Unknown"
+			}
+			fmt.Fprintf(&b, "- [%s] %s (상태: %s)\n", i.Date, i.Title, status)
 		}
 		b.WriteString("\n")
 	}
@@ -245,10 +239,13 @@ func buildPrompt(items []model.SyncItem, startDate, endDate, style string, proje
    - 각 항목을 기술적으로 상세하게 작성 (어떤 모듈, 어떤 기능, 어떤 환경 등)
 6. due_date: YYYY-MM-DD 형식
 7. 메일 제목/내용, 커밋 메시지, Jira 이슈를 분석해서 프로젝트와 고객사를 식별
-8. "this_week" (금주실적): 커밋, MR, 완료된 Jira 이슈, 메일 기반으로 해당 기간의 모든 업무를 빠짐없이 포함. progress는 100
-9. "next_week" (차주계획): 미완료 Jira 이슈 기반으로 구체적 계획 작성. progress는 0
+8. "this_week" (금주실적): 커밋, MR, Jira 이슈, 메일 기반으로 해당 기간의 모든 업무를 빠짐없이 포함
+9. "next_week" (차주계획): 미완료 Jira 이슈 중 다음 주에 이어질 작업 기반으로 구체적 계획 작성
 10. 같은 title(프로젝트)에 여러 client(고객사)가 있을 수 있음. 각 고객사별로 별도의 Task를 생성
 11. summary: 금주 전체 업무를 3~5줄로 요약 (주요 성과, 진행 현황, 특이사항 포함)
+12. Jira 티켓 1개 = Task 1개. 각 Jira 티켓은 별도의 Task로 생성하고, title은 프로젝트명, details에 티켓 키와 요약 포함
+13. Jira 티켓의 상태에 따라 progress를 추정하세요 (예: To Do→0%, In Progress→30~70%, In Review/QA→70~90%, Done→100%)
+14. 커밋/MR 기반 Task의 progress는 100
 `)
 	} else if style == "detailed" {
 		b.WriteString(`요구사항:
@@ -260,9 +257,12 @@ func buildPrompt(items []model.SyncItem, startDate, endDate, style string, proje
    - 줄바꿈(\n)을 사용하여 각 항목 구분
 6. due_date: YYYY-MM-DD 형식
 7. 메일 제목/내용, 커밋 메시지, Jira 이슈를 분석해서 프로젝트와 고객사를 식별
-8. "this_week" (금주실적): 커밋, MR, 완료된 Jira 이슈, 메일 기반으로 해당 기간의 모든 업무를 포함. progress는 100
-9. "next_week" (차주계획): 미완료 Jira 이슈 기반. progress는 0
+8. "this_week" (금주실적): 커밋, MR, Jira 이슈, 메일 기반으로 해당 기간의 모든 업무를 포함
+9. "next_week" (차주계획): 미완료 Jira 이슈 중 다음 주에 이어질 작업 기반
 10. 같은 title(프로젝트)에 여러 client(고객사)가 있을 수 있음
+11. Jira 티켓 1개 = Task 1개. 각 Jira 티켓은 별도의 Task로 생성하고, title은 프로젝트명, details에 티켓 키와 요약 포함
+12. Jira 티켓의 상태에 따라 progress를 추정하세요 (예: To Do→0%, In Progress→30~70%, In Review/QA→70~90%, Done→100%)
+13. 커밋/MR 기반 Task의 progress는 100
 `)
 	} else {
 		b.WriteString(`요구사항:
@@ -272,9 +272,12 @@ func buildPrompt(items []model.SyncItem, startDate, endDate, style string, proje
 4. details: 해당 고객사에서 수행한 진행사항을 **한 줄로 간결하게** 작성
 5. due_date: YYYY-MM-DD 형식
 6. 메일 제목/내용, 커밋 메시지, Jira 이슈를 분석해서 프로젝트와 고객사를 식별
-7. "this_week" (금주실적): 커밋, MR, 완료된 Jira 이슈, 메일 기반으로 해당 기간의 모든 업무를 포함. progress는 100
-8. "next_week" (차주계획): 미완료 Jira 이슈 기반. progress는 0
+7. "this_week" (금주실적): 커밋, MR, Jira 이슈, 메일 기반으로 해당 기간의 모든 업무를 포함
+8. "next_week" (차주계획): 미완료 Jira 이슈 중 다음 주에 이어질 작업 기반
 9. 같은 title(프로젝트)에 여러 client(고객사)가 있을 수 있음
+10. Jira 티켓 1개 = Task 1개. 각 Jira 티켓은 별도의 Task로 생성하고, title은 프로젝트명, details에 티켓 키와 요약 포함
+11. Jira 티켓의 상태에 따라 progress를 추정하세요 (예: To Do→0%, In Progress→30~70%, In Review/QA→70~90%, Done→100%)
+12. 커밋/MR 기반 Task의 progress는 100
 `)
 	}
 
@@ -285,16 +288,24 @@ func buildPrompt(items []model.SyncItem, startDate, endDate, style string, proje
     {
       "title": "CruzAPIM",
       "client": "삼성카드",
-      "details": "모니모 APIM imanager 프로젝트 진행",
+      "details": "[PROJ-101] 모니모 APIM imanager 프로젝트 진행",
       "description": "- API 설계 및 구현\n- 인증 모듈 JWT 토큰 검증 로직 추가",
       "due_date": "2026-01-24",
       "progress": 100
+    },
+    {
+      "title": "CruzAPIM",
+      "client": "삼성카드",
+      "details": "[PROJ-102] API 에러 핸들링 개선",
+      "description": "",
+      "due_date": "2026-01-24",
+      "progress": 50
     }
   ],
   "next_week": [
     {
       "title": "Mesh",
-      "details": "Backend 아키텍처 설계 계속 진행",
+      "details": "[MESH-55] Backend 아키텍처 설계",
       "description": "",
       "due_date": "2026-01-31",
       "progress": 0

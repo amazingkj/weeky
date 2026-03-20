@@ -59,41 +59,25 @@ func (s *JiraService) Sync(req model.JiraSyncRequest) (*model.SyncResult, error)
 	auth := base64.StdEncoding.EncodeToString([]byte(req.Email + ":" + req.Token))
 	searchURL := fmt.Sprintf("%s/rest/api/3/search/jql", req.BaseURL)
 
-	doneJQL := fmt.Sprintf(
-		`assignee = currentUser() AND status = Done AND updated >= "%s" AND updated <= "%s" ORDER BY updated DESC`,
+	jql := fmt.Sprintf(
+		`assignee = currentUser() AND updated >= "%s" AND updated <= "%s" ORDER BY updated DESC`,
 		req.StartDate, req.EndDate,
 	)
-	doneIssues, err := s.fetchIssues(searchURL, auth, doneJQL)
+	issues, err := s.fetchIssues(searchURL, auth, jql)
 	if err != nil {
 		return nil, err
 	}
-	for _, issue := range doneIssues {
+	for _, issue := range issues {
 		date := issue.Fields.Updated[:10]
 		if issue.Fields.ResolutionDate != nil && len(*issue.Fields.ResolutionDate) >= 10 {
 			date = (*issue.Fields.ResolutionDate)[:10]
 		}
 		result.Items = append(result.Items, model.SyncItem{
-			Title: fmt.Sprintf("[%s] %s", issue.Key, issue.Fields.Summary),
-			Date:  date,
-			URL:   fmt.Sprintf("%s/browse/%s", req.BaseURL, issue.Key),
-			Type:  "issue_done",
-		})
-	}
-
-	todoJQL := fmt.Sprintf(
-		`assignee = currentUser() AND status != Done AND updated >= "%s" AND updated <= "%s" ORDER BY updated DESC`,
-		req.StartDate, req.EndDate,
-	)
-	todoIssues, err := s.fetchIssues(searchURL, auth, todoJQL)
-	if err != nil {
-		return nil, err
-	}
-	for _, issue := range todoIssues {
-		result.Items = append(result.Items, model.SyncItem{
-			Title: fmt.Sprintf("[%s] %s", issue.Key, issue.Fields.Summary),
-			Date:  issue.Fields.Updated[:10],
-			URL:   fmt.Sprintf("%s/browse/%s", req.BaseURL, issue.Key),
-			Type:  "issue_todo",
+			Title:   fmt.Sprintf("[%s] %s", issue.Key, issue.Fields.Summary),
+			Date:    date,
+			URL:     fmt.Sprintf("%s/browse/%s", req.BaseURL, issue.Key),
+			Type:    "issue",
+			Content: issue.Fields.Status.Name,
 		})
 	}
 
