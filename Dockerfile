@@ -6,14 +6,14 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-# 2단계: 백엔드 빌드 (CGO 불필요 - pure Go SQLite)
+# 2단계: 백엔드 빌드 (CGO 불필요 - pure Go SQLite + pure Go Oracle)
 FROM golang:1.24-alpine AS backend-builder
 WORKDIR /app
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 COPY backend/ ./
 COPY --from=frontend-builder /app/backend/dist ./dist
-RUN CGO_ENABLED=0 go build -o jugan -ldflags="-s -w" ./cmd/server
+RUN CGO_ENABLED=0 go build -tags oracle -o jugan -ldflags="-s -w" ./cmd/server
 
 # 3단계: 최소 런타임
 FROM alpine:3.19

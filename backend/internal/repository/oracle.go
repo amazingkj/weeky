@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/jiin/weeky/internal/model"
-	_ "github.com/godror/godror"
+	go_ora "github.com/sijms/go-ora/v2"
 )
 
 type OracleRepository struct {
@@ -20,7 +20,7 @@ type OracleRepository struct {
 var _ IRepository = (*OracleRepository)(nil)
 
 func NewOracle(dsn string) (*OracleRepository, error) {
-	db, err := sql.Open("godror", dsn)
+	db, err := sql.Open("oracle", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open oracle connection: %w", err)
 	}
@@ -241,7 +241,7 @@ func (r *OracleRepository) CreateUser(email, passwordHash, name string, isAdmin 
 		`INSERT INTO users (email, password_hash, name, is_admin)
 		 VALUES (:1, :2, :3, :4)
 		 RETURNING id INTO :5`,
-		email, passwordHash, name, adminInt, sql.Out{Dest: &id},
+		email, passwordHash, name, adminInt, go_ora.Out{Dest: &id, Size: 8},
 	)
 	if err != nil {
 		return nil, err
@@ -275,7 +275,7 @@ func (r *OracleRepository) CreateFirstAdmin(email, passwordHash, name string) (*
 		`INSERT INTO users (email, password_hash, name, is_admin)
 		 VALUES (:1, :2, :3, 1)
 		 RETURNING id INTO :4`,
-		email, passwordHash, name, sql.Out{Dest: &id},
+		email, passwordHash, name, go_ora.Out{Dest: &id, Size: 8},
 	)
 	if err != nil {
 		return nil, err
@@ -370,7 +370,7 @@ func (r *OracleRepository) CreateInviteCode(code string, createdBy int64) (*mode
 		`INSERT INTO invite_codes (code, created_by)
 		 VALUES (:1, :2)
 		 RETURNING id INTO :3`,
-		code, createdBy, sql.Out{Dest: &id},
+		code, createdBy, go_ora.Out{Dest: &id, Size: 8},
 	)
 	if err != nil {
 		return nil, err
@@ -448,7 +448,7 @@ func (r *OracleRepository) CreateTemplate(name, style string) (*model.Template, 
 	var id int64
 	_, err := r.db.Exec(
 		`INSERT INTO templates (name, style) VALUES (:1, :2) RETURNING id INTO :3`,
-		name, style, sql.Out{Dest: &id},
+		name, style, go_ora.Out{Dest: &id, Size: 8},
 	)
 	if err != nil {
 		return nil, err
@@ -517,7 +517,7 @@ func (r *OracleRepository) CreateReport(req model.CreateReportRequest, userID in
 		userID, req.TeamName, req.AuthorName, req.ReportDate,
 		string(thisWeekJSON), string(nextWeekJSON),
 		req.Issues, req.Notes, req.NextIssues, req.NextNotes, req.TemplateID,
-		sql.Out{Dest: &id},
+		go_ora.Out{Dest: &id, Size: 8},
 	)
 	if err != nil {
 		return nil, err
@@ -721,7 +721,7 @@ func (r *OracleRepository) CreateTeam(name, description string, createdBy int64)
 		`INSERT INTO teams (name, description, created_by)
 		 VALUES (:1, :2, :3)
 		 RETURNING id INTO :4`,
-		name, description, createdBy, sql.Out{Dest: &id},
+		name, description, createdBy, go_ora.Out{Dest: &id, Size: 8},
 	)
 	if err != nil {
 		return nil, err
@@ -802,7 +802,7 @@ func (r *OracleRepository) AddTeamMember(teamID, userID int64, role model.TeamRo
 		`INSERT INTO team_members (team_id, user_id, role, role_code)
 		 VALUES (:1, :2, :3, :4)
 		 RETURNING id INTO :5`,
-		teamID, userID, role, roleCode, sql.Out{Dest: &id},
+		teamID, userID, role, roleCode, go_ora.Out{Dest: &id, Size: 8},
 	)
 	if err != nil {
 		return nil, err
@@ -989,7 +989,7 @@ func (r *OracleRepository) CreateTeamProject(teamID int64, name, client string) 
 		`INSERT INTO team_projects (team_id, name, client)
 		 VALUES (:1, :2, :3)
 		 RETURNING id INTO :4`,
-		teamID, name, client, sql.Out{Dest: &id},
+		teamID, name, client, go_ora.Out{Dest: &id, Size: 8},
 	)
 	if err != nil {
 		return nil, err

@@ -3,19 +3,16 @@ module github.com/jiin/weeky
 go 1.24.0
 
 require (
-	github.com/godror/godror v0.50.0
 	github.com/gofiber/fiber/v2 v2.52.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/sijms/go-ora/v2 v2.9.0
 	golang.org/x/crypto v0.48.0
 	modernc.org/sqlite v1.29.1
 )
 
 require (
-	github.com/VictoriaMetrics/easyproto v0.1.4 // indirect
 	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/go-logfmt/logfmt v0.6.0 // indirect
-	github.com/godror/knownpb v0.3.0 // indirect
 	github.com/google/uuid v1.5.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/klauspost/compress v1.17.0 // indirect
@@ -30,9 +27,8 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.51.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
-	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6 // indirect
 	golang.org/x/sys v0.41.0 // indirect
-	google.golang.org/protobuf v1.36.6 // indirect
+	golang.org/x/tools v0.33.0 // indirect
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect
 	modernc.org/libc v1.41.0 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
