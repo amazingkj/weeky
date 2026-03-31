@@ -106,7 +106,16 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<Respons
 }
 
 async function throwIfNotOk(res: Response, message: string): Promise<void> {
-  if (!res.ok) throw new Error(message);
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const body = await res.json();
+      detail = body.error || JSON.stringify(body);
+    } catch {
+      detail = res.statusText;
+    }
+    throw new Error(`${message} (${res.status}: ${detail})`);
+  }
 }
 
 async function throwWithServerError(res: Response, fallback: string): Promise<void> {

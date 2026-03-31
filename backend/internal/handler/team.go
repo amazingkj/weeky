@@ -146,6 +146,7 @@ func (h *Handler) AddTeamMember(c *fiber.Ctx) error {
 
 	newMember, err := h.repo.AddTeamMember(teamID, targetUser.ID, req.Role, req.RoleCode)
 	if err != nil {
+		slog.Error("AddTeamMember failed", "teamID", teamID, "userID", targetUser.ID, "error", err)
 		return badRequest(c, "이미 팀에 추가된 멤버이거나 오류가 발생했습니다")
 	}
 
@@ -385,6 +386,7 @@ func (h *Handler) GetTeamMemberReport(c *fiber.Ctx) error {
 
 	report, err := h.repo.GetReportByID(reportID)
 	if err != nil {
+		slog.Error("GetTeamMemberReport failed", "reportID", reportID, "error", err)
 		return notFound(c, "보고서를 찾을 수 없습니다")
 	}
 	return c.JSON(report)

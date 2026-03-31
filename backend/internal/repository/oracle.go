@@ -473,29 +473,50 @@ func (r *OracleRepository) DeleteTemplate(id int64) error {
 
 // --- Report methods ---
 
-func (r *OracleRepository) GetReport(id int64, userID int64) (*model.Report, error) {
+func scanReport(scanner interface{ Scan(...any) error }) (*model.Report, error) {
 	var report model.Report
-	var thisWeekJSON, nextWeekJSON string
+	var thisWeekJSON, nextWeekJSON sql.NullString
+	var issues, notes, nextIssues, nextNotes sql.NullString
+	var templateID sql.NullInt64
 
-	err := r.db.QueryRow(
-		`SELECT id, team_name, author_name, report_date, this_week, next_week,
-		        issues, notes, next_issues, next_notes, template_id, created_at
-		 FROM reports WHERE id = :1 AND user_id = :2`,
-		id, userID,
-	).Scan(&report.ID, &report.TeamName, &report.AuthorName, &report.ReportDate,
-		&thisWeekJSON, &nextWeekJSON, &report.Issues, &report.Notes,
-		&report.NextIssues, &report.NextNotes, &report.TemplateID, &report.CreatedAt)
+	err := scanner.Scan(&report.ID, &report.TeamName, &report.AuthorName, &report.ReportDate,
+		&thisWeekJSON, &nextWeekJSON, &issues, &notes,
+		&nextIssues, &nextNotes, &templateID, &report.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := json.Unmarshal([]byte(thisWeekJSON), &report.ThisWeek); err != nil {
+	report.Issues = issues.String
+	report.Notes = notes.String
+	report.NextIssues = nextIssues.String
+	report.NextNotes = nextNotes.String
+	report.TemplateID = templateID.Int64
+
+	twJSON := thisWeekJSON.String
+	if twJSON == "" {
+		twJSON = "[]"
+	}
+	nwJSON := nextWeekJSON.String
+	if nwJSON == "" {
+		nwJSON = "[]"
+	}
+	if err := json.Unmarshal([]byte(twJSON), &report.ThisWeek); err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal([]byte(nextWeekJSON), &report.NextWeek); err != nil {
+	if err := json.Unmarshal([]byte(nwJSON), &report.NextWeek); err != nil {
 		return nil, err
 	}
 	return &report, nil
+}
+
+const reportColumns = `id, team_name, author_name, report_date, this_week, next_week,
+		        issues, notes, next_issues, next_notes, template_id, created_at`
+
+func (r *OracleRepository) GetReport(id int64, userID int64) (*model.Report, error) {
+	return scanReport(r.db.QueryRow(
+		`SELECT `+reportColumns+` FROM reports WHERE id = :1 AND user_id = :2`,
+		id, userID,
+	))
 }
 
 func (r *OracleRepository) CreateReport(req model.CreateReportRequest, userID int64) (*model.Report, error) {
@@ -559,39 +580,19 @@ func (r *OracleRepository) UpdateReport(id int64, req model.CreateReportRequest,
 }
 
 func (r *OracleRepository) GetReportByDateAndUser(reportDate string, userID int64) (*model.Report, error) {
-	var report model.Report
-	var thisWeekJSON, nextWeekJSON string
-
 	mon, sun := weekRange(reportDate)
-	err := r.db.QueryRow(
-		`SELECT id, team_name, author_name, report_date, this_week, next_week,
-		        issues, notes, next_issues, next_notes, template_id, created_at
-		 FROM reports
+	return scanReport(r.db.QueryRow(
+		`SELECT `+reportColumns+` FROM reports
 		 WHERE report_date BETWEEN :1 AND :2 AND user_id = :3
 		 ORDER BY created_at DESC
 		 FETCH FIRST 1 ROWS ONLY`,
 		mon, sun, userID,
-	).Scan(&report.ID, &report.TeamName, &report.AuthorName, &report.ReportDate,
-		&thisWeekJSON, &nextWeekJSON, &report.Issues, &report.Notes,
-		&report.NextIssues, &report.NextNotes, &report.TemplateID, &report.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := json.Unmarshal([]byte(thisWeekJSON), &report.ThisWeek); err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal([]byte(nextWeekJSON), &report.NextWeek); err != nil {
-		return nil, err
-	}
-	return &report, nil
+	))
 }
 
 func (r *OracleRepository) GetReportsByUser(userID int64) ([]model.Report, error) {
 	rows, err := r.db.Query(
-		`SELECT id, team_name, author_name, report_date, this_week, next_week,
-		        issues, notes, next_issues, next_notes, template_id, created_at
-		 FROM reports WHERE user_id = :1 ORDER BY created_at DESC`,
+		`SELECT `+reportColumns+` FROM reports WHERE user_id = :1 ORDER BY created_at DESC`,
 		userID,
 	)
 	if err != nil {
@@ -601,47 +602,19 @@ func (r *OracleRepository) GetReportsByUser(userID int64) ([]model.Report, error
 
 	var reports []model.Report
 	for rows.Next() {
-		var report model.Report
-		var thisWeekJSON, nextWeekJSON string
-		if err := rows.Scan(&report.ID, &report.TeamName, &report.AuthorName, &report.ReportDate,
-			&thisWeekJSON, &nextWeekJSON, &report.Issues, &report.Notes,
-			&report.NextIssues, &report.NextNotes, &report.TemplateID, &report.CreatedAt); err != nil {
+		report, err := scanReport(rows)
+		if err != nil {
 			return nil, err
 		}
-		if err := json.Unmarshal([]byte(thisWeekJSON), &report.ThisWeek); err != nil {
-			return nil, err
-		}
-		if err := json.Unmarshal([]byte(nextWeekJSON), &report.NextWeek); err != nil {
-			return nil, err
-		}
-		reports = append(reports, report)
+		reports = append(reports, *report)
 	}
 	return reports, rows.Err()
 }
 
 func (r *OracleRepository) GetReportByID(id int64) (*model.Report, error) {
-	var report model.Report
-	var thisWeekJSON, nextWeekJSON string
-
-	err := r.db.QueryRow(
-		`SELECT id, team_name, author_name, report_date, this_week, next_week,
-		        issues, notes, next_issues, next_notes, template_id, created_at
-		 FROM reports WHERE id = :1`,
-		id,
-	).Scan(&report.ID, &report.TeamName, &report.AuthorName, &report.ReportDate,
-		&thisWeekJSON, &nextWeekJSON, &report.Issues, &report.Notes,
-		&report.NextIssues, &report.NextNotes, &report.TemplateID, &report.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := json.Unmarshal([]byte(thisWeekJSON), &report.ThisWeek); err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal([]byte(nextWeekJSON), &report.NextWeek); err != nil {
-		return nil, err
-	}
-	return &report, nil
+	return scanReport(r.db.QueryRow(
+		`SELECT `+reportColumns+` FROM reports WHERE id = :1`, id,
+	))
 }
 
 func (r *OracleRepository) UpdateReportByID(id int64, req model.CreateReportRequest) error {
@@ -702,8 +675,8 @@ func (r *OracleRepository) SetConfig(key, value string, userID int64) error {
 		 USING (SELECT :1 AS user_id, :2 AS key FROM DUAL) src
 		 ON (c.user_id = src.user_id AND c.key = src.key)
 		 WHEN MATCHED THEN UPDATE SET c.value = :3, c.updated_at = CURRENT_TIMESTAMP
-		 WHEN NOT MATCHED THEN INSERT (user_id, key, value, updated_at) VALUES (:1, :2, :3, CURRENT_TIMESTAMP)`,
-		userID, key, value,
+		 WHEN NOT MATCHED THEN INSERT (user_id, key, value, updated_at) VALUES (:4, :5, :6, CURRENT_TIMESTAMP)`,
+		userID, key, value, userID, key, value,
 	)
 	return err
 }
@@ -802,7 +775,7 @@ func (r *OracleRepository) AddTeamMember(teamID, userID int64, role model.TeamRo
 		`INSERT INTO team_members (team_id, user_id, role, role_code)
 		 VALUES (:1, :2, :3, :4)
 		 RETURNING id INTO :5`,
-		teamID, userID, role, roleCode, go_ora.Out{Dest: &id, Size: 8},
+		teamID, userID, string(role), string(roleCode), go_ora.Out{Dest: &id, Size: 8},
 	)
 	if err != nil {
 		return nil, err
@@ -863,7 +836,7 @@ func (r *OracleRepository) GetTeamMember(teamID, userID int64) (*model.TeamMembe
 }
 
 func (r *OracleRepository) UpdateTeamMember(id int64, role model.TeamRole, roleCode model.RoleCode, name string) error {
-	_, err := r.db.Exec("UPDATE team_members SET role = :1, role_code = :2 WHERE id = :3", role, roleCode, id)
+	_, err := r.db.Exec("UPDATE team_members SET role = :1, role_code = :2 WHERE id = :3", string(role), string(roleCode), id)
 	if err != nil {
 		return err
 	}
@@ -890,8 +863,8 @@ func (r *OracleRepository) SubmitReport(reportID, teamID, userID int64) (*model.
 		 ON (rs.report_id = src.report_id AND rs.team_id = src.team_id)
 		 WHEN MATCHED THEN UPDATE SET rs.status = 'submitted', rs.submitted_at = CURRENT_TIMESTAMP
 		 WHEN NOT MATCHED THEN INSERT (report_id, team_id, user_id, status, submitted_at)
-		      VALUES (:1, :2, :3, 'submitted', CURRENT_TIMESTAMP)`,
-		reportID, teamID, userID,
+		      VALUES (:3, :4, :5, 'submitted', CURRENT_TIMESTAMP)`,
+		reportID, teamID, reportID, teamID, userID,
 	)
 	if err != nil {
 		return nil, err
@@ -1111,8 +1084,8 @@ func (r *OracleRepository) SaveConsolidatedEdit(teamID int64, reportDate, data s
 		 ON (ce.team_id = src.team_id AND ce.report_date = src.report_date)
 		 WHEN MATCHED THEN UPDATE SET ce.data = :3, ce.updated_by = :4, ce.updated_at = CURRENT_TIMESTAMP
 		 WHEN NOT MATCHED THEN INSERT (team_id, report_date, data, updated_by, updated_at)
-		      VALUES (:1, :2, :3, :4, CURRENT_TIMESTAMP)`,
-		teamID, reportDate, data, updatedBy,
+		      VALUES (:5, :6, :7, :8, CURRENT_TIMESTAMP)`,
+		teamID, reportDate, data, updatedBy, teamID, reportDate, data, updatedBy,
 	)
 	return err
 }

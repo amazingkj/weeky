@@ -83,57 +83,33 @@ function buildItemPreviewRows(items: ConsolidatedTask['items']): PreviewRow[] {
   return rows;
 }
 
-// Build left/right preview rows aligned by project+client
+// Build rows for one side independently (project → client → detail)
+function buildSidePreviewRows(groups: ConsolidatedTask[]): PreviewRow[] {
+  const rows: PreviewRow[] = [];
+  for (const g of groups) {
+    rows.push({ body: `[${g.title}]`, date: '', progress: '', bold: true, isProjectHeader: true });
+    const clientMap = subGroupByClient(g.items);
+    for (const [client, items] of clientMap) {
+      if (client) {
+        rows.push({ body: `• ${client}`, date: '', progress: '', bold: false, isProjectHeader: false });
+      }
+      rows.push(...buildItemPreviewRows(items));
+    }
+  }
+  return rows;
+}
+
+// Build left/right rows independently, pad shorter side at the end
 function buildAlignedPreviewRows(
   leftGroups: ConsolidatedTask[],
   rightGroups: ConsolidatedTask[]
 ): { leftRows: PreviewRow[]; rightRows: PreviewRow[] } {
   const empty: PreviewRow = { body: '', date: '', progress: '', bold: false };
-  const leftRows: PreviewRow[] = [];
-  const rightRows: PreviewRow[] = [];
+  const leftRows = buildSidePreviewRows(leftGroups);
+  const rightRows = buildSidePreviewRows(rightGroups);
 
-  // Merge project titles preserving insertion order
-  const allTitles: string[] = [];
-  const seen = new Set<string>();
-  for (const g of leftGroups) { if (!seen.has(g.title)) { seen.add(g.title); allTitles.push(g.title); } }
-  for (const g of rightGroups) { if (!seen.has(g.title)) { seen.add(g.title); allTitles.push(g.title); } }
-
-  const leftMap = new Map(leftGroups.map(g => [g.title, g]));
-  const rightMap = new Map(rightGroups.map(g => [g.title, g]));
-
-  for (const title of allTitles) {
-    const leftGroup = leftMap.get(title);
-    const rightGroup = rightMap.get(title);
-
-    leftRows.push({ body: `[${title}]`, date: '', progress: '', bold: true, isProjectHeader: true });
-    rightRows.push({ body: `[${title}]`, date: '', progress: '', bold: true, isProjectHeader: true });
-
-    const leftClients = leftGroup ? subGroupByClient(leftGroup.items) : new Map<string, ConsolidatedTask['items']>();
-    const rightClients = rightGroup ? subGroupByClient(rightGroup.items) : new Map<string, ConsolidatedTask['items']>();
-    const allClients: string[] = [];
-    const clientSeen = new Set<string>();
-    for (const k of leftClients.keys()) { if (!clientSeen.has(k)) { clientSeen.add(k); allClients.push(k); } }
-    for (const k of rightClients.keys()) { if (!clientSeen.has(k)) { clientSeen.add(k); allClients.push(k); } }
-
-    for (const client of allClients) {
-      const lItems = leftClients.get(client) || [];
-      const rItems = rightClients.get(client) || [];
-
-      if (client) {
-        leftRows.push({ body: `• ${client}`, date: '', progress: '', bold: false, isProjectHeader: false });
-        rightRows.push({ body: `• ${client}`, date: '', progress: '', bold: false, isProjectHeader: false });
-      }
-
-      const lDetailRows = buildItemPreviewRows(lItems);
-      const rDetailRows = buildItemPreviewRows(rItems);
-      const maxLen = Math.max(lDetailRows.length, rDetailRows.length);
-
-      for (let i = 0; i < maxLen; i++) {
-        leftRows.push(i < lDetailRows.length ? lDetailRows[i] : empty);
-        rightRows.push(i < rDetailRows.length ? rDetailRows[i] : empty);
-      }
-    }
-  }
+  while (leftRows.length < rightRows.length) leftRows.push(empty);
+  while (rightRows.length < leftRows.length) rightRows.push(empty);
 
   return { leftRows, rightRows };
 }

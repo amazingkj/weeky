@@ -428,62 +428,35 @@ function buildItemRows(items: ConsolidatedTaskItem[], indent: string): BodyRow[]
   return rows;
 }
 
-// Build left/right rows aligned by project+client
+// Build rows for one side independently (project → client → detail)
+function buildSideRows(groups: ConsolidatedGroup[]): BodyRow[] {
+  const rows: BodyRow[] = [];
+  for (const g of groups) {
+    rows.push({ body: `[${g.title}]`, date: '', progress: '', bold: true });
+    const clientMap = subGroupByClient(g.items);
+    for (const [client, items] of clientMap) {
+      const indent = client ? '    ' : '  ';
+      if (client) {
+        rows.push({ body: `  • ${client}`, date: '', progress: '', bold: false });
+      }
+      rows.push(...buildItemRows(items, indent));
+    }
+  }
+  return rows;
+}
+
+// Build left/right rows independently, pad shorter side at the end
 function buildAlignedRows(
     leftGroups: ConsolidatedGroup[],
     rightGroups: ConsolidatedGroup[]
 ): { leftRows: BodyRow[]; rightRows: BodyRow[] } {
   const emptyRow: BodyRow = { body: '', date: '', progress: '', bold: false };
-  const leftRows: BodyRow[] = [];
-  const rightRows: BodyRow[] = [];
+  const leftRows = buildSideRows(leftGroups);
+  const rightRows = buildSideRows(rightGroups);
 
-  // Merge project titles preserving insertion order (left first, then right-only)
-  const allTitles: string[] = [];
-  const seen = new Set<string>();
-  for (const g of leftGroups) { if (!seen.has(g.title)) { seen.add(g.title); allTitles.push(g.title); } }
-  for (const g of rightGroups) { if (!seen.has(g.title)) { seen.add(g.title); allTitles.push(g.title); } }
-
-  const leftMap = new Map(leftGroups.map(g => [g.title, g]));
-  const rightMap = new Map(rightGroups.map(g => [g.title, g]));
-
-  for (const title of allTitles) {
-    const leftGroup = leftMap.get(title);
-    const rightGroup = rightMap.get(title);
-
-    // Project header row on both sides
-    leftRows.push({ body: `[${title}]`, date: '', progress: '', bold: true });
-    rightRows.push({ body: `[${title}]`, date: '', progress: '', bold: true });
-
-    // Merge clients from both sides
-    const leftClients = leftGroup ? subGroupByClient(leftGroup.items) : new Map<string, ConsolidatedTaskItem[]>();
-    const rightClients = rightGroup ? subGroupByClient(rightGroup.items) : new Map<string, ConsolidatedTaskItem[]>();
-    const allClients: string[] = [];
-    const clientSeen = new Set<string>();
-    for (const k of leftClients.keys()) { if (!clientSeen.has(k)) { clientSeen.add(k); allClients.push(k); } }
-    for (const k of rightClients.keys()) { if (!clientSeen.has(k)) { clientSeen.add(k); allClients.push(k); } }
-
-    for (const client of allClients) {
-      const lItems = leftClients.get(client) || [];
-      const rItems = rightClients.get(client) || [];
-      const indent = client ? '    ' : '  ';
-
-      // Client header on both sides
-      if (client) {
-        leftRows.push({ body: `  • ${client}`, date: '', progress: '', bold: false });
-        rightRows.push({ body: `  • ${client}`, date: '', progress: '', bold: false });
-      }
-
-      // Build detail rows for each side
-      const lDetailRows = buildItemRows(lItems, indent);
-      const rDetailRows = buildItemRows(rItems, indent);
-      const maxLen = Math.max(lDetailRows.length, rDetailRows.length);
-
-      for (let i = 0; i < maxLen; i++) {
-        leftRows.push(i < lDetailRows.length ? lDetailRows[i] : emptyRow);
-        rightRows.push(i < rDetailRows.length ? rDetailRows[i] : emptyRow);
-      }
-    }
-  }
+  // Pad shorter side to match total length
+  while (leftRows.length < rightRows.length) leftRows.push(emptyRow);
+  while (rightRows.length < leftRows.length) rightRows.push(emptyRow);
 
   return { leftRows, rightRows };
 }
@@ -529,39 +502,36 @@ function getCharsPerInch(fs: number): number {
   return 21;
 }
 
-// 좌우 BodyRow를 visual line 단위로 확장 (left/right 정렬 유지)
+// 한 쪽의 BodyRow를 visual line 단위로 확장 (word-wrap 분할)
+function expandSideRows(rows: BodyRow[], cpl: number): BodyRow[] {
+  const expanded: BodyRow[] = [];
+  for (const r of rows) {
+    const lines = splitTextToFit(r.body, cpl);
+    for (let j = 0; j < lines.length; j++) {
+      expanded.push({
+        body: lines[j],
+        date: j === 0 ? r.date : '',
+        progress: j === 0 ? r.progress : '',
+        bold: j === 0 && r.bold,
+      });
+    }
+  }
+  return expanded;
+}
+
+// 좌우 각각 독립 확장 후 짧은 쪽만 끝에서 패딩
 function expandAlignedRows(
     leftRows: BodyRow[], rightRows: BodyRow[],
     leftCPL: number, rightCPL: number
 ): { leftRows: BodyRow[]; rightRows: BodyRow[] } {
-  const expandedLeft: BodyRow[] = [];
-  const expandedRight: BodyRow[] = [];
   const empty: BodyRow = { body: '', date: '', progress: '', bold: false };
-  const count = Math.max(leftRows.length, rightRows.length);
+  const eL = expandSideRows(leftRows, leftCPL);
+  const eR = expandSideRows(rightRows, rightCPL);
 
-  for (let i = 0; i < count; i++) {
-    const lr = i < leftRows.length ? leftRows[i] : empty;
-    const rr = i < rightRows.length ? rightRows[i] : empty;
-    const leftLines = splitTextToFit(lr.body, leftCPL);
-    const rightLines = splitTextToFit(rr.body, rightCPL);
-    const maxLines = Math.max(leftLines.length, rightLines.length);
+  while (eL.length < eR.length) eL.push(empty);
+  while (eR.length < eL.length) eR.push(empty);
 
-    for (let j = 0; j < maxLines; j++) {
-      expandedLeft.push({
-        body: j < leftLines.length ? leftLines[j] : '',
-        date: j === 0 ? lr.date : '',
-        progress: j === 0 ? lr.progress : '',
-        bold: j === 0 && lr.bold,
-      });
-      expandedRight.push({
-        body: j < rightLines.length ? rightLines[j] : '',
-        date: j === 0 ? rr.date : '',
-        progress: j === 0 ? rr.progress : '',
-        bold: j === 0 && rr.bold,
-      });
-    }
-  }
-  return { leftRows: expandedLeft, rightRows: expandedRight };
+  return { leftRows: eL, rightRows: eR };
 }
 
 // 각 폰트 크기별로 텍스트 확장 후 페이지 수 결정
@@ -636,7 +606,7 @@ export async function generateConsolidatedPPT(
   // Footer: 3-column layout [header | 금주 | 차주] matching left/right body split
   // footer는 unifiedColW + colspan으로 처리하므로 별도 footerColW 불필요
 
-  // ✅ FIX: 이슈/특이사항 높이 — 텍스트 길이 기반으로 wrap 줄 수 추정
+  // FIX: 이슈/특이사항 높이 — 텍스트 길이 기반으로 wrap 줄 수 추정
   // 셀 너비 = LAYOUT.w - 헤더열(1.5) = 7.9inch, 폰트 8pt 기준 한 줄 약 110자
   const ISSUE_CELL_W = LAYOUT.w - 1.5;
   const CHARS_PER_LINE = Math.floor(ISSUE_CELL_W * 14); // 1inch당 약 14자 (8pt 기준)
@@ -662,7 +632,7 @@ export async function generateConsolidatedPPT(
   const noteFontSize = noteLineCount > 3 ? 7 : 8;
   const noteH = Math.max(0.50, Math.min(1.5, noteLineCount * LINE_H + 0.15));
 
-  // ✅ FIX: footer 높이를 먼저 확보하고 body 높이 계산
+  // FIX: footer 높이를 먼저 확보하고 body 높이 계산
   // (LAYOUT.y + LAYOUT.h) - LAYOUT.y - fixedH = LAYOUT.h - fixedH
   const fixedH = ROW_H.header + ROW_H.section + ROW_H.colHeader + issueH + noteH;
   const bodyH = LAYOUT.h - fixedH;
@@ -790,7 +760,7 @@ export async function generateConsolidatedPPT(
     curY += bodyHeight;
 
     // Issues/Notes — 마지막 페이지에만, body 바로 아래
-    // ✅ FIX: body와 동일한 unifiedColW 사용 → 경계선 정렬
+    // FIX: body와 동일한 unifiedColW 사용 → 경계선 정렬
     // footer: 이슈/특이사항을 하나의 테이블로 합쳐서 curY 누적 오차 제거
     if (isLastPage) {
       const footerFontSize = Math.min(issueFontSize, noteFontSize);

@@ -73,7 +73,7 @@ func (s *JiraService) Sync(req model.JiraSyncRequest) (*model.SyncResult, error)
 			date = (*issue.Fields.ResolutionDate)[:10]
 		}
 		result.Items = append(result.Items, model.SyncItem{
-			Title:   fmt.Sprintf("[%s] %s", issue.Key, issue.Fields.Summary),
+			Title:   issue.Fields.Summary,
 			Date:    date,
 			URL:     fmt.Sprintf("%s/browse/%s", req.BaseURL, issue.Key),
 			Type:    "issue",

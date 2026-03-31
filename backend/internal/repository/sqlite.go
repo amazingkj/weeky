@@ -569,7 +569,7 @@ func (r *Repository) GetReport(id int64, userID int64) (*model.Report, error) {
 	var thisWeekJSON, nextWeekJSON string
 
 	err := r.db.QueryRow(
-		"SELECT id, team_name, author_name, report_date, this_week, next_week, issues, notes, next_issues, next_notes, template_id, created_at FROM reports WHERE id = ? AND user_id = ?",
+		"SELECT id, team_name, author_name, report_date, COALESCE(this_week, '[]'), COALESCE(next_week, '[]'), COALESCE(issues, ''), COALESCE(notes, ''), COALESCE(next_issues, ''), COALESCE(next_notes, ''), COALESCE(template_id, 0), created_at FROM reports WHERE id = ? AND user_id = ?",
 		id, userID,
 	).Scan(&report.ID, &report.TeamName, &report.AuthorName, &report.ReportDate, &thisWeekJSON, &nextWeekJSON, &report.Issues, &report.Notes, &report.NextIssues, &report.NextNotes, &report.TemplateID, &report.CreatedAt)
 
@@ -650,7 +650,7 @@ func (r *Repository) GetReportByDateAndUser(reportDate string, userID int64) (*m
 
 	mon, sun := weekRange(reportDate)
 	err := r.db.QueryRow(
-		"SELECT id, team_name, author_name, report_date, this_week, next_week, issues, notes, next_issues, next_notes, template_id, created_at FROM reports WHERE report_date BETWEEN ? AND ? AND user_id = ? ORDER BY created_at DESC LIMIT 1",
+		"SELECT id, team_name, author_name, report_date, COALESCE(this_week, '[]'), COALESCE(next_week, '[]'), COALESCE(issues, ''), COALESCE(notes, ''), COALESCE(next_issues, ''), COALESCE(next_notes, ''), COALESCE(template_id, 0), created_at FROM reports WHERE report_date BETWEEN ? AND ? AND user_id = ? ORDER BY created_at DESC LIMIT 1",
 		mon, sun, userID,
 	).Scan(&report.ID, &report.TeamName, &report.AuthorName, &report.ReportDate, &thisWeekJSON, &nextWeekJSON, &report.Issues, &report.Notes, &report.NextIssues, &report.NextNotes, &report.TemplateID, &report.CreatedAt)
 
@@ -670,7 +670,7 @@ func (r *Repository) GetReportByDateAndUser(reportDate string, userID int64) (*m
 
 func (r *Repository) GetReportsByUser(userID int64) ([]model.Report, error) {
 	rows, err := r.db.Query(
-		"SELECT id, team_name, author_name, report_date, this_week, next_week, issues, notes, next_issues, next_notes, template_id, created_at FROM reports WHERE user_id = ? ORDER BY created_at DESC",
+		"SELECT id, team_name, author_name, report_date, COALESCE(this_week, '[]'), COALESCE(next_week, '[]'), COALESCE(issues, ''), COALESCE(notes, ''), COALESCE(next_issues, ''), COALESCE(next_notes, ''), COALESCE(template_id, 0), created_at FROM reports WHERE user_id = ? ORDER BY created_at DESC",
 		userID,
 	)
 	if err != nil {
@@ -1001,7 +1001,7 @@ func (r *Repository) GetReportByID(id int64) (*model.Report, error) {
 	var thisWeekJSON, nextWeekJSON string
 
 	err := r.db.QueryRow(
-		"SELECT id, team_name, author_name, report_date, this_week, next_week, issues, notes, next_issues, next_notes, template_id, created_at FROM reports WHERE id = ?",
+		"SELECT id, team_name, author_name, report_date, COALESCE(this_week, '[]'), COALESCE(next_week, '[]'), COALESCE(issues, ''), COALESCE(notes, ''), COALESCE(next_issues, ''), COALESCE(next_notes, ''), COALESCE(template_id, 0), created_at FROM reports WHERE id = ?",
 		id,
 	).Scan(&report.ID, &report.TeamName, &report.AuthorName, &report.ReportDate, &thisWeekJSON, &nextWeekJSON, &report.Issues, &report.Notes, &report.NextIssues, &report.NextNotes, &report.TemplateID, &report.CreatedAt)
 
