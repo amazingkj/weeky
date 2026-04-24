@@ -18,6 +18,7 @@ interface PreviewRow {
   progress: string;
   bold: boolean;
   isProjectHeader?: boolean;
+  indent?: number; // 0=project, 1=client/detail-no-client, 2=detail-under-client
 }
 
 function groupTasksByTitle(
@@ -68,7 +69,7 @@ function subGroupByClient(items: ConsolidatedTask['items']): Map<string, Consoli
 }
 
 // Build detail rows for a list of items (without project/client headers)
-function buildItemPreviewRows(items: ConsolidatedTask['items']): PreviewRow[] {
+function buildItemPreviewRows(items: ConsolidatedTask['items'], indent: number): PreviewRow[] {
   const rows: PreviewRow[] = [];
   for (const item of items) {
     const memberTag = item.memberName ? ` (${item.memberName})` : '';
@@ -78,6 +79,7 @@ function buildItemPreviewRows(items: ConsolidatedTask['items']): PreviewRow[] {
       date: formatDateMMDD(item.task.due_date),
       progress: `${item.task.progress}%`,
       bold: false,
+      indent,
     });
   }
   return rows;
@@ -87,13 +89,13 @@ function buildItemPreviewRows(items: ConsolidatedTask['items']): PreviewRow[] {
 function buildSidePreviewRows(groups: ConsolidatedTask[]): PreviewRow[] {
   const rows: PreviewRow[] = [];
   for (const g of groups) {
-    rows.push({ body: `[${g.title}]`, date: '', progress: '', bold: true, isProjectHeader: true });
+    rows.push({ body: `[${g.title}]`, date: '', progress: '', bold: true, isProjectHeader: true, indent: 0 });
     const clientMap = subGroupByClient(g.items);
     for (const [client, items] of clientMap) {
       if (client) {
-        rows.push({ body: `• ${client}`, date: '', progress: '', bold: false, isProjectHeader: false });
+        rows.push({ body: `• ${client}`, date: '', progress: '', bold: false, isProjectHeader: false, indent: 1 });
       }
-      rows.push(...buildItemPreviewRows(items));
+      rows.push(...buildItemPreviewRows(items, client ? 2 : 1));
     }
   }
   return rows;
@@ -264,7 +266,7 @@ export default function ConsolidatedPptPreview({ data, leaderName }: Consolidate
                       <td className={`${brdCls} px-1 py-0 align-top`}>
                         {lr.bold
                           ? <span className="font-medium">{lr.body}</span>
-                          : <span className="pl-2">{lr.body}</span>
+                          : <span className={lr.indent === 2 ? 'pl-6' : 'pl-2'}>{lr.body}</span>
                         }
                       </td>
                       <td className={`${brdCls} px-1 py-0 text-center align-top`}>{lr.date}</td>
@@ -272,7 +274,7 @@ export default function ConsolidatedPptPreview({ data, leaderName }: Consolidate
                       <td className={`${brdCls} px-1 py-0 align-top`}>
                         {rr.bold
                           ? <span className="font-medium">{rr.body}</span>
-                          : <span className="pl-2">{rr.body}</span>
+                          : <span className={rr.indent === 2 ? 'pl-6' : 'pl-2'}>{rr.body}</span>
                         }
                       </td>
                       <td className={`${brdCls} px-1 py-0 text-center align-top`}>{rr.date}</td>

@@ -435,7 +435,7 @@ function buildSideRows(groups: ConsolidatedGroup[]): BodyRow[] {
     rows.push({ body: `[${g.title}]`, date: '', progress: '', bold: true });
     const clientMap = subGroupByClient(g.items);
     for (const [client, items] of clientMap) {
-      const indent = client ? '    ' : '  ';
+      const indent = client ? '      ' : '  ';
       if (client) {
         rows.push({ body: `  • ${client}`, date: '', progress: '', bold: false });
       }
