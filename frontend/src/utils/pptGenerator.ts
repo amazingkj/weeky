@@ -416,7 +416,7 @@ function subGroupByClient(items: ConsolidatedTaskItem[]): Map<string, Consolidat
 function buildItemRows(items: ConsolidatedTaskItem[], indent: string): BodyRow[] {
   const rows: BodyRow[] = [];
   for (const item of items) {
-    const memberTag = item.memberName ? ` (${item.memberName})` : '';
+    const memberTag = item.memberName ? ` ( ${item.memberName} )` : '';
     const detail = item.task.details || '-';
     rows.push({
       body: `${indent}- ${detail}${memberTag}`,
@@ -428,6 +428,14 @@ function buildItemRows(items: ConsolidatedTaskItem[], indent: string): BodyRow[]
   return rows;
 }
 
+// NBSP( )를 사용하여 PPT 렌더 시 leading 공백 보존 보장
+// (일반 space는 splitTextToFit의 split(' ')에 의해 토큰화돼 leading 공백이 유실되고,
+//  일부 PPT 렌더러도 leading 일반공백을 시각적으로 무시할 수 있음)
+const NBSP = ' ';
+const INDENT_CLIENT_HEADER = NBSP.repeat(2);   // "  • 고객사"
+const INDENT_DETAIL_W_CLIENT = NBSP.repeat(6); // "      - 진행사항"
+const INDENT_DETAIL_NO_CLIENT = NBSP.repeat(2); // "  - 진행사항"
+
 // Build rows for one side independently (project → client → detail)
 function buildSideRows(groups: ConsolidatedGroup[]): BodyRow[] {
   const rows: BodyRow[] = [];
@@ -435,9 +443,9 @@ function buildSideRows(groups: ConsolidatedGroup[]): BodyRow[] {
     rows.push({ body: `[${g.title}]`, date: '', progress: '', bold: true });
     const clientMap = subGroupByClient(g.items);
     for (const [client, items] of clientMap) {
-      const indent = client ? '      ' : '  ';
+      const indent = client ? INDENT_DETAIL_W_CLIENT : INDENT_DETAIL_NO_CLIENT;
       if (client) {
-        rows.push({ body: `  • ${client}`, date: '', progress: '', bold: false });
+        rows.push({ body: `${INDENT_CLIENT_HEADER}• ${client}`, date: '', progress: '', bold: false });
       }
       rows.push(...buildItemRows(items, indent));
     }
@@ -477,14 +485,25 @@ function measureTextWidth(text: string): number {
 }
 
 // 단어 단위로 텍스트를 셀 폭에 맞게 분할 (word-wrap 대체)
+// leading whitespace(NBSP/space)는 추출해두고 wrap된 모든 줄에 다시 prepend하여
+// 미리보기의 CSS pl-* 동작(둘째 줄도 들여쓰기)과 일치시킨다.
 function splitTextToFit(text: string, charsPerLine: number): string[] {
-  if (!text || measureTextWidth(text) <= charsPerLine) return [text || ''];
-  const segments = text.split(' ');
+  if (!text) return [''];
+  if (measureTextWidth(text) <= charsPerLine) return [text];
+
+  let i = 0;
+  while (i < text.length && (text[i] === ' ' || text[i] === ' ')) i++;
+  const indent = text.slice(0, i);
+  const body = text.slice(i);
+  const indentW = measureTextWidth(indent);
+  const innerCPL = Math.max(charsPerLine - indentW, 1);
+
+  const segments = body.split(' ');
   const lines: string[] = [];
   let current = '';
   for (const seg of segments) {
     const test = current ? `${current} ${seg}` : seg;
-    if (measureTextWidth(test) <= charsPerLine) {
+    if (measureTextWidth(test) <= innerCPL) {
       current = test;
     } else {
       if (current) lines.push(current);
@@ -492,7 +511,7 @@ function splitTextToFit(text: string, charsPerLine: number): string[] {
     }
   }
   if (current) lines.push(current);
-  return lines.length > 0 ? lines : [''];
+  return lines.length > 0 ? lines.map(l => indent + l) : [indent];
 }
 
 function getCharsPerInch(fs: number): number {

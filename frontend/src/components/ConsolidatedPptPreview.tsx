@@ -72,7 +72,7 @@ function subGroupByClient(items: ConsolidatedTask['items']): Map<string, Consoli
 function buildItemPreviewRows(items: ConsolidatedTask['items'], indent: number): PreviewRow[] {
   const rows: PreviewRow[] = [];
   for (const item of items) {
-    const memberTag = item.memberName ? ` (${item.memberName})` : '';
+    const memberTag = item.memberName ? ` ( ${item.memberName} )` : '';
     const detail = item.task.details || '-';
     rows.push({
       body: `- ${detail}${memberTag}`,
