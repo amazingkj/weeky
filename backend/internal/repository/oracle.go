@@ -190,6 +190,54 @@ var oracleMigrations = []oracleMigration{
 			)`,
 		},
 	},
+	{
+		version: 9,
+		sqls: []string{
+			`CREATE TABLE site_projects (
+				id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				team_id NUMBER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+				project_name VARCHAR2(500) NOT NULL,
+				client_name VARCHAR2(500) DEFAULT '',
+				is_active NUMBER(1) DEFAULT 1 NOT NULL,
+				sort_order NUMBER DEFAULT 0 NOT NULL,
+				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+				CONSTRAINT uq_site_projects_team_name UNIQUE (team_id, project_name)
+			)`,
+			`CREATE TABLE site_project_authors (
+				site_project_id NUMBER NOT NULL REFERENCES site_projects(id) ON DELETE CASCADE,
+				user_id NUMBER NOT NULL REFERENCES users(id),
+				sort_order NUMBER DEFAULT 0 NOT NULL,
+				CONSTRAINT pk_site_project_authors PRIMARY KEY (site_project_id, user_id)
+			)`,
+			`CREATE TABLE site_reports (
+				id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				team_id NUMBER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+				site_project_id NUMBER NOT NULL REFERENCES site_projects(id) ON DELETE CASCADE,
+				author_user_id NUMBER NOT NULL REFERENCES users(id),
+				author_names CLOB DEFAULT '[]',
+				project_name VARCHAR2(500) DEFAULT '',
+				report_date VARCHAR2(10) NOT NULL,
+				report_date_text VARCHAR2(100) DEFAULT '',
+				this_week CLOB DEFAULT '[]',
+				next_week CLOB DEFAULT '[]',
+				notes CLOB DEFAULT '',
+				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+				CONSTRAINT uq_site_reports_proj_date UNIQUE (site_project_id, report_date)
+			)`,
+		},
+	},
+	{
+		// Oracle은 '' = NULL이라 NOT NULL DEFAULT '' 컬럼에 빈 문자열 INSERT 시
+		// ORA-01400 발생. v8에서 NOT NULL로 잡았던 텍스트 컬럼을 nullable로 풀어
+		// 빈 문자열(=NULL)이 정상적으로 저장되도록 한다.
+		version: 10,
+		sqls: []string{
+			`ALTER TABLE consolidation_rules MODIFY pattern NULL`,
+			`ALTER TABLE consolidation_rules MODIFY replacement NULL`,
+			`ALTER TABLE consolidation_rules MODIFY scope_title NULL`,
+		},
+	},
 }
 
 func runOracleMigrations(db *sql.DB) error {
@@ -345,6 +393,15 @@ func (r *OracleRepository) CountUsers() (int64, error) {
 
 func (r *OracleRepository) UpdateUserPassword(userID int64, passwordHash string) error {
 	_, err := r.db.Exec("UPDATE users SET password_hash = :1 WHERE id = :2", passwordHash, userID)
+	return err
+}
+
+func (r *OracleRepository) UpdateUserAdmin(userID int64, isAdmin bool) error {
+	val := 0
+	if isAdmin {
+		val = 1
+	}
+	_, err := r.db.Exec("UPDATE users SET is_admin = :1 WHERE id = :2", val, userID)
 	return err
 }
 
@@ -1166,10 +1223,14 @@ func (r *OracleRepository) GetConsolidationRules(teamID int64) ([]model.Consolid
 	for rows.Next() {
 		var c model.ConsolidationRule
 		var ruleType string
-		if err := rows.Scan(&c.ID, &c.TeamID, &ruleType, &c.Pattern, &c.Replacement, &c.ScopeTitle, &c.SortOrder, &c.CreatedAt); err != nil {
+		var pattern, replacement, scopeTitle sql.NullString
+		if err := rows.Scan(&c.ID, &c.TeamID, &ruleType, &pattern, &replacement, &scopeTitle, &c.SortOrder, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 		c.RuleType = model.ConsolidationRuleType(ruleType)
+		c.Pattern = pattern.String
+		c.Replacement = replacement.String
+		c.ScopeTitle = scopeTitle.String
 		rules = append(rules, c)
 	}
 	return rules, rows.Err()
@@ -1178,14 +1239,18 @@ func (r *OracleRepository) GetConsolidationRules(teamID int64) ([]model.Consolid
 func (r *OracleRepository) GetConsolidationRule(id int64) (*model.ConsolidationRule, error) {
 	var c model.ConsolidationRule
 	var ruleType string
+	var pattern, replacement, scopeTitle sql.NullString
 	err := r.db.QueryRow(
 		`SELECT id, team_id, rule_type, pattern, replacement, scope_title, sort_order, created_at
 		 FROM consolidation_rules WHERE id = :1`, id,
-	).Scan(&c.ID, &c.TeamID, &ruleType, &c.Pattern, &c.Replacement, &c.ScopeTitle, &c.SortOrder, &c.CreatedAt)
+	).Scan(&c.ID, &c.TeamID, &ruleType, &pattern, &replacement, &scopeTitle, &c.SortOrder, &c.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
 	c.RuleType = model.ConsolidationRuleType(ruleType)
+	c.Pattern = pattern.String
+	c.Replacement = replacement.String
+	c.ScopeTitle = scopeTitle.String
 	return &c, nil
 }
 
@@ -1221,4 +1286,377 @@ func (r *OracleRepository) ReorderConsolidationRules(teamID int64, ids []int64) 
 		}
 	}
 	return tx.Commit()
+}
+
+// --- SiteProject / SiteProjectAuthor ---
+
+func (r *OracleRepository) loadSiteProjectAuthors(siteProjectID int64) ([]model.SiteProjectAuthor, error) {
+	rows, err := r.db.Query(
+		`SELECT spa.site_project_id, spa.user_id, u.name, u.email, spa.sort_order
+		 FROM site_project_authors spa
+		 JOIN users u ON spa.user_id = u.id
+		 WHERE spa.site_project_id = :1
+		 ORDER BY spa.sort_order, u.name`, siteProjectID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	authors := []model.SiteProjectAuthor{}
+	for rows.Next() {
+		var a model.SiteProjectAuthor
+		if err := rows.Scan(&a.SiteProjectID, &a.UserID, &a.UserName, &a.UserEmail, &a.SortOrder); err != nil {
+			return nil, err
+		}
+		authors = append(authors, a)
+	}
+	return authors, rows.Err()
+}
+
+func (r *OracleRepository) replaceSiteProjectAuthors(tx *sql.Tx, siteProjectID int64, userIDs []int64) error {
+	if _, err := tx.Exec("DELETE FROM site_project_authors WHERE site_project_id = :1", siteProjectID); err != nil {
+		return err
+	}
+	if len(userIDs) == 0 {
+		return nil
+	}
+	stmt, err := tx.Prepare("INSERT INTO site_project_authors (site_project_id, user_id, sort_order) VALUES (:1, :2, :3)")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for i, uid := range userIDs {
+		if _, err := stmt.Exec(siteProjectID, uid, i); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *OracleRepository) CreateSiteProject(teamID int64, req model.CreateSiteProjectRequest) (*model.SiteProject, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var nextOrder int
+	tx.QueryRow("SELECT COALESCE(MAX(sort_order)+1, 0) FROM site_projects WHERE team_id = :1", teamID).Scan(&nextOrder)
+
+	var id int64
+	_, err = tx.Exec(
+		`INSERT INTO site_projects (team_id, project_name, client_name, is_active, sort_order)
+		 VALUES (:1, :2, :3, 1, :4)
+		 RETURNING id INTO :5`,
+		teamID, req.ProjectName, req.ClientName, nextOrder, go_ora.Out{Dest: &id, Size: 8},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.replaceSiteProjectAuthors(tx, id, req.AuthorIDs); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	authors, _ := r.loadSiteProjectAuthors(id)
+	return &model.SiteProject{
+		ID: id, TeamID: teamID, ProjectName: req.ProjectName, ClientName: req.ClientName,
+		IsActive: true, SortOrder: nextOrder, CreatedAt: time.Now(), Authors: authors,
+	}, nil
+}
+
+func (r *OracleRepository) GetSiteProjects(teamID int64, activeOnly bool) ([]model.SiteProject, error) {
+	query := "SELECT id, team_id, project_name, COALESCE(client_name, ''), is_active, sort_order, created_at FROM site_projects WHERE team_id = :1"
+	if activeOnly {
+		query += " AND is_active = 1"
+	}
+	query += " ORDER BY sort_order, project_name"
+	rows, err := r.db.Query(query, teamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	projects := []model.SiteProject{}
+	for rows.Next() {
+		var p model.SiteProject
+		var isActive int
+		if err := rows.Scan(&p.ID, &p.TeamID, &p.ProjectName, &p.ClientName, &isActive, &p.SortOrder, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		p.IsActive = isActive == 1
+		projects = append(projects, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range projects {
+		authors, err := r.loadSiteProjectAuthors(projects[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		projects[i].Authors = authors
+	}
+	return projects, nil
+}
+
+func (r *OracleRepository) GetSiteProject(id int64) (*model.SiteProject, error) {
+	var p model.SiteProject
+	var isActive int
+	err := r.db.QueryRow(
+		"SELECT id, team_id, project_name, COALESCE(client_name, ''), is_active, sort_order, created_at FROM site_projects WHERE id = :1", id,
+	).Scan(&p.ID, &p.TeamID, &p.ProjectName, &p.ClientName, &isActive, &p.SortOrder, &p.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	p.IsActive = isActive == 1
+	authors, err := r.loadSiteProjectAuthors(p.ID)
+	if err != nil {
+		return nil, err
+	}
+	p.Authors = authors
+	return &p, nil
+}
+
+func (r *OracleRepository) UpdateSiteProject(id int64, req model.UpdateSiteProjectRequest) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if req.IsActive != nil {
+		active := 0
+		if *req.IsActive {
+			active = 1
+		}
+		if _, err := tx.Exec(
+			"UPDATE site_projects SET project_name = :1, client_name = :2, is_active = :3 WHERE id = :4",
+			req.ProjectName, req.ClientName, active, id,
+		); err != nil {
+			return err
+		}
+	} else {
+		if _, err := tx.Exec(
+			"UPDATE site_projects SET project_name = :1, client_name = :2 WHERE id = :3",
+			req.ProjectName, req.ClientName, id,
+		); err != nil {
+			return err
+		}
+	}
+	if req.AuthorIDs != nil {
+		if err := r.replaceSiteProjectAuthors(tx, id, req.AuthorIDs); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *OracleRepository) DeleteSiteProject(id int64) error {
+	_, err := r.db.Exec("DELETE FROM site_projects WHERE id = :1", id)
+	return err
+}
+
+func (r *OracleRepository) GetSiteProjectsByAuthor(teamID, userID int64) ([]model.SiteProject, error) {
+	rows, err := r.db.Query(
+		`SELECT sp.id, sp.team_id, sp.project_name, COALESCE(sp.client_name, ''), sp.is_active, sp.sort_order, sp.created_at
+		 FROM site_projects sp
+		 JOIN site_project_authors spa ON spa.site_project_id = sp.id
+		 WHERE sp.team_id = :1 AND spa.user_id = :2 AND sp.is_active = 1
+		 ORDER BY sp.sort_order, sp.project_name`, teamID, userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	projects := []model.SiteProject{}
+	for rows.Next() {
+		var p model.SiteProject
+		var isActive int
+		if err := rows.Scan(&p.ID, &p.TeamID, &p.ProjectName, &p.ClientName, &isActive, &p.SortOrder, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		p.IsActive = isActive == 1
+		projects = append(projects, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range projects {
+		authors, err := r.loadSiteProjectAuthors(projects[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		projects[i].Authors = authors
+	}
+	return projects, nil
+}
+
+func (r *OracleRepository) IsSiteProjectAuthor(siteProjectID, userID int64) (bool, error) {
+	var n int
+	err := r.db.QueryRow(
+		"SELECT COUNT(*) FROM site_project_authors WHERE site_project_id = :1 AND user_id = :2",
+		siteProjectID, userID,
+	).Scan(&n)
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+// --- SiteReport ---
+
+func (r *OracleRepository) SaveSiteReport(teamID, userID int64, req model.SaveSiteReportRequest) (*model.SiteReport, error) {
+	thisWeekJSON, err := json.Marshal(req.ThisWeek)
+	if err != nil {
+		return nil, err
+	}
+	nextWeekJSON, err := json.Marshal(req.NextWeek)
+	if err != nil {
+		return nil, err
+	}
+
+	project, err := r.GetSiteProject(req.SiteProjectID)
+	if err != nil {
+		return nil, err
+	}
+	authorNames := make([]string, 0, len(project.Authors))
+	for _, a := range project.Authors {
+		authorNames = append(authorNames, a.UserName)
+	}
+	authorNamesJSON, err := json.Marshal(authorNames)
+	if err != nil {
+		return nil, err
+	}
+
+	mon, _ := weekRange(req.ReportDate)
+
+	// go-ora는 string을 VARCHAR2로 바인딩 → Oracle CLOB 컬럼에 INSERT/UPDATE 시
+	// ORA-00932 (expected CLOB got CHAR). go_ora.Clob 타입으로 명시 바인딩.
+	authorNamesClob := go_ora.Clob{Valid: true, String: string(authorNamesJSON)}
+	thisWeekClob := go_ora.Clob{Valid: true, String: string(thisWeekJSON)}
+	nextWeekClob := go_ora.Clob{Valid: true, String: string(nextWeekJSON)}
+	notesClob := go_ora.Clob{Valid: true, String: req.Notes}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var existingID int64
+	err = tx.QueryRow(
+		"SELECT id FROM site_reports WHERE site_project_id = :1 AND report_date = :2",
+		req.SiteProjectID, mon,
+	).Scan(&existingID)
+
+	switch {
+	case err == sql.ErrNoRows:
+		_, err = tx.Exec(
+			`INSERT INTO site_reports (team_id, site_project_id, author_user_id, author_names,
+				project_name, report_date, report_date_text, this_week, next_week, notes, updated_at)
+			 VALUES (:1, :2, :3, :4, :5, :6, :7, :8, :9, :10, CURRENT_TIMESTAMP)`,
+			teamID, req.SiteProjectID, userID, authorNamesClob,
+			project.ProjectName, mon, req.ReportDateText,
+			thisWeekClob, nextWeekClob, notesClob,
+		)
+		if err != nil {
+			return nil, err
+		}
+	case err != nil:
+		return nil, err
+	default:
+		_, err = tx.Exec(
+			`UPDATE site_reports SET
+				author_user_id = :1,
+				author_names = :2,
+				project_name = :3,
+				report_date_text = :4,
+				this_week = :5,
+				next_week = :6,
+				notes = :7,
+				updated_at = CURRENT_TIMESTAMP
+			 WHERE id = :8`,
+			userID, authorNamesClob, project.ProjectName, req.ReportDateText,
+			thisWeekClob, nextWeekClob, notesClob, existingID,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return r.GetSiteReportByProjectAndDate(req.SiteProjectID, mon)
+}
+
+func (r *OracleRepository) scanSiteReport(scan func(...any) error) (*model.SiteReport, error) {
+	var sr model.SiteReport
+	var authorNamesJSON, thisWeekJSON, nextWeekJSON string
+	if err := scan(&sr.ID, &sr.TeamID, &sr.SiteProjectID, &sr.AuthorUserID, &authorNamesJSON,
+		&sr.ProjectName, &sr.ReportDate, &sr.ReportDateText, &thisWeekJSON, &nextWeekJSON,
+		&sr.Notes, &sr.CreatedAt, &sr.UpdatedAt); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(authorNamesJSON), &sr.AuthorNames); err != nil {
+		sr.AuthorNames = []string{}
+	}
+	if err := json.Unmarshal([]byte(thisWeekJSON), &sr.ThisWeek); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(nextWeekJSON), &sr.NextWeek); err != nil {
+		return nil, err
+	}
+	if sr.ThisWeek == nil {
+		sr.ThisWeek = []model.SiteTask{}
+	}
+	if sr.NextWeek == nil {
+		sr.NextWeek = []model.SiteNextTask{}
+	}
+	return &sr, nil
+}
+
+// Oracle은 ''=NULL이라 빈 문자열이 NULL로 저장됨 → scan 시 NULL→string 변환 실패 방지를 위해 COALESCE
+const oracleSiteReportColumns = `id, team_id, site_project_id, author_user_id, COALESCE(author_names, '[]'),
+	COALESCE(project_name, ''), report_date, COALESCE(report_date_text, ''),
+	COALESCE(this_week, '[]'), COALESCE(next_week, '[]'), COALESCE(notes, ''),
+	created_at, updated_at`
+
+func (r *OracleRepository) GetSiteReport(id int64) (*model.SiteReport, error) {
+	row := r.db.QueryRow(`SELECT `+oracleSiteReportColumns+` FROM site_reports WHERE id = :1`, id)
+	return r.scanSiteReport(row.Scan)
+}
+
+func (r *OracleRepository) GetSiteReportByProjectAndDate(siteProjectID int64, reportDate string) (*model.SiteReport, error) {
+	mon, sun := weekRange(reportDate)
+	row := r.db.QueryRow(
+		`SELECT `+oracleSiteReportColumns+` FROM site_reports
+		 WHERE site_project_id = :1 AND report_date BETWEEN :2 AND :3`,
+		siteProjectID, mon, sun,
+	)
+	return r.scanSiteReport(row.Scan)
+}
+
+func (r *OracleRepository) GetSiteReportsByTeamAndDate(teamID int64, reportDate string) ([]model.SiteReport, error) {
+	mon, sun := weekRange(reportDate)
+	rows, err := r.db.Query(
+		`SELECT `+oracleSiteReportColumns+` FROM site_reports
+		 WHERE team_id = :1 AND report_date BETWEEN :2 AND :3
+		 ORDER BY site_project_id`,
+		teamID, mon, sun,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	results := []model.SiteReport{}
+	for rows.Next() {
+		sr, err := r.scanSiteReport(rows.Scan)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, *sr)
+	}
+	return results, rows.Err()
 }

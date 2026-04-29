@@ -5,6 +5,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import Loading from './components/ui/Loading';
 
 const ReportForm = lazy(() => import('./components/ReportForm'));
+const SiteReportForm = lazy(() => import('./components/SiteReportForm'));
 const TeamPanel = lazy(() => import('./components/TeamPanel'));
 const ConfigPanel = lazy(() => import('./components/ConfigPanel'));
 const InviteCodeManager = lazy(() => import('./components/InviteCodeManager'));
@@ -12,7 +13,7 @@ const AdminUserManager = lazy(() => import('./components/AdminUserManager'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 
-type Tab = 'report' | 'team' | 'config';
+type Tab = 'report' | 'site' | 'team' | 'config';
 
 interface TabConfig {
   id: Tab;
@@ -23,6 +24,12 @@ interface TabConfig {
 const reportIcon = (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  </svg>
+);
+
+const siteIcon = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3m4-7h.01M11 14h.01M7 10h.01M11 10h.01M7 6h.01M11 6h.01" />
   </svg>
 );
 
@@ -41,6 +48,7 @@ const configIcon = (
 
 const TABS: TabConfig[] = [
   { id: 'report', label: '보고서 작성', icon: reportIcon },
+  { id: 'site', label: '사이트 보고서', icon: siteIcon },
   { id: 'team', label: '팀', icon: teamIcon },
   { id: 'config', label: '설정', icon: configIcon },
 ];
@@ -82,6 +90,7 @@ function AuthenticatedApp() {
         <ErrorBoundary>
           <Suspense fallback={<LoadingFallback />}>
             {activeTab === 'report' && <ReportForm onNavigateToConfig={() => setActiveTab('config')} />}
+            {activeTab === 'site' && <SiteReportForm />}
             {activeTab === 'team' && <TeamPanel />}
             {activeTab === 'config' && <ConfigWithInvite />}
           </Suspense>

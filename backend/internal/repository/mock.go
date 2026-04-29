@@ -121,6 +121,16 @@ func (m *MockRepository) UpdateUserPassword(userID int64, passwordHash string) e
 	return nil
 }
 
+func (m *MockRepository) UpdateUserAdmin(userID int64, isAdmin bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if u, ok := m.users[userID]; ok {
+		u.IsAdmin = isAdmin
+		m.users[userID] = u
+	}
+	return nil
+}
+
 func (m *MockRepository) ReassignLegacyData(userID int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -557,6 +567,58 @@ func (m *MockRepository) DeleteConsolidationRule(id int64) error {
 
 func (m *MockRepository) ReorderConsolidationRules(teamID int64, ids []int64) error {
 	return nil
+}
+
+
+func (m *MockRepository) CreateSiteProject(teamID int64, req model.CreateSiteProjectRequest) (*model.SiteProject, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	id := m.nextID
+	m.nextID++
+	return &model.SiteProject{
+		ID: id, TeamID: teamID, ProjectName: req.ProjectName, ClientName: req.ClientName,
+		IsActive: true, CreatedAt: time.Now(),
+	}, nil
+}
+
+func (m *MockRepository) GetSiteProjects(teamID int64, activeOnly bool) ([]model.SiteProject, error) {
+	return nil, nil
+}
+
+func (m *MockRepository) GetSiteProject(id int64) (*model.SiteProject, error) {
+	return nil, errors.New("not found")
+}
+
+func (m *MockRepository) UpdateSiteProject(id int64, req model.UpdateSiteProjectRequest) error {
+	return nil
+}
+
+func (m *MockRepository) DeleteSiteProject(id int64) error {
+	return nil
+}
+
+func (m *MockRepository) GetSiteProjectsByAuthor(teamID, userID int64) ([]model.SiteProject, error) {
+	return nil, nil
+}
+
+func (m *MockRepository) IsSiteProjectAuthor(siteProjectID, userID int64) (bool, error) {
+	return false, nil
+}
+
+func (m *MockRepository) SaveSiteReport(teamID, userID int64, req model.SaveSiteReportRequest) (*model.SiteReport, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (m *MockRepository) GetSiteReport(id int64) (*model.SiteReport, error) {
+	return nil, errors.New("not found")
+}
+
+func (m *MockRepository) GetSiteReportByProjectAndDate(siteProjectID int64, reportDate string) (*model.SiteReport, error) {
+	return nil, errors.New("not found")
+}
+
+func (m *MockRepository) GetSiteReportsByTeamAndDate(teamID int64, reportDate string) ([]model.SiteReport, error) {
+	return nil, nil
 }
 
 var _ IRepository = (*MockRepository)(nil)

@@ -251,6 +251,54 @@ func (h *Handler) AdminResetPassword(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "비밀번호가 초기화되었습니다"})
 }
 
+func (h *Handler) AdminSetUserAdmin(c *fiber.Ctx) error {
+	targetID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 사용자 ID입니다")
+	}
+
+	var req struct {
+		IsAdmin bool `json:"is_admin"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return badRequest(c, "잘못된 요청입니다")
+	}
+
+	actorID := getUserID(c)
+	if !req.IsAdmin && actorID == targetID {
+		return badRequest(c, "본인의 관리자 권한은 해제할 수 없습니다")
+	}
+
+	target, err := h.repo.GetUserByID(targetID)
+	if err != nil {
+		return notFound(c, "사용자를 찾을 수 없습니다")
+	}
+
+	// 마지막 관리자 보호: 시스템에서 관리자가 사라지면 잠기므로 차단
+	if !req.IsAdmin && target.IsAdmin {
+		users, err := h.repo.GetAllUsers()
+		if err != nil {
+			return internalError(c, err)
+		}
+		adminCount := 0
+		for _, u := range users {
+			if u.IsAdmin {
+				adminCount++
+			}
+		}
+		if adminCount <= 1 {
+			return badRequest(c, "마지막 관리자는 해제할 수 없습니다")
+		}
+	}
+
+	if err := h.repo.UpdateUserAdmin(targetID, req.IsAdmin); err != nil {
+		return internalError(c, err)
+	}
+
+	slog.Info("admin role updated", "actor_id", actorID, "target_user_id", targetID, "is_admin", req.IsAdmin)
+	return c.JSON(fiber.Map{"message": "관리자 권한이 변경되었습니다"})
+}
+
 func getUserID(c *fiber.Ctx) int64 {
 	id, _ := c.Locals("userID").(int64)
 	return id

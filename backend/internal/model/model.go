@@ -341,3 +341,81 @@ type UpdateConsolidationRuleRequest struct {
 type ReorderConsolidationRulesRequest struct {
 	IDs []int64 `json:"ids"`
 }
+
+// --- 사이트 파견 보고서 (Site Dispatch Report) ---
+//
+// 본사 APIM 양식과는 별도 양식으로, 고객사 현장 파견 인원이 작성한다.
+// 취합 시 ConsolidationRule/ConsolidatedEdit 적용 없이 그대로 PPT 뒤에 append된다.
+
+// SiteTask: 금주실적 5컬럼 (계획업무 | 소요일 | 시작일 | 완료일 | 실적)
+type SiteTask struct {
+	Title       string `json:"title"`        // 계획업무 (■/<>/번호 포함 멀티라인 텍스트)
+	ElapsedDays string `json:"elapsed_days"` // 소요일
+	StartDate   string `json:"start_date"`   // 시작일
+	DueDate     string `json:"due_date"`     // 완료일
+	Progress    string `json:"progress"`     // 실적 (% 또는 - 등 자유 텍스트)
+}
+
+// SiteNextTask: 차주계획 3컬럼 (계획업무 | 시작예정일 | 완료예정일)
+type SiteNextTask struct {
+	Title     string `json:"title"`
+	StartDate string `json:"start_date"`
+	DueDate   string `json:"due_date"`
+}
+
+type SiteProject struct {
+	ID          int64               `json:"id"`
+	TeamID      int64               `json:"team_id"`
+	ProjectName string              `json:"project_name"` // 헤더 출력용 (예: "한화손해보험 마이데이터, 유지보수")
+	ClientName  string              `json:"client_name"`  // 고객사명 (예: "한화손해보험")
+	IsActive    bool                `json:"is_active"`
+	SortOrder   int                 `json:"sort_order"`
+	CreatedAt   time.Time           `json:"created_at"`
+	Authors     []SiteProjectAuthor `json:"authors,omitempty"`
+}
+
+type SiteProjectAuthor struct {
+	SiteProjectID int64  `json:"site_project_id"`
+	UserID        int64  `json:"user_id"`
+	UserName      string `json:"user_name,omitempty"`
+	UserEmail     string `json:"user_email,omitempty"`
+	SortOrder     int    `json:"sort_order"`
+}
+
+type SiteReport struct {
+	ID             int64          `json:"id"`
+	TeamID         int64          `json:"team_id"`
+	SiteProjectID  int64          `json:"site_project_id"`
+	AuthorUserID   int64          `json:"author_user_id"`             // 마지막으로 저장한 사용자
+	AuthorNames    []string       `json:"author_names"`               // 헤더 출력용 스냅샷 (작성자 다수 시 줄바꿈으로 표기)
+	ProjectName    string         `json:"project_name"`               // 스냅샷
+	ReportDate     string         `json:"report_date"`                // weekRange 매핑용 (YYYY-MM-DD)
+	ReportDateText string         `json:"report_date_text,omitempty"` // 헤더에 그대로 표시 (작성자 입력)
+	ThisWeek       []SiteTask     `json:"this_week"`
+	NextWeek       []SiteNextTask `json:"next_week"`
+	Notes          string         `json:"notes"` // 특이사항 (단일 영역)
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+}
+
+type CreateSiteProjectRequest struct {
+	ProjectName string  `json:"project_name"`
+	ClientName  string  `json:"client_name"`
+	AuthorIDs   []int64 `json:"author_ids"`
+}
+
+type UpdateSiteProjectRequest struct {
+	ProjectName string  `json:"project_name"`
+	ClientName  string  `json:"client_name"`
+	IsActive    *bool   `json:"is_active,omitempty"`
+	AuthorIDs   []int64 `json:"author_ids"` // nil이면 변경 안 함, []이면 모두 해제
+}
+
+type SaveSiteReportRequest struct {
+	SiteProjectID  int64          `json:"site_project_id"`
+	ReportDate     string         `json:"report_date"`
+	ReportDateText string         `json:"report_date_text,omitempty"`
+	ThisWeek       []SiteTask     `json:"this_week"`
+	NextWeek       []SiteNextTask `json:"next_week"`
+	Notes          string         `json:"notes"`
+}

@@ -273,3 +273,79 @@ export interface TeamHistoryResponse {
   team_name: string;
   weeks: WeekSummary[];
 }
+
+// ============ Site Dispatch Report types ============
+// 본사 양식과는 별도. 취합 PPT 뒤에 편집 없이 그대로 append됨.
+
+// 금주실적 5컬럼: 계획업무 | 소요일 | 시작일 | 완료일 | 실적
+export interface SiteTask {
+  title: string;
+  elapsed_days: string;
+  start_date: string;
+  due_date: string;
+  progress: string;
+}
+
+// 차주계획 3컬럼: 계획업무 | 시작예정일 | 완료예정일
+export interface SiteNextTask {
+  title: string;
+  start_date: string;
+  due_date: string;
+}
+
+export interface SiteProjectAuthor {
+  site_project_id: number;
+  user_id: number;
+  user_name?: string;
+  user_email?: string;
+  sort_order: number;
+}
+
+export interface SiteProject {
+  id: number;
+  team_id: number;
+  project_name: string;
+  client_name: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  authors?: SiteProjectAuthor[];
+}
+
+export interface SiteReport {
+  id: number;
+  team_id: number;
+  site_project_id: number;
+  author_user_id: number;
+  author_names: string[];
+  project_name: string;
+  report_date: string;
+  report_date_text?: string;
+  this_week: SiteTask[];
+  next_week: SiteNextTask[];
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateSiteProjectRequest {
+  project_name: string;
+  client_name: string;
+  author_ids: number[];
+}
+
+export interface UpdateSiteProjectRequest {
+  project_name: string;
+  client_name: string;
+  is_active?: boolean;
+  author_ids?: number[];
+}
+
+export interface SaveSiteReportRequest {
+  site_project_id: number;
+  report_date: string;
+  report_date_text?: string;
+  this_week: SiteTask[];
+  next_week: SiteNextTask[];
+  notes: string;
+}

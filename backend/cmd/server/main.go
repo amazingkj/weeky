@@ -85,6 +85,7 @@ func main() {
 	admin.Post("/invite-codes", h.CreateInviteCode)
 	admin.Get("/invite-codes", h.GetInviteCodes)
 	admin.Post("/users/:id/reset-password", h.AdminResetPassword)
+	admin.Post("/users/:id/admin", h.AdminSetUserAdmin)
 
 	protected.Get("/templates", h.GetTemplates)
 	protected.Post("/templates", h.CreateTemplate)
@@ -152,6 +153,16 @@ func main() {
 	protected.Delete("/teams/:id/rules/:rid", h.DeleteConsolidationRule)
 
 	protected.Get("/teams/:id/history", h.GetTeamHistory)
+
+	protected.Get("/teams/:id/site-projects", h.GetSiteProjects)
+	protected.Get("/teams/:id/site-projects/mine", h.GetMySiteProjects)
+	protected.Post("/teams/:id/site-projects", h.CreateSiteProject)
+	protected.Put("/teams/:id/site-projects/:pid", h.UpdateSiteProject)
+	protected.Delete("/teams/:id/site-projects/:pid", h.DeleteSiteProject)
+
+	protected.Get("/teams/:id/site-reports", h.GetTeamSiteReports)
+	protected.Get("/teams/:id/site-reports/mine", h.GetSiteReport)
+	protected.Post("/teams/:id/site-reports", h.SaveSiteReport)
 
 	app.Use("/api", func(c *fiber.Ctx) error {
 		path := c.Path()

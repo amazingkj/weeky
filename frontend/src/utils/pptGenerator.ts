@@ -1,5 +1,5 @@
 import PptxGenJS from 'pptxgenjs';
-import { Report, TemplateStyle, Task, ConsolidatedReport, MemberReportData, defaultTemplateStyle } from '../types';
+import { Report, TemplateStyle, Task, ConsolidatedReport, MemberReportData, SiteReport, defaultTemplateStyle } from '../types';
 import { formatDateShort, getWeekRange, getNextWeekRange } from './date';
 
 // Cross-browser file download (Safari compatible)
@@ -596,7 +596,8 @@ function calcPagination(
 
 export async function generateConsolidatedPPT(
     data: ConsolidatedReport,
-    leaderName?: string
+    leaderName?: string,
+    siteReports?: SiteReport[]
 ): Promise<void> {
   const pptx = new PptxGenJS();
   pptx.author = leaderName || data.team.name;
@@ -809,8 +810,216 @@ export async function generateConsolidatedPPT(
     }
   }
 
+  // 사이트 파견 보고서 슬라이드를 본사 슬라이드 뒤에 그대로 append (편집 없음)
+  if (siteReports && siteReports.length > 0) {
+    for (const sr of siteReports) {
+      addSiteReportSlide(pptx, sr, data.report_date);
+    }
+  }
+
   const date = data.report_date.replace(/-/g, '');
   const filename = `${data.team.name}_주간보고_${displayAuthor}_${date}.pptx`;
   const blob = await pptx.write({ outputType: 'blob' }) as Blob;
   downloadBlob(blob, filename);
+}
+
+// --- 사이트 보고서 슬라이드 (5+3 컬럼, 편집 없이 raw 데이터 그대로) ---
+
+const SITE_HEADER_COL_W = HEADER_COL_W; // 본사와 동일 (1.3 + 2.2 + 1.1 + 1.5 + 1.1 + 2.2 = 9.4)
+// 8컬럼: [계획업무, 소요일, 시작일, 완료일, 실적, 계획업무, 시작예정일, 완료예정일]
+// 좌측 5컬럼 합 = 4.6, 우측 3컬럼 합 = 4.8 (LAYOUT.w 9.4와 일치)
+const SITE_BODY_COL_W = [2.4, 0.5, 0.6, 0.6, 0.5, 3.6, 0.6, 0.6];
+const SITE_SECTION_COL_W = [4.6, 4.8];
+
+// 사이트 슬라이드 전용 날짜 포맷 (구분자 `/`, ~ 양옆 공백)
+function formatSlashDate(d: Date): string {
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function getSiteWeekRange(dateStr: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const day = d.getDay();
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+  const friday = new Date(monday);
+  friday.setDate(monday.getDate() + 4);
+  return `${formatSlashDate(monday)} ~ ${formatSlashDate(friday)}`;
+}
+
+function getSiteNextWeekRange(dateStr: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const day = d.getDay();
+  const nextMonday = new Date(d);
+  nextMonday.setDate(d.getDate() - (day === 0 ? 6 : day - 1) + 7);
+  const nextFriday = new Date(nextMonday);
+  nextFriday.setDate(nextMonday.getDate() + 4);
+  return `${formatSlashDate(nextMonday)} ~ ${formatSlashDate(nextFriday)}`;
+}
+
+// report_date(월요일) 기준 그 주 금요일 → 보고일자 fallback용 (YYYY-MM-DD)
+function getFridayOfWeek(dateStr: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const day = d.getDay();
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+  const friday = new Date(monday);
+  friday.setDate(monday.getDate() + 4);
+  return `${friday.getFullYear()}-${String(friday.getMonth() + 1).padStart(2, '0')}-${String(friday.getDate()).padStart(2, '0')}`;
+}
+
+function addSiteReportSlide(pptx: PptxGenJS, sr: SiteReport, fallbackDate: string): void {
+  const slide = pptx.addSlide();
+  let curY = LAYOUT.y;
+
+  const dateRange = getSiteWeekRange(sr.report_date || fallbackDate);
+  const nextDateRange = getSiteNextWeekRange(sr.report_date || fallbackDate);
+  const headerDate = sr.report_date_text || getFridayOfWeek(sr.report_date) || fallbackDate;
+  const authorText = (sr.author_names && sr.author_names.length > 0)
+      ? sr.author_names.join('\n')
+      : '';
+
+  // 헤더 행: 프로젝트 | 값 | 보고일자 | 값 | 작성자 | 값
+  // 작성자 다수 시 줄바꿈으로 표기되므로 셀 높이를 살짝 키움
+  const authorLines = Math.max(1, (sr.author_names || []).length);
+  const headerH = ROW_H.header + (authorLines > 1 ? 0.15 * (authorLines - 1) : 0);
+  slide.addTable(
+      [[
+        { text: '프로젝트', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+        { text: sr.project_name, options: { align: 'center' } },
+        { text: '보고일자', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+        { text: headerDate, options: { align: 'center' } },
+        { text: '작성자', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+        { text: authorText, options: { align: 'center' } },
+      ]],
+      {
+        x: LAYOUT.x, y: curY, w: LAYOUT.w, h: headerH,
+        colW: SITE_HEADER_COL_W, rowH: [headerH],
+        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+        fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+        autoPage: false,
+      }
+  );
+  curY += headerH;
+
+  // 섹션 헤더: 금주실적 | 차주계획
+  slide.addTable(
+      [[
+        { text: '금주실적', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+        { text: '차주계획', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center' } },
+      ]],
+      {
+        x: LAYOUT.x, y: curY, w: LAYOUT.w, h: ROW_H.section,
+        colW: SITE_SECTION_COL_W, rowH: [ROW_H.section],
+        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+        fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
+        autoPage: false,
+      }
+  );
+  curY += ROW_H.section;
+
+  // 컬럼 헤더: 8컬럼
+  slide.addTable(
+      [[
+        { text: `계획업무\n(${dateRange})`, options: { fill: { color: COLORS.headerBg }, bold: true, valign: 'middle' } },
+        { text: '소요일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+        { text: '시작일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+        { text: '완료일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+        { text: '실적', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+        { text: `계획업무\n(${nextDateRange})`, options: { fill: { color: COLORS.headerBg }, bold: true, valign: 'middle' } },
+        { text: '시작\n예정일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+        { text: '완료\n예정일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
+      ]],
+      {
+        x: LAYOUT.x, y: curY, w: LAYOUT.w, h: ROW_H.colHeader,
+        colW: SITE_BODY_COL_W, rowH: [ROW_H.colHeader],
+        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+        fontFace: FONT.face, fontSize: 9, valign: 'middle',
+        autoPage: false,
+      }
+  );
+  curY += ROW_H.colHeader;
+
+  // 푸터(특이사항) 높이 산정 — 본사처럼 단일 행, 빈 값이면 '-'
+  const noteFontSize = 8;
+  const NOTE_LINE_H = 0.22;
+  const NOTE_CELL_W = LAYOUT.w - SITE_HEADER_COL_W[0]; // 1.3 → 8.1 inch
+  const charsPerLine = Math.floor(NOTE_CELL_W * 14);
+  const notesText = sr.notes || '-';
+  const noteLineCount = notesText.split('\n').reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
+  const noteH = Math.max(0.50, Math.min(2.0, noteLineCount * NOTE_LINE_H + 0.15));
+
+  const footerY = LAYOUT.y + LAYOUT.h - noteH;
+  const bodyH = footerY - curY;
+
+  // 본문: 좌측 5컬럼 + 우측 3컬럼 행 정렬 (max 길이만큼 빈 행 채움)
+  const cellMargin: [number, number, number, number] = [2, 4, 2, 4];
+  const bodyFontSize = 9;
+  const lineH = bodyFontSize + 2;
+  const baseOpts = { breakLine: true as const, fontSize: bodyFontSize, paraSpaceBefore: 0, paraSpaceAfter: 0, lineSpacing: lineH };
+
+  const left = sr.this_week || [];
+  const right = sr.next_week || [];
+  const rowCount = Math.max(left.length, right.length, 1);
+
+  // 행을 단일 셀의 멀티라인 텍스트로 누적 (행 분할 시 셀 높이 자동 분배가 까다로움)
+  const flatTitleL: PptxGenJS.TextProps[] = [];
+  const flatElapsed: PptxGenJS.TextProps[] = [];
+  const flatStartL: PptxGenJS.TextProps[] = [];
+  const flatDueL: PptxGenJS.TextProps[] = [];
+  const flatProg: PptxGenJS.TextProps[] = [];
+  const flatTitleR: PptxGenJS.TextProps[] = [];
+  const flatStartR: PptxGenJS.TextProps[] = [];
+  const flatDueR: PptxGenJS.TextProps[] = [];
+  for (let i = 0; i < rowCount; i++) {
+    const l = left[i];
+    const r = right[i];
+    const trail = i < rowCount - 1 ? '\n' : '';
+    flatTitleL.push({ text: (l?.title || ' ') + trail, options: baseOpts });
+    flatElapsed.push({ text: (l?.elapsed_days || ' ') + trail, options: baseOpts });
+    flatStartL.push({ text: (l?.start_date || ' ') + trail, options: baseOpts });
+    flatDueL.push({ text: (l?.due_date || ' ') + trail, options: baseOpts });
+    flatProg.push({ text: (l?.progress || ' ') + trail, options: baseOpts });
+    flatTitleR.push({ text: (r?.title || ' ') + trail, options: baseOpts });
+    flatStartR.push({ text: (r?.start_date || ' ') + trail, options: baseOpts });
+    flatDueR.push({ text: (r?.due_date || ' ') + trail, options: baseOpts });
+  }
+
+  slide.addTable(
+      [[
+        { text: flatTitleL, options: { valign: 'top' as const, margin: cellMargin } },
+        { text: flatElapsed, options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
+        { text: flatStartL, options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
+        { text: flatDueL, options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
+        { text: flatProg, options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
+        { text: flatTitleR, options: { valign: 'top' as const, margin: cellMargin } },
+        { text: flatStartR, options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
+        { text: flatDueR, options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
+      ]],
+      {
+        x: LAYOUT.x, y: curY, w: LAYOUT.w, h: bodyH,
+        colW: SITE_BODY_COL_W, rowH: [bodyH],
+        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+        fontFace: FONT.face, fontSize: bodyFontSize,
+        autoPage: false,
+      }
+  );
+
+  // 푸터: 특이사항 한 행
+  const footerColW = [SITE_HEADER_COL_W[0], LAYOUT.w - SITE_HEADER_COL_W[0]];
+  slide.addTable(
+      [[
+        { text: '특이사항', options: { fill: { color: COLORS.headerBg }, bold: true, fontSize: 9, valign: 'middle' } },
+        { text: notesText, options: { fontSize: noteFontSize, valign: 'middle' } },
+      ]],
+      {
+        x: LAYOUT.x, y: footerY, w: LAYOUT.w, h: noteH,
+        colW: footerColW, rowH: [noteH],
+        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+        fontFace: FONT.face, fontSize: noteFontSize, valign: 'middle',
+        autoPage: false,
+      }
+  );
 }

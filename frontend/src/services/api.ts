@@ -1,4 +1,4 @@
-import { Template, Report, SyncResult, SyncItem, Task, GitHubSyncRequest, GitLabSyncRequest, JiraSyncRequest, HiworksSyncRequest, ConfigMap, AuthResponse, LoginRequest, RegisterRequest, User, InviteCode, GitLabProject, Team, TeamMember, TeamRole, RoleCode, ReportSubmission, TeamMemberWithSubmission, ConsolidatedReport, TeamProject, TeamHistoryResponse, ConsolidationRule, CreateConsolidationRuleRequest } from '../types';
+import { Template, Report, SyncResult, SyncItem, Task, GitHubSyncRequest, GitLabSyncRequest, JiraSyncRequest, HiworksSyncRequest, ConfigMap, AuthResponse, LoginRequest, RegisterRequest, User, InviteCode, GitLabProject, Team, TeamMember, TeamRole, RoleCode, ReportSubmission, TeamMemberWithSubmission, ConsolidatedReport, TeamProject, TeamHistoryResponse, ConsolidationRule, CreateConsolidationRuleRequest, SiteProject, SiteReport, CreateSiteProjectRequest, UpdateSiteProjectRequest, SaveSiteReportRequest } from '../types';
 
 export interface GenerateReportRequest {
   items: SyncItem[];
@@ -185,6 +185,14 @@ export async function adminResetPassword(userId: number, password: string): Prom
     body: JSON.stringify({ password }),
   });
   await throwIfNotOk(res, 'Failed to reset password');
+}
+
+export async function adminSetUserAdmin(userId: number, isAdmin: boolean): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/admin/users/${userId}/admin`, {
+    method: 'POST',
+    body: JSON.stringify({ is_admin: isAdmin }),
+  });
+  await throwWithServerError(res, '관리자 권한 변경에 실패했습니다');
 }
 
 export async function adminGetUsers(): Promise<User[]> {
@@ -566,5 +574,63 @@ export async function deleteConsolidatedEdit(teamId: number, reportDate: string)
 export async function getTeamHistory(teamId: number, weeks = 8): Promise<TeamHistoryResponse> {
   const res = await apiFetch(`${API_BASE}/teams/${teamId}/history?weeks=${weeks}`);
   await throwIfNotOk(res, '히스토리 조회에 실패했습니다');
+  return res.json();
+}
+
+// --- 사이트 파견 보고서 API ---
+
+export async function getSiteProjects(teamId: number, activeOnly = false): Promise<SiteProject[]> {
+  const params = activeOnly ? '?active_only=true' : '';
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/site-projects${params}`);
+  await throwIfNotOk(res, '사이트 프로젝트 조회에 실패했습니다');
+  return res.json();
+}
+
+export async function getMySiteProjects(teamId: number): Promise<SiteProject[]> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/site-projects/mine`);
+  await throwIfNotOk(res, '내 사이트 프로젝트 조회에 실패했습니다');
+  return res.json();
+}
+
+export async function createSiteProject(teamId: number, req: CreateSiteProjectRequest): Promise<SiteProject> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/site-projects`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
+  await throwWithServerError(res, '사이트 프로젝트 생성에 실패했습니다');
+  return res.json();
+}
+
+export async function updateSiteProject(teamId: number, pid: number, req: UpdateSiteProjectRequest): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/site-projects/${pid}`, {
+    method: 'PUT',
+    body: JSON.stringify(req),
+  });
+  await throwWithServerError(res, '사이트 프로젝트 수정에 실패했습니다');
+}
+
+export async function deleteSiteProject(teamId: number, pid: number): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/site-projects/${pid}`, { method: 'DELETE' });
+  await throwIfNotOk(res, '사이트 프로젝트 삭제에 실패했습니다');
+}
+
+export async function getMySiteReport(teamId: number, siteProjectId: number, reportDate: string): Promise<{ exists: boolean; report?: SiteReport }> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/site-reports/mine?site_project_id=${siteProjectId}&report_date=${reportDate}`);
+  await throwIfNotOk(res, '사이트 보고서 조회에 실패했습니다');
+  return res.json();
+}
+
+export async function saveSiteReport(teamId: number, req: SaveSiteReportRequest): Promise<SiteReport> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/site-reports`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
+  await throwWithServerError(res, '사이트 보고서 저장에 실패했습니다');
+  return res.json();
+}
+
+export async function getTeamSiteReports(teamId: number, reportDate: string): Promise<SiteReport[]> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/site-reports?report_date=${reportDate}`);
+  await throwIfNotOk(res, '팀 사이트 보고서 조회에 실패했습니다');
   return res.json();
 }

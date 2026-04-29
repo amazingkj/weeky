@@ -12,6 +12,7 @@ type IRepository interface {
 	CountUsers() (int64, error)
 	ReassignLegacyData(userID int64) error
 	UpdateUserPassword(userID int64, passwordHash string) error
+	UpdateUserAdmin(userID int64, isAdmin bool) error
 
 	CreateInviteCode(code string, createdBy int64) (*model.InviteCode, error)
 	GetInviteCodeByCode(code string) (*model.InviteCode, error)
@@ -75,6 +76,19 @@ type IRepository interface {
 	UpdateConsolidationRule(id int64, req model.UpdateConsolidationRuleRequest) error
 	DeleteConsolidationRule(id int64) error
 	ReorderConsolidationRules(teamID int64, ids []int64) error
+
+	CreateSiteProject(teamID int64, req model.CreateSiteProjectRequest) (*model.SiteProject, error)
+	GetSiteProjects(teamID int64, activeOnly bool) ([]model.SiteProject, error)
+	GetSiteProject(id int64) (*model.SiteProject, error)
+	UpdateSiteProject(id int64, req model.UpdateSiteProjectRequest) error
+	DeleteSiteProject(id int64) error
+	GetSiteProjectsByAuthor(teamID, userID int64) ([]model.SiteProject, error)
+	IsSiteProjectAuthor(siteProjectID, userID int64) (bool, error)
+
+	SaveSiteReport(teamID, userID int64, req model.SaveSiteReportRequest) (*model.SiteReport, error)
+	GetSiteReport(id int64) (*model.SiteReport, error)
+	GetSiteReportByProjectAndDate(siteProjectID int64, reportDate string) (*model.SiteReport, error)
+	GetSiteReportsByTeamAndDate(teamID int64, reportDate string) ([]model.SiteReport, error)
 }
 
 var _ IRepository = (*Repository)(nil)

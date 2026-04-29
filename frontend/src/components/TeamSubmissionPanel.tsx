@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { Team, TeamMemberWithSubmission, Report, ConsolidatedReport, Task, TeamProject, ROLE_CODE_LABELS, defaultTemplateStyle } from '../types';
-import { getTeamSubmissions, getTeamMemberReport, getConsolidatedReport, updateTeamMemberReport, getTeamProjects, saveConsolidatedEdit, getConsolidatedEdit, deleteConsolidatedEdit } from '../services/api';
+import { Team, TeamMemberWithSubmission, Report, ConsolidatedReport, Task, TeamProject, SiteReport, ROLE_CODE_LABELS, defaultTemplateStyle } from '../types';
+import { getTeamSubmissions, getTeamMemberReport, getConsolidatedReport, updateTeamMemberReport, getTeamProjects, saveConsolidatedEdit, getConsolidatedEdit, deleteConsolidatedEdit, getTeamSiteReports } from '../services/api';
 import TaskList from './TaskList';
 import { generatePPT, generateConsolidatedPPT } from '../utils/pptGenerator';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,6 +8,7 @@ import Loading from './ui/Loading';
 
 const ConsolidatedPptPreview = lazy(() => import('./ConsolidatedPptPreview'));
 const PptPreview = lazy(() => import('./PptPreview'));
+const SiteReportsPreview = lazy(() => import('./SiteReportsPreview'));
 
 const TEXTAREA_CLASS = 'w-full px-2.5 py-1.5 bg-white border border-neutral-200 rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-400 text-xs text-neutral-700 resize-y';
 
@@ -67,6 +68,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
   const [consolidated, setConsolidated] = useState<ConsolidatedReport | null>(null);
   const [pptLoading, setPptLoading] = useState(false);
   const [teamProjects, setTeamProjects] = useState<TeamProject[]>([]);
+  const [siteReports, setSiteReports] = useState<SiteReport[]>([]);
   const [editSaving, setEditSaving] = useState(false);
   const [editSaveSuccess, setEditSaveSuccess] = useState(false);
   const [hasSavedEdit, setHasSavedEdit] = useState(false);
@@ -95,6 +97,12 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
   useEffect(() => {
     getTeamProjects(team.id, true).then(setTeamProjects).catch(() => setTeamProjects([]));
   }, [team.id]);
+
+  // 사이트 보고서 (read-only 미리보기 + PPT append용) 자동 로드
+  useEffect(() => {
+    if (!reportDate) return;
+    getTeamSiteReports(team.id, reportDate).then(setSiteReports).catch(() => setSiteReports([]));
+  }, [team.id, reportDate]);
 
   const fetchSubmissions = async () => {
     setLoading(true);
@@ -315,7 +323,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
         data = consolidated || await getConsolidatedReport(team.id, reportDate);
         if (!consolidated) setConsolidated(data);
       }
-      await generateConsolidatedPPT(data, user?.name);
+      await generateConsolidatedPPT(data, user?.name, siteReports);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -745,6 +753,13 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
               <ConsolidatedPptPreview data={editingConsolidated ? buildEditedConsolidated(consolidated) : consolidated} leaderName={user?.name} />
             </Suspense>
           )}
+
+          {/* 사이트 보고서 (read-only) — PPT의 본사 슬라이드 뒤에 그대로 append됨 */}
+          {siteReports.length > 0 ? (
+            <Suspense fallback={null}>
+              <SiteReportsPreview siteReports={siteReports} />
+            </Suspense>
+          ) : null}
         </>
       )}
     </div>

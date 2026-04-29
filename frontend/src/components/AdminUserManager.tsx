@@ -1,13 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { User } from '../types';
-import { adminGetUsers, adminResetPassword } from '../services/api';
+import { adminGetUsers, adminResetPassword, adminSetUserAdmin } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function AdminUserManager() {
+  const { user: me } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState('');
   const [resetTarget, setResetTarget] = useState<User | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [isResetting, setIsResetting] = useState(false);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
 
   const fetchUsers = useCallback(async () => {
@@ -37,6 +40,24 @@ export default function AdminUserManager() {
       setError('비밀번호 초기화에 실패했습니다');
     } finally {
       setIsResetting(false);
+    }
+  };
+
+  const handleToggleAdmin = async (target: User) => {
+    const next = !target.is_admin;
+    const action = next ? '관리자로 지정' : '관리자 권한 해제';
+    if (!confirm(`${target.name}님을 ${action}하시겠습니까?`)) return;
+    setTogglingId(target.id);
+    setError('');
+    try {
+      await adminSetUserAdmin(target.id, next);
+      setUsers((prev) => prev.map((u) => u.id === target.id ? { ...u, is_admin: next } : u));
+      setSuccessMsg(`${target.name}님을 ${action}했습니다`);
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (e: any) {
+      setError(e?.message || '관리자 권한 변경에 실패했습니다');
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -78,12 +99,26 @@ export default function AdminUserManager() {
                   <div className="text-xs text-neutral-500 truncate">{u.email}</div>
                 </div>
               </div>
-              <button
-                onClick={() => { setResetTarget(u); setNewPassword(''); setError(''); }}
-                className="px-2.5 py-1.5 text-xs text-neutral-600 hover:text-neutral-900 border border-neutral-300 rounded-lg hover:bg-neutral-50 transition-colors flex-shrink-0"
-              >
-                비밀번호 초기화
-              </button>
+              <div className="flex gap-1.5 flex-shrink-0">
+                <button
+                  onClick={() => handleToggleAdmin(u)}
+                  disabled={togglingId === u.id || u.id === me?.id}
+                  title={u.id === me?.id ? '본인의 관리자 권한은 변경할 수 없습니다' : ''}
+                  className={`px-2.5 py-1.5 text-xs border rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                    u.is_admin
+                      ? 'text-red-600 border-red-200 hover:bg-red-50'
+                      : 'text-blue-600 border-blue-200 hover:bg-blue-50'
+                  }`}
+                >
+                  {togglingId === u.id ? '처리 중...' : (u.is_admin ? '관리자 해제' : '관리자 지정')}
+                </button>
+                <button
+                  onClick={() => { setResetTarget(u); setNewPassword(''); setError(''); }}
+                  className="px-2.5 py-1.5 text-xs text-neutral-600 hover:text-neutral-900 border border-neutral-300 rounded-lg hover:bg-neutral-50 transition-colors"
+                >
+                  비밀번호 초기화
+                </button>
+              </div>
             </div>
           ))}
         </div>

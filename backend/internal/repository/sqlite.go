@@ -200,6 +200,43 @@ ALTER TABLE reports ADD COLUMN next_notes TEXT DEFAULT '';`,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);`,
 	},
+	{
+		version: 9,
+		sql: `CREATE TABLE IF NOT EXISTS site_projects (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+			project_name TEXT NOT NULL,
+			client_name TEXT DEFAULT '',
+			is_active INTEGER NOT NULL DEFAULT 1,
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(team_id, project_name)
+		);
+
+		CREATE TABLE IF NOT EXISTS site_project_authors (
+			site_project_id INTEGER NOT NULL REFERENCES site_projects(id) ON DELETE CASCADE,
+			user_id INTEGER NOT NULL REFERENCES users(id),
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (site_project_id, user_id)
+		);
+
+		CREATE TABLE IF NOT EXISTS site_reports (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+			site_project_id INTEGER NOT NULL REFERENCES site_projects(id) ON DELETE CASCADE,
+			author_user_id INTEGER NOT NULL REFERENCES users(id),
+			author_names TEXT NOT NULL DEFAULT '[]',
+			project_name TEXT NOT NULL DEFAULT '',
+			report_date TEXT NOT NULL,
+			report_date_text TEXT NOT NULL DEFAULT '',
+			this_week TEXT NOT NULL DEFAULT '[]',
+			next_week TEXT NOT NULL DEFAULT '[]',
+			notes TEXT NOT NULL DEFAULT '',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(site_project_id, report_date)
+		);`,
+	},
 }
 
 func runMigrations(db *sql.DB) error {
@@ -437,6 +474,15 @@ func (r *Repository) CreateFirstAdmin(email, passwordHash, name string) (*model.
 
 func (r *Repository) UpdateUserPassword(userID int64, passwordHash string) error {
 	_, err := r.db.Exec("UPDATE users SET password_hash = ? WHERE id = ?", passwordHash, userID)
+	return err
+}
+
+func (r *Repository) UpdateUserAdmin(userID int64, isAdmin bool) error {
+	val := 0
+	if isAdmin {
+		val = 1
+	}
+	_, err := r.db.Exec("UPDATE users SET is_admin = ? WHERE id = ?", val, userID)
 	return err
 }
 
@@ -1298,4 +1344,355 @@ func (r *Repository) ReorderConsolidationRules(teamID int64, ids []int64) error 
 		}
 	}
 	return tx.Commit()
+}
+
+// --- SiteProject / SiteProjectAuthor ---
+
+func (r *Repository) loadSiteProjectAuthors(siteProjectID int64) ([]model.SiteProjectAuthor, error) {
+	rows, err := r.db.Query(
+		`SELECT spa.site_project_id, spa.user_id, u.name, u.email, spa.sort_order
+		 FROM site_project_authors spa
+		 JOIN users u ON spa.user_id = u.id
+		 WHERE spa.site_project_id = ?
+		 ORDER BY spa.sort_order, u.name`, siteProjectID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	authors := []model.SiteProjectAuthor{}
+	for rows.Next() {
+		var a model.SiteProjectAuthor
+		if err := rows.Scan(&a.SiteProjectID, &a.UserID, &a.UserName, &a.UserEmail, &a.SortOrder); err != nil {
+			return nil, err
+		}
+		authors = append(authors, a)
+	}
+	return authors, rows.Err()
+}
+
+func (r *Repository) replaceSiteProjectAuthors(tx *sql.Tx, siteProjectID int64, userIDs []int64) error {
+	if _, err := tx.Exec("DELETE FROM site_project_authors WHERE site_project_id = ?", siteProjectID); err != nil {
+		return err
+	}
+	if len(userIDs) == 0 {
+		return nil
+	}
+	stmt, err := tx.Prepare("INSERT INTO site_project_authors (site_project_id, user_id, sort_order) VALUES (?, ?, ?)")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for i, uid := range userIDs {
+		if _, err := stmt.Exec(siteProjectID, uid, i); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Repository) CreateSiteProject(teamID int64, req model.CreateSiteProjectRequest) (*model.SiteProject, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var nextOrder int
+	tx.QueryRow("SELECT COALESCE(MAX(sort_order)+1, 0) FROM site_projects WHERE team_id = ?", teamID).Scan(&nextOrder)
+
+	result, err := tx.Exec(
+		`INSERT INTO site_projects (team_id, project_name, client_name, is_active, sort_order)
+		 VALUES (?, ?, ?, 1, ?)`,
+		teamID, req.ProjectName, req.ClientName, nextOrder,
+	)
+	if err != nil {
+		return nil, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := r.replaceSiteProjectAuthors(tx, id, req.AuthorIDs); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	authors, _ := r.loadSiteProjectAuthors(id)
+	return &model.SiteProject{
+		ID:          id,
+		TeamID:      teamID,
+		ProjectName: req.ProjectName,
+		ClientName:  req.ClientName,
+		IsActive:    true,
+		SortOrder:   nextOrder,
+		CreatedAt:   time.Now(),
+		Authors:     authors,
+	}, nil
+}
+
+func (r *Repository) GetSiteProjects(teamID int64, activeOnly bool) ([]model.SiteProject, error) {
+	query := "SELECT id, team_id, project_name, client_name, is_active, sort_order, created_at FROM site_projects WHERE team_id = ?"
+	if activeOnly {
+		query += " AND is_active = 1"
+	}
+	query += " ORDER BY sort_order, project_name"
+
+	rows, err := r.db.Query(query, teamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	projects := []model.SiteProject{}
+	for rows.Next() {
+		var p model.SiteProject
+		var isActive int
+		if err := rows.Scan(&p.ID, &p.TeamID, &p.ProjectName, &p.ClientName, &isActive, &p.SortOrder, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		p.IsActive = isActive == 1
+		projects = append(projects, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i := range projects {
+		authors, err := r.loadSiteProjectAuthors(projects[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		projects[i].Authors = authors
+	}
+	return projects, nil
+}
+
+func (r *Repository) GetSiteProject(id int64) (*model.SiteProject, error) {
+	var p model.SiteProject
+	var isActive int
+	err := r.db.QueryRow(
+		"SELECT id, team_id, project_name, client_name, is_active, sort_order, created_at FROM site_projects WHERE id = ?", id,
+	).Scan(&p.ID, &p.TeamID, &p.ProjectName, &p.ClientName, &isActive, &p.SortOrder, &p.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	p.IsActive = isActive == 1
+	authors, err := r.loadSiteProjectAuthors(p.ID)
+	if err != nil {
+		return nil, err
+	}
+	p.Authors = authors
+	return &p, nil
+}
+
+func (r *Repository) UpdateSiteProject(id int64, req model.UpdateSiteProjectRequest) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if req.IsActive != nil {
+		active := 0
+		if *req.IsActive {
+			active = 1
+		}
+		if _, err := tx.Exec(
+			"UPDATE site_projects SET project_name = ?, client_name = ?, is_active = ? WHERE id = ?",
+			req.ProjectName, req.ClientName, active, id,
+		); err != nil {
+			return err
+		}
+	} else {
+		if _, err := tx.Exec(
+			"UPDATE site_projects SET project_name = ?, client_name = ? WHERE id = ?",
+			req.ProjectName, req.ClientName, id,
+		); err != nil {
+			return err
+		}
+	}
+
+	if req.AuthorIDs != nil {
+		if err := r.replaceSiteProjectAuthors(tx, id, req.AuthorIDs); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *Repository) DeleteSiteProject(id int64) error {
+	_, err := r.db.Exec("DELETE FROM site_projects WHERE id = ?", id)
+	return err
+}
+
+func (r *Repository) GetSiteProjectsByAuthor(teamID, userID int64) ([]model.SiteProject, error) {
+	rows, err := r.db.Query(
+		`SELECT sp.id, sp.team_id, sp.project_name, sp.client_name, sp.is_active, sp.sort_order, sp.created_at
+		 FROM site_projects sp
+		 JOIN site_project_authors spa ON spa.site_project_id = sp.id
+		 WHERE sp.team_id = ? AND spa.user_id = ? AND sp.is_active = 1
+		 ORDER BY sp.sort_order, sp.project_name`, teamID, userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	projects := []model.SiteProject{}
+	for rows.Next() {
+		var p model.SiteProject
+		var isActive int
+		if err := rows.Scan(&p.ID, &p.TeamID, &p.ProjectName, &p.ClientName, &isActive, &p.SortOrder, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		p.IsActive = isActive == 1
+		projects = append(projects, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i := range projects {
+		authors, err := r.loadSiteProjectAuthors(projects[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		projects[i].Authors = authors
+	}
+	return projects, nil
+}
+
+func (r *Repository) IsSiteProjectAuthor(siteProjectID, userID int64) (bool, error) {
+	var n int
+	err := r.db.QueryRow(
+		"SELECT COUNT(*) FROM site_project_authors WHERE site_project_id = ? AND user_id = ?",
+		siteProjectID, userID,
+	).Scan(&n)
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+// --- SiteReport ---
+
+func (r *Repository) SaveSiteReport(teamID, userID int64, req model.SaveSiteReportRequest) (*model.SiteReport, error) {
+	thisWeekJSON, err := json.Marshal(req.ThisWeek)
+	if err != nil {
+		return nil, err
+	}
+	nextWeekJSON, err := json.Marshal(req.NextWeek)
+	if err != nil {
+		return nil, err
+	}
+
+	project, err := r.GetSiteProject(req.SiteProjectID)
+	if err != nil {
+		return nil, err
+	}
+	authorNames := make([]string, 0, len(project.Authors))
+	for _, a := range project.Authors {
+		authorNames = append(authorNames, a.UserName)
+	}
+	authorNamesJSON, err := json.Marshal(authorNames)
+	if err != nil {
+		return nil, err
+	}
+
+	mon, _ := weekRange(req.ReportDate)
+
+	_, err = r.db.Exec(
+		`INSERT INTO site_reports (team_id, site_project_id, author_user_id, author_names, project_name,
+			report_date, report_date_text, this_week, next_week, notes, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		 ON CONFLICT(site_project_id, report_date) DO UPDATE SET
+			author_user_id = excluded.author_user_id,
+			author_names = excluded.author_names,
+			project_name = excluded.project_name,
+			report_date_text = excluded.report_date_text,
+			this_week = excluded.this_week,
+			next_week = excluded.next_week,
+			notes = excluded.notes,
+			updated_at = CURRENT_TIMESTAMP`,
+		teamID, req.SiteProjectID, userID, string(authorNamesJSON), project.ProjectName,
+		mon, req.ReportDateText, string(thisWeekJSON), string(nextWeekJSON), req.Notes,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return r.GetSiteReportByProjectAndDate(req.SiteProjectID, mon)
+}
+
+func (r *Repository) scanSiteReport(scan func(...any) error) (*model.SiteReport, error) {
+	var sr model.SiteReport
+	var authorNamesJSON, thisWeekJSON, nextWeekJSON string
+	if err := scan(&sr.ID, &sr.TeamID, &sr.SiteProjectID, &sr.AuthorUserID, &authorNamesJSON,
+		&sr.ProjectName, &sr.ReportDate, &sr.ReportDateText, &thisWeekJSON, &nextWeekJSON,
+		&sr.Notes, &sr.CreatedAt, &sr.UpdatedAt); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(authorNamesJSON), &sr.AuthorNames); err != nil {
+		sr.AuthorNames = []string{}
+	}
+	if err := json.Unmarshal([]byte(thisWeekJSON), &sr.ThisWeek); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(nextWeekJSON), &sr.NextWeek); err != nil {
+		return nil, err
+	}
+	if sr.ThisWeek == nil {
+		sr.ThisWeek = []model.SiteTask{}
+	}
+	if sr.NextWeek == nil {
+		sr.NextWeek = []model.SiteNextTask{}
+	}
+	return &sr, nil
+}
+
+const siteReportColumns = `id, team_id, site_project_id, author_user_id, author_names,
+	project_name, report_date, report_date_text, this_week, next_week, notes, created_at, updated_at`
+
+func (r *Repository) GetSiteReport(id int64) (*model.SiteReport, error) {
+	row := r.db.QueryRow(`SELECT `+siteReportColumns+` FROM site_reports WHERE id = ?`, id)
+	return r.scanSiteReport(row.Scan)
+}
+
+func (r *Repository) GetSiteReportByProjectAndDate(siteProjectID int64, reportDate string) (*model.SiteReport, error) {
+	mon, sun := weekRange(reportDate)
+	row := r.db.QueryRow(
+		`SELECT `+siteReportColumns+` FROM site_reports
+		 WHERE site_project_id = ? AND report_date BETWEEN ? AND ?`,
+		siteProjectID, mon, sun,
+	)
+	return r.scanSiteReport(row.Scan)
+}
+
+func (r *Repository) GetSiteReportsByTeamAndDate(teamID int64, reportDate string) ([]model.SiteReport, error) {
+	mon, sun := weekRange(reportDate)
+	rows, err := r.db.Query(
+		`SELECT `+siteReportColumns+` FROM site_reports
+		 WHERE team_id = ? AND report_date BETWEEN ? AND ?
+		 ORDER BY site_project_id`,
+		teamID, mon, sun,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	results := []model.SiteReport{}
+	for rows.Next() {
+		sr, err := r.scanSiteReport(rows.Scan)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, *sr)
+	}
+	return results, rows.Err()
 }
