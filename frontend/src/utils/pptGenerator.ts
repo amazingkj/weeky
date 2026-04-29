@@ -36,6 +36,7 @@ const COLORS = {
   white: 'FFFFFF',
   black: '000000',
   border: '000000',
+  siteBorder: '808080', // 사이트 슬라이드 전용 회색 테두리
 };
 
 // Font settings
@@ -828,7 +829,8 @@ export async function generateConsolidatedPPT(
 const SITE_HEADER_COL_W = HEADER_COL_W; // 본사와 동일 (1.3 + 2.2 + 1.1 + 1.5 + 1.1 + 2.2 = 9.4)
 // 8컬럼: [계획업무, 소요일, 시작일, 완료일, 실적, 계획업무, 시작예정일, 완료예정일]
 // 좌측 5컬럼 합 = 4.6, 우측 3컬럼 합 = 4.8 (LAYOUT.w 9.4와 일치)
-const SITE_BODY_COL_W = [2.4, 0.5, 0.6, 0.6, 0.5, 3.6, 0.6, 0.6];
+// 소요일은 헤더 텍스트 줄바꿈 방지를 위해 0.7로 확장 (계획업무 좌/우에서 0.1씩 회수)
+const SITE_BODY_COL_W = [2.3, 0.7, 0.6, 0.6, 0.5, 3.5, 0.6, 0.6];
 const SITE_SECTION_COL_W = [4.6, 4.8];
 
 // 사이트 슬라이드 전용 날짜 포맷 (구분자 `/`, ~ 양옆 공백)
@@ -897,7 +899,7 @@ function addSiteReportSlide(pptx: PptxGenJS, sr: SiteReport, fallbackDate: strin
       {
         x: LAYOUT.x, y: curY, w: LAYOUT.w, h: headerH,
         colW: SITE_HEADER_COL_W, rowH: [headerH],
-        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+        border: { type: 'solid', color: COLORS.siteBorder, pt: 0.5 },
         fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
         autoPage: false,
       }
@@ -913,43 +915,44 @@ function addSiteReportSlide(pptx: PptxGenJS, sr: SiteReport, fallbackDate: strin
       {
         x: LAYOUT.x, y: curY, w: LAYOUT.w, h: ROW_H.section,
         colW: SITE_SECTION_COL_W, rowH: [ROW_H.section],
-        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+        border: { type: 'solid', color: COLORS.siteBorder, pt: 0.5 },
         fontFace: FONT.face, fontSize: FONT.size, valign: 'middle',
         autoPage: false,
       }
   );
   curY += ROW_H.section;
 
-  // 컬럼 헤더: 8컬럼
+  // 컬럼 헤더: 8컬럼. 사이트 양식은 "계획업무" 라벨 없이 날짜 범위만 표시.
   slide.addTable(
       [[
-        { text: `계획업무\n(${dateRange})`, options: { fill: { color: COLORS.headerBg }, bold: true, valign: 'middle' } },
+        { text: dateRange, options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
         { text: '소요일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
         { text: '시작일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
         { text: '완료일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
         { text: '실적', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
-        { text: `계획업무\n(${nextDateRange})`, options: { fill: { color: COLORS.headerBg }, bold: true, valign: 'middle' } },
+        { text: nextDateRange, options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
         { text: '시작\n예정일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
         { text: '완료\n예정일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
       ]],
       {
         x: LAYOUT.x, y: curY, w: LAYOUT.w, h: ROW_H.colHeader,
         colW: SITE_BODY_COL_W, rowH: [ROW_H.colHeader],
-        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+        border: { type: 'solid', color: COLORS.siteBorder, pt: 0.5 },
         fontFace: FONT.face, fontSize: 9, valign: 'middle',
         autoPage: false,
       }
   );
   curY += ROW_H.colHeader;
 
-  // 푸터(특이사항) 높이 산정 — 본사처럼 단일 행, 빈 값이면 '-'
+  // 푸터(특이사항) 높이 산정 — 라벨 행(상단, 색상 채움) + 내용 행(하단, 전체 너비) 2행 구조
   const noteFontSize = 8;
   const NOTE_LINE_H = 0.22;
-  const NOTE_CELL_W = LAYOUT.w - SITE_HEADER_COL_W[0]; // 1.3 → 8.1 inch
-  const charsPerLine = Math.floor(NOTE_CELL_W * 14);
+  const NOTE_LABEL_H = 0.30;
+  const charsPerLine = Math.floor(LAYOUT.w * 14);
   const notesText = sr.notes || '-';
   const noteLineCount = notesText.split('\n').reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
-  const noteH = Math.max(0.50, Math.min(2.0, noteLineCount * NOTE_LINE_H + 0.15));
+  const noteContentH = Math.max(0.40, Math.min(2.0, noteLineCount * NOTE_LINE_H + 0.15));
+  const noteH = NOTE_LABEL_H + noteContentH;
 
   const footerY = LAYOUT.y + LAYOUT.h - noteH;
   const bodyH = footerY - curY;
@@ -1021,24 +1024,23 @@ function addSiteReportSlide(pptx: PptxGenJS, sr: SiteReport, fallbackDate: strin
       {
         x: LAYOUT.x, y: curY, w: LAYOUT.w, h: bodyH,
         colW: SITE_BODY_COL_W, rowH: [bodyH],
-        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
+        border: { type: 'solid', color: COLORS.siteBorder, pt: 0.5 },
         fontFace: FONT.face, fontSize: bodyFontSize,
         autoPage: false,
       }
   );
 
-  // 푸터: 특이사항 한 행
-  const footerColW = [SITE_HEADER_COL_W[0], LAYOUT.w - SITE_HEADER_COL_W[0]];
+  // 푸터: 특이사항 — 상단 라벨(전체 너비, 색상) / 하단 내용(전체 너비)
   slide.addTable(
-      [[
-        { text: '특이사항', options: { fill: { color: COLORS.headerBg }, bold: true, fontSize: 9, valign: 'middle' } },
-        { text: notesText, options: { fontSize: noteFontSize, valign: 'middle' } },
-      ]],
+      [
+        [{ text: '특이사항', options: { fill: { color: COLORS.headerBg }, bold: true, fontSize: 9, align: 'center', valign: 'middle' } }],
+        [{ text: notesText, options: { fontSize: noteFontSize, valign: 'top', margin: [2, 6, 2, 6] as [number, number, number, number] } }],
+      ],
       {
         x: LAYOUT.x, y: footerY, w: LAYOUT.w, h: noteH,
-        colW: footerColW, rowH: [noteH],
-        border: { type: 'solid', color: COLORS.border, pt: 0.5 },
-        fontFace: FONT.face, fontSize: noteFontSize, valign: 'middle',
+        colW: [LAYOUT.w], rowH: [NOTE_LABEL_H, noteContentH],
+        border: { type: 'solid', color: COLORS.siteBorder, pt: 0.5 },
+        fontFace: FONT.face, fontSize: noteFontSize,
         autoPage: false,
       }
   );
