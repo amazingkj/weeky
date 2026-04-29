@@ -302,3 +302,42 @@ type TeamHistoryResponse struct {
 	TeamName string        `json:"team_name"`
 	Weeks    []WeekSummary `json:"weeks"`
 }
+
+type ConsolidationRuleType string
+
+const (
+	// RuleTypeRenameTitle: 모든 task의 title=pattern → replacement
+	RuleTypeRenameTitle ConsolidationRuleType = "rename_title"
+	// RuleTypeVirtualClient: title=scope_title이고 client가 비어 있는 task의 client → replacement
+	// (예: scope_title="CruzAPIM", replacement="본사" → CruzAPIM 안의 고객사 없는 작업이 "본사"로 묶임)
+	RuleTypeVirtualClient ConsolidationRuleType = "virtual_client"
+)
+
+type ConsolidationRule struct {
+	ID          int64                 `json:"id"`
+	TeamID      int64                 `json:"team_id"`
+	RuleType    ConsolidationRuleType `json:"rule_type"`
+	Pattern     string                `json:"pattern"`               // rename_title: 원본 title / virtual_client: 사용 안 함
+	Replacement string                `json:"replacement"`           // 변경 대상 값
+	ScopeTitle  string                `json:"scope_title,omitempty"` // virtual_client에서 어느 title 안에서 적용할지
+	SortOrder   int                   `json:"sort_order"`
+	CreatedAt   time.Time             `json:"created_at"`
+}
+
+type CreateConsolidationRuleRequest struct {
+	RuleType    ConsolidationRuleType `json:"rule_type"`
+	Pattern     string                `json:"pattern"`
+	Replacement string                `json:"replacement"`
+	ScopeTitle  string                `json:"scope_title,omitempty"`
+}
+
+type UpdateConsolidationRuleRequest struct {
+	RuleType    ConsolidationRuleType `json:"rule_type"`
+	Pattern     string                `json:"pattern"`
+	Replacement string                `json:"replacement"`
+	ScopeTitle  string                `json:"scope_title,omitempty"`
+}
+
+type ReorderConsolidationRulesRequest struct {
+	IDs []int64 `json:"ids"`
+}

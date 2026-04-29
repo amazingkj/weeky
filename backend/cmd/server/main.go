@@ -145,6 +145,12 @@ func main() {
 	protected.Get("/teams/:id/consolidated-edit", h.GetConsolidatedEdit)
 	protected.Delete("/teams/:id/consolidated-edit", h.DeleteConsolidatedEdit)
 
+	protected.Get("/teams/:id/rules", h.GetConsolidationRules)
+	protected.Post("/teams/:id/rules", h.CreateConsolidationRule)
+	protected.Put("/teams/:id/rules/reorder", h.ReorderConsolidationRules)
+	protected.Put("/teams/:id/rules/:rid", h.UpdateConsolidationRule)
+	protected.Delete("/teams/:id/rules/:rid", h.DeleteConsolidationRule)
+
 	protected.Get("/teams/:id/history", h.GetTeamHistory)
 
 	app.Use("/api", func(c *fiber.Ctx) error {

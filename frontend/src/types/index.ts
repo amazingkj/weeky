@@ -248,6 +248,26 @@ export interface WeekSummary {
   submitted_names: string[];
 }
 
+export type ConsolidationRuleType = 'rename_title' | 'virtual_client';
+
+export interface ConsolidationRule {
+  id: number;
+  team_id: number;
+  rule_type: ConsolidationRuleType;
+  pattern: string;
+  replacement: string;
+  scope_title?: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface CreateConsolidationRuleRequest {
+  rule_type: ConsolidationRuleType;
+  pattern: string;
+  replacement: string;
+  scope_title?: string;
+}
+
 export interface TeamHistoryResponse {
   team_id: number;
   team_name: string;

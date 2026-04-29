@@ -524,4 +524,39 @@ func (m *MockRepository) DeleteConsolidatedEdit(teamID int64, reportDate string)
 	return nil
 }
 
+func (m *MockRepository) CreateConsolidationRule(teamID int64, req model.CreateConsolidationRuleRequest) (*model.ConsolidationRule, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	id := m.nextID
+	m.nextID++
+	return &model.ConsolidationRule{
+		ID:          id,
+		TeamID:      teamID,
+		RuleType:    req.RuleType,
+		Pattern:     req.Pattern,
+		Replacement: req.Replacement,
+		ScopeTitle:  req.ScopeTitle,
+	}, nil
+}
+
+func (m *MockRepository) GetConsolidationRules(teamID int64) ([]model.ConsolidationRule, error) {
+	return nil, nil
+}
+
+func (m *MockRepository) GetConsolidationRule(id int64) (*model.ConsolidationRule, error) {
+	return nil, errors.New("not found")
+}
+
+func (m *MockRepository) UpdateConsolidationRule(id int64, req model.UpdateConsolidationRuleRequest) error {
+	return nil
+}
+
+func (m *MockRepository) DeleteConsolidationRule(id int64) error {
+	return nil
+}
+
+func (m *MockRepository) ReorderConsolidationRules(teamID int64, ids []int64) error {
+	return nil
+}
+
 var _ IRepository = (*MockRepository)(nil)

@@ -6,6 +6,7 @@ import TeamCreateModal from './TeamCreateModal';
 import TeamMemberManager from './TeamMemberManager';
 import TeamSubmissionPanel from './TeamSubmissionPanel';
 import WeeklyHistoryPanel from './WeeklyHistoryPanel';
+import RulesEditor from './RulesEditor';
 import Loading from './ui/Loading';
 
 const ROLE_DISPLAY: Record<TeamRole, string> = {
@@ -21,7 +22,7 @@ export default function TeamPanel() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [myRole, setMyRole] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'members' | 'submissions' | 'projects' | 'history'>('submissions');
+  const [activeView, setActiveView] = useState<'members' | 'submissions' | 'projects' | 'rules' | 'history'>('submissions');
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [mySubmissionStatus, setMySubmissionStatus] = useState<boolean>(false);
   const [submissionHistory, setSubmissionHistory] = useState<ReportSubmission[]>([]);
@@ -315,6 +316,7 @@ export default function TeamPanel() {
                 { key: 'submissions' as const, label: '취합 현황', leaderOnly: false },
                 { key: 'history' as const, label: '히스토리', leaderOnly: false },
                 { key: 'projects' as const, label: '프로젝트 관리', leaderOnly: true },
+                { key: 'rules' as const, label: '취합 변환 규칙', leaderOnly: true },
                 { key: 'members' as const, label: '멤버 관리', leaderOnly: true },
               ]
                 .filter(tab => !tab.leaderOnly || myRole === 'leader' || user?.is_admin)
@@ -341,6 +343,9 @@ export default function TeamPanel() {
             )}
             {isLeaderOrGroupLeader && activeView === 'history' && (
               <WeeklyHistoryPanel teamId={selectedTeam.id} />
+            )}
+            {(myRole === 'leader' || user?.is_admin) && activeView === 'rules' && (
+              <RulesEditor teamId={selectedTeam.id} />
             )}
             {(myRole === 'leader' || user?.is_admin) && activeView === 'projects' && (
               <div className="space-y-4">

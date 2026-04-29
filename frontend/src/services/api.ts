@@ -1,4 +1,4 @@
-import { Template, Report, SyncResult, SyncItem, Task, GitHubSyncRequest, GitLabSyncRequest, JiraSyncRequest, HiworksSyncRequest, ConfigMap, AuthResponse, LoginRequest, RegisterRequest, User, InviteCode, GitLabProject, Team, TeamMember, TeamRole, RoleCode, ReportSubmission, TeamMemberWithSubmission, ConsolidatedReport, TeamProject, TeamHistoryResponse } from '../types';
+import { Template, Report, SyncResult, SyncItem, Task, GitHubSyncRequest, GitLabSyncRequest, JiraSyncRequest, HiworksSyncRequest, ConfigMap, AuthResponse, LoginRequest, RegisterRequest, User, InviteCode, GitLabProject, Team, TeamMember, TeamRole, RoleCode, ReportSubmission, TeamMemberWithSubmission, ConsolidatedReport, TeamProject, TeamHistoryResponse, ConsolidationRule, CreateConsolidationRuleRequest } from '../types';
 
 export interface GenerateReportRequest {
   items: SyncItem[];
@@ -492,6 +492,44 @@ export async function reorderTeamProjects(teamId: number, ids: number[]): Promis
     body: JSON.stringify({ ids }),
   });
   await throwIfNotOk(res, '프로젝트 순서 변경에 실패했습니다');
+}
+
+// --- ConsolidationRule API ---
+
+export async function getConsolidationRules(teamId: number): Promise<ConsolidationRule[]> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/rules`);
+  await throwIfNotOk(res, '변환 규칙 조회에 실패했습니다');
+  return res.json();
+}
+
+export async function createConsolidationRule(teamId: number, req: CreateConsolidationRuleRequest): Promise<ConsolidationRule> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/rules`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
+  await throwWithServerError(res, '변환 규칙 생성에 실패했습니다');
+  return res.json();
+}
+
+export async function updateConsolidationRule(teamId: number, rid: number, req: CreateConsolidationRuleRequest): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/rules/${rid}`, {
+    method: 'PUT',
+    body: JSON.stringify(req),
+  });
+  await throwWithServerError(res, '변환 규칙 수정에 실패했습니다');
+}
+
+export async function deleteConsolidationRule(teamId: number, rid: number): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/rules/${rid}`, { method: 'DELETE' });
+  await throwIfNotOk(res, '변환 규칙 삭제에 실패했습니다');
+}
+
+export async function reorderConsolidationRules(teamId: number, ids: number[]): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/rules/reorder`, {
+    method: 'PUT',
+    body: JSON.stringify({ ids }),
+  });
+  await throwIfNotOk(res, '규칙 순서 변경에 실패했습니다');
 }
 
 export async function saveConsolidatedEdit(teamId: number, data: {

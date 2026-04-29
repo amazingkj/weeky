@@ -456,6 +456,12 @@ func (h *Handler) GetConsolidatedReport(c *fiber.Ctx) error {
 		subMap[s.UserID] = s
 	}
 
+	// 팀의 변환 규칙 — 실패해도 raw 데이터로 진행 (취합 자체는 깨면 안 됨)
+	rules, err := h.repo.GetConsolidationRules(teamID)
+	if err != nil {
+		rules = nil
+	}
+
 	var memberReports []model.MemberReportData
 	for _, m := range members {
 		mrd := model.MemberReportData{
@@ -466,7 +472,7 @@ func (h *Handler) GetConsolidatedReport(c *fiber.Ctx) error {
 		if sub, ok := subMap[m.UserID]; ok {
 			report, err := h.repo.GetReportByID(sub.ReportID)
 			if err == nil {
-				mrd.Report = report
+				mrd.Report = applyRulesToReport(report, rules)
 			}
 		}
 		memberReports = append(memberReports, mrd)
@@ -761,6 +767,174 @@ func (h *Handler) ReorderTeamProjects(c *fiber.Ctx) error {
 	}
 
 	if err := h.repo.ReorderTeamProjects(teamID, req.IDs); err != nil {
+		return internalError(c, err)
+	}
+	return c.SendStatus(204)
+}
+
+// --- ConsolidationRule handlers ---
+
+func validateRuleType(rt model.ConsolidationRuleType) bool {
+	return rt == model.RuleTypeRenameTitle || rt == model.RuleTypeVirtualClient
+}
+
+// 규칙별 필수 필드 검증. 잘못 채우면 변환 적용 시 의도치 않은 결과가 나오므로 입력 단계에서 차단.
+func validateRulePayload(rt model.ConsolidationRuleType, pattern, replacement, scopeTitle string) string {
+	switch rt {
+	case model.RuleTypeRenameTitle:
+		if pattern == "" {
+			return "rename_title 규칙은 변환 대상 title(pattern)이 필요합니다"
+		}
+		if replacement == "" {
+			return "rename_title 규칙은 변환 결과(replacement)가 필요합니다"
+		}
+	case model.RuleTypeVirtualClient:
+		if scopeTitle == "" {
+			return "virtual_client 규칙은 적용 대상 업무제목(scope_title)이 필요합니다"
+		}
+		if replacement == "" {
+			return "virtual_client 규칙은 가상 고객사명(replacement)이 필요합니다"
+		}
+	}
+	return ""
+}
+
+func (h *Handler) GetConsolidationRules(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+	userID := getUserID(c)
+	if _, err := h.repo.GetTeamMember(teamID, userID); err != nil && !isAdmin(c) {
+		return respondError(c, fiber.StatusForbidden, "팀 멤버가 아닙니다")
+	}
+
+	rules, err := h.repo.GetConsolidationRules(teamID)
+	if err != nil {
+		return internalError(c, err)
+	}
+	if rules == nil {
+		rules = []model.ConsolidationRule{}
+	}
+	return c.JSON(rules)
+}
+
+func (h *Handler) CreateConsolidationRule(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+	userID := getUserID(c)
+	member, err := h.repo.GetTeamMember(teamID, userID)
+	if !isAdmin(c) && (err != nil || member.Role != model.TeamRoleLeader) {
+		return respondError(c, fiber.StatusForbidden, "팀장 권한이 필요합니다")
+	}
+
+	var req model.CreateConsolidationRuleRequest
+	if err := c.BodyParser(&req); err != nil {
+		return badRequest(c, "잘못된 요청입니다")
+	}
+	if !validateRuleType(req.RuleType) {
+		return badRequest(c, "지원하지 않는 규칙 타입입니다")
+	}
+	if msg := validateRulePayload(req.RuleType, req.Pattern, req.Replacement, req.ScopeTitle); msg != "" {
+		return badRequest(c, msg)
+	}
+
+	rule, err := h.repo.CreateConsolidationRule(teamID, req)
+	if err != nil {
+		return internalError(c, err)
+	}
+	return c.Status(201).JSON(rule)
+}
+
+func (h *Handler) UpdateConsolidationRule(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+	rid, err := strconv.ParseInt(c.Params("rid"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 규칙 ID입니다")
+	}
+	userID := getUserID(c)
+	member, err := h.repo.GetTeamMember(teamID, userID)
+	if !isAdmin(c) && (err != nil || member.Role != model.TeamRoleLeader) {
+		return respondError(c, fiber.StatusForbidden, "팀장 권한이 필요합니다")
+	}
+
+	rule, err := h.repo.GetConsolidationRule(rid)
+	if err != nil {
+		return notFound(c, "규칙을 찾을 수 없습니다")
+	}
+	if rule.TeamID != teamID {
+		return respondError(c, fiber.StatusForbidden, "해당 팀의 규칙이 아닙니다")
+	}
+
+	var req model.UpdateConsolidationRuleRequest
+	if err := c.BodyParser(&req); err != nil {
+		return badRequest(c, "잘못된 요청입니다")
+	}
+	if !validateRuleType(req.RuleType) {
+		return badRequest(c, "지원하지 않는 규칙 타입입니다")
+	}
+	if msg := validateRulePayload(req.RuleType, req.Pattern, req.Replacement, req.ScopeTitle); msg != "" {
+		return badRequest(c, msg)
+	}
+
+	if err := h.repo.UpdateConsolidationRule(rid, req); err != nil {
+		return internalError(c, err)
+	}
+	return c.SendStatus(204)
+}
+
+func (h *Handler) DeleteConsolidationRule(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+	rid, err := strconv.ParseInt(c.Params("rid"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 규칙 ID입니다")
+	}
+	userID := getUserID(c)
+	member, err := h.repo.GetTeamMember(teamID, userID)
+	if !isAdmin(c) && (err != nil || member.Role != model.TeamRoleLeader) {
+		return respondError(c, fiber.StatusForbidden, "팀장 권한이 필요합니다")
+	}
+
+	rule, err := h.repo.GetConsolidationRule(rid)
+	if err != nil {
+		return notFound(c, "규칙을 찾을 수 없습니다")
+	}
+	if rule.TeamID != teamID {
+		return respondError(c, fiber.StatusForbidden, "해당 팀의 규칙이 아닙니다")
+	}
+	if err := h.repo.DeleteConsolidationRule(rid); err != nil {
+		return internalError(c, err)
+	}
+	return c.SendStatus(204)
+}
+
+func (h *Handler) ReorderConsolidationRules(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+	userID := getUserID(c)
+	member, err := h.repo.GetTeamMember(teamID, userID)
+	if !isAdmin(c) && (err != nil || member.Role != model.TeamRoleLeader) {
+		return respondError(c, fiber.StatusForbidden, "팀장 권한이 필요합니다")
+	}
+
+	var req model.ReorderConsolidationRulesRequest
+	if err := c.BodyParser(&req); err != nil {
+		return badRequest(c, "잘못된 요청입니다")
+	}
+	if len(req.IDs) == 0 {
+		return badRequest(c, "규칙 ID 목록이 필요합니다")
+	}
+	if err := h.repo.ReorderConsolidationRules(teamID, req.IDs); err != nil {
 		return internalError(c, err)
 	}
 	return c.SendStatus(204)

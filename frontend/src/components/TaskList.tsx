@@ -1,6 +1,23 @@
 import { useState, useCallback, useRef, useEffect, memo } from 'react';
 import { Task, TeamProject } from '../types';
 import ProjectCombobox from './ProjectCombobox';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface TaskListProps {
   title: string;
@@ -70,6 +87,24 @@ export default function TaskList({
     onChange(newTasks);
   }, [tasks, onChange]);
 
+  const sensors = useSensors(
+    // PointerSensor의 8px activation distance — 입력 필드 클릭/드래그 잘못 인식 방지
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const fromId = Number(active.id);
+    const toId = Number(over.id);
+    const fromIdx = taskIdsRef.current.indexOf(fromId);
+    const toIdx = taskIdsRef.current.indexOf(toId);
+    if (fromIdx < 0 || toIdx < 0) return;
+    taskIdsRef.current = arrayMove(taskIdsRef.current, fromIdx, toIdx);
+    onChange(arrayMove(tasks, fromIdx, toIdx));
+  }, [tasks, onChange]);
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -114,25 +149,70 @@ export default function TaskList({
           <p className="text-neutral-300 text-xs mt-1">클릭하여 첫 번째 항목 추가</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {tasks.map((task, index) => (
-            <TaskItem
-              key={taskIdsRef.current[index]}
-              task={task}
-              index={index}
-              totalCount={tasks.length}
-              showProgress={showProgress}
-              onUpdate={(field, value) => updateTask(index, field, value)}
-              onUpdateMulti={(fields) => updateTaskMulti(index, fields)}
-              onRemove={() => removeTask(index)}
-              onMoveUp={() => moveTask(index, 'up')}
-              onMoveDown={() => moveTask(index, 'down')}
-              projectSuggestions={projectSuggestions}
-              onAutoCreateProject={onAutoCreateProject}
-            />
-          ))}
-        </div>
+        (() => {
+          // 현재 리스트의 고유 title/client + 등록 프로젝트 머지 → 빠른 이동 메뉴 옵션
+          const titleSet = new Set<string>();
+          const clientSet = new Set<string>();
+          for (const t of tasks) {
+            if (t.title?.trim()) titleSet.add(t.title.trim());
+            if (t.client?.trim()) clientSet.add(t.client.trim());
+          }
+          if (projectSuggestions) {
+            for (const p of projectSuggestions) {
+              if (p.is_active && p.name) titleSet.add(p.name);
+              if (p.is_active && p.client) clientSet.add(p.client);
+            }
+          }
+          const availableTitles = Array.from(titleSet).sort();
+          const availableClients = Array.from(clientSet).sort();
+          const sortableIds = taskIdsRef.current.slice(0, tasks.length);
+          return (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
+            <div className="space-y-2">
+              {tasks.map((task, index) => (
+                <SortableTaskItem
+                  key={taskIdsRef.current[index]}
+                  id={taskIdsRef.current[index]}
+                  task={task}
+                  index={index}
+                  totalCount={tasks.length}
+                  showProgress={showProgress}
+                  onUpdate={(field, value) => updateTask(index, field, value)}
+                  onUpdateMulti={(fields) => updateTaskMulti(index, fields)}
+                  onRemove={() => removeTask(index)}
+                  onMoveUp={() => moveTask(index, 'up')}
+                  onMoveDown={() => moveTask(index, 'down')}
+                  projectSuggestions={projectSuggestions}
+                  onAutoCreateProject={onAutoCreateProject}
+                  availableTitles={availableTitles}
+                  availableClients={availableClients}
+                />
+              ))}
+            </div>
+              </SortableContext>
+            </DndContext>
+          );
+        })()
       )}
+    </div>
+  );
+}
+
+// Sortable wrapper around TaskItem — provides drag handle + transform/transition
+interface SortableTaskItemProps extends TaskItemProps {
+  id: number;
+}
+function SortableTaskItem({ id, ...rest }: SortableTaskItemProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style}>
+      <TaskItem {...rest} dragHandleProps={{ ...attributes, ...listeners }} />
     </div>
   );
 }
@@ -159,6 +239,9 @@ interface TaskItemProps {
   onMoveDown: () => void;
   projectSuggestions?: TeamProject[];
   onAutoCreateProject?: (name: string) => void;
+  availableTitles?: string[];
+  availableClients?: string[];
+  dragHandleProps?: React.HTMLAttributes<HTMLElement>;
 }
 
 const TaskItem = memo(function TaskItem({
@@ -172,9 +255,23 @@ const TaskItem = memo(function TaskItem({
   onMoveUp,
   onMoveDown,
   projectSuggestions,
-  onAutoCreateProject
+  onAutoCreateProject,
+  availableTitles,
+  availableClients,
+  dragHandleProps,
 }: TaskItemProps) {
   const [showDescription, setShowDescription] = useState(() => !!task.description);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
 
   let progressColor = 'bg-neutral-300';
   if (task.progress === 100) progressColor = 'bg-neutral-900';
@@ -185,7 +282,12 @@ const TaskItem = memo(function TaskItem({
       {/* Header Row */}
       <div className="flex items-center justify-between mb-2.5">
         <div className="flex items-center gap-2">
-          <span className="w-5 h-5 flex items-center justify-center bg-neutral-200 text-neutral-600 text-xs font-mono rounded">
+          {/* 인덱스 배지 = 드래그 핸들 */}
+          <span
+            {...(dragHandleProps || {})}
+            className="w-5 h-5 flex items-center justify-center bg-neutral-200 text-neutral-600 text-xs font-mono rounded cursor-grab active:cursor-grabbing select-none"
+            title="드래그해서 순서 변경"
+          >
             {index + 1}
           </span>
           {task._carriedForward && (
@@ -211,6 +313,57 @@ const TaskItem = memo(function TaskItem({
             className="p-1 text-neutral-400 hover:text-neutral-600 disabled:opacity-30" title="아래로">
             {downIcon}
           </button>
+          {/* ⋯ 메뉴: 다른 업무제목/고객사로 빠른 이동 */}
+          {((availableTitles && availableTitles.length > 0) || (availableClients && availableClients.length > 0)) && (
+            <div ref={menuRef} className="relative">
+              <button type="button" onClick={() => setMenuOpen(o => !o)}
+                className="p-1 text-neutral-400 hover:text-neutral-600 transition-colors" title="이동/메뉴">
+                {moreIcon}
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-full mt-1 z-30 bg-white border border-neutral-200 rounded-lg shadow-lg py-1 w-56 max-h-72 overflow-auto">
+                  {availableTitles && availableTitles.length > 0 && (
+                    <>
+                      <div className="px-3 py-1 text-[10px] font-semibold text-neutral-400 uppercase tracking-wide">
+                        업무제목으로 이동
+                      </div>
+                      {availableTitles.filter(t => t !== task.title).map(t => (
+                        <button key={`t-${t}`} type="button"
+                          onClick={() => { onUpdate('title', t); setMenuOpen(false); }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 transition-colors truncate">
+                          {t}
+                        </button>
+                      ))}
+                      {availableTitles.filter(t => t !== task.title).length === 0 && (
+                        <div className="px-3 py-1 text-[11px] text-neutral-400">다른 업무제목 없음</div>
+                      )}
+                    </>
+                  )}
+                  {availableClients && availableClients.length > 0 && (
+                    <>
+                      <div className="px-3 py-1 mt-1 border-t border-neutral-100 text-[10px] font-semibold text-neutral-400 uppercase tracking-wide">
+                        고객사로 이동
+                      </div>
+                      <button type="button"
+                        onClick={() => { onUpdate('client', ''); setMenuOpen(false); }}
+                        className={`w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-100 transition-colors ${
+                          !task.client ? 'text-neutral-400' : 'text-neutral-700'
+                        }`}>
+                        (고객사 없음)
+                      </button>
+                      {availableClients.filter(c => c !== task.client).map(c => (
+                        <button key={`c-${c}`} type="button"
+                          onClick={() => { onUpdate('client', c); setMenuOpen(false); }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 transition-colors truncate">
+                          {c}
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <button type="button" onClick={onRemove}
             className="p-1 text-neutral-400 hover:text-red-500 transition-colors" title="삭제">
             {trashIcon}
@@ -449,6 +602,12 @@ const upIcon = (
 const downIcon = (
   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 9l-7 7-7-7" />
+  </svg>
+);
+
+const moreIcon = (
+  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 12h.01M12 12h.01M19 12h.01" />
   </svg>
 );
 

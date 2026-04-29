@@ -175,6 +175,21 @@ var oracleMigrations = []oracleMigration{
 			)`,
 		},
 	},
+	{
+		version: 8,
+		sqls: []string{
+			`CREATE TABLE consolidation_rules (
+				id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				team_id NUMBER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+				rule_type VARCHAR2(50) NOT NULL,
+				pattern VARCHAR2(500) DEFAULT '' NOT NULL,
+				replacement VARCHAR2(500) DEFAULT '' NOT NULL,
+				scope_title VARCHAR2(500) DEFAULT '' NOT NULL,
+				sort_order NUMBER DEFAULT 0 NOT NULL,
+				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			)`,
+		},
+	},
 }
 
 func runOracleMigrations(db *sql.DB) error {
@@ -1105,4 +1120,105 @@ func (r *OracleRepository) GetConsolidatedEdit(teamID int64, reportDate string) 
 func (r *OracleRepository) DeleteConsolidatedEdit(teamID int64, reportDate string) error {
 	_, err := r.db.Exec("DELETE FROM consolidated_edits WHERE team_id = :1 AND report_date = :2", teamID, reportDate)
 	return err
+}
+
+// --- ConsolidationRule methods ---
+
+func (r *OracleRepository) CreateConsolidationRule(teamID int64, req model.CreateConsolidationRuleRequest) (*model.ConsolidationRule, error) {
+	var nextOrder int
+	r.db.QueryRow("SELECT COALESCE(MAX(sort_order)+1, 0) FROM consolidation_rules WHERE team_id = :1", teamID).Scan(&nextOrder)
+
+	var id int64
+	_, err := r.db.Exec(
+		`INSERT INTO consolidation_rules (team_id, rule_type, pattern, replacement, scope_title, sort_order)
+		 VALUES (:1, :2, :3, :4, :5, :6)
+		 RETURNING id INTO :7`,
+		teamID, string(req.RuleType), req.Pattern, req.Replacement, req.ScopeTitle, nextOrder,
+		go_ora.Out{Dest: &id, Size: 8},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &model.ConsolidationRule{
+		ID:          id,
+		TeamID:      teamID,
+		RuleType:    req.RuleType,
+		Pattern:     req.Pattern,
+		Replacement: req.Replacement,
+		ScopeTitle:  req.ScopeTitle,
+		SortOrder:   nextOrder,
+		CreatedAt:   time.Now(),
+	}, nil
+}
+
+func (r *OracleRepository) GetConsolidationRules(teamID int64) ([]model.ConsolidationRule, error) {
+	rows, err := r.db.Query(
+		`SELECT id, team_id, rule_type, pattern, replacement, scope_title, sort_order, created_at
+		 FROM consolidation_rules WHERE team_id = :1 ORDER BY sort_order, id`,
+		teamID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	rules := []model.ConsolidationRule{}
+	for rows.Next() {
+		var c model.ConsolidationRule
+		var ruleType string
+		if err := rows.Scan(&c.ID, &c.TeamID, &ruleType, &c.Pattern, &c.Replacement, &c.ScopeTitle, &c.SortOrder, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		c.RuleType = model.ConsolidationRuleType(ruleType)
+		rules = append(rules, c)
+	}
+	return rules, rows.Err()
+}
+
+func (r *OracleRepository) GetConsolidationRule(id int64) (*model.ConsolidationRule, error) {
+	var c model.ConsolidationRule
+	var ruleType string
+	err := r.db.QueryRow(
+		`SELECT id, team_id, rule_type, pattern, replacement, scope_title, sort_order, created_at
+		 FROM consolidation_rules WHERE id = :1`, id,
+	).Scan(&c.ID, &c.TeamID, &ruleType, &c.Pattern, &c.Replacement, &c.ScopeTitle, &c.SortOrder, &c.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	c.RuleType = model.ConsolidationRuleType(ruleType)
+	return &c, nil
+}
+
+func (r *OracleRepository) UpdateConsolidationRule(id int64, req model.UpdateConsolidationRuleRequest) error {
+	_, err := r.db.Exec(
+		`UPDATE consolidation_rules SET rule_type = :1, pattern = :2, replacement = :3, scope_title = :4 WHERE id = :5`,
+		string(req.RuleType), req.Pattern, req.Replacement, req.ScopeTitle, id,
+	)
+	return err
+}
+
+func (r *OracleRepository) DeleteConsolidationRule(id int64) error {
+	_, err := r.db.Exec("DELETE FROM consolidation_rules WHERE id = :1", id)
+	return err
+}
+
+func (r *OracleRepository) ReorderConsolidationRules(teamID int64, ids []int64) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare("UPDATE consolidation_rules SET sort_order = :1 WHERE id = :2 AND team_id = :3")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for i, id := range ids {
+		if _, err := stmt.Exec(i, id, teamID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }

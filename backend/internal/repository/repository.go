@@ -68,6 +68,13 @@ type IRepository interface {
 	SaveConsolidatedEdit(teamID int64, reportDate, data string, updatedBy int64) error
 	GetConsolidatedEdit(teamID int64, reportDate string) (*model.ConsolidatedEdit, error)
 	DeleteConsolidatedEdit(teamID int64, reportDate string) error
+
+	CreateConsolidationRule(teamID int64, req model.CreateConsolidationRuleRequest) (*model.ConsolidationRule, error)
+	GetConsolidationRules(teamID int64) ([]model.ConsolidationRule, error)
+	GetConsolidationRule(id int64) (*model.ConsolidationRule, error)
+	UpdateConsolidationRule(id int64, req model.UpdateConsolidationRuleRequest) error
+	DeleteConsolidationRule(id int64) error
+	ReorderConsolidationRules(teamID int64, ids []int64) error
 }
 
 var _ IRepository = (*Repository)(nil)

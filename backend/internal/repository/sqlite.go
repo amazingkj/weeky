@@ -187,6 +187,19 @@ ALTER TABLE reports ADD COLUMN next_notes TEXT DEFAULT '';`,
 			UNIQUE(team_id, report_date)
 		);`,
 	},
+	{
+		version: 8,
+		sql: `CREATE TABLE IF NOT EXISTS consolidation_rules (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+			rule_type TEXT NOT NULL,
+			pattern TEXT NOT NULL DEFAULT '',
+			replacement TEXT NOT NULL DEFAULT '',
+			scope_title TEXT NOT NULL DEFAULT '',
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);`,
+	},
 }
 
 func runMigrations(db *sql.DB) error {
@@ -1183,4 +1196,106 @@ func (r *Repository) GetConsolidatedEdit(teamID int64, reportDate string) (*mode
 func (r *Repository) DeleteConsolidatedEdit(teamID int64, reportDate string) error {
 	_, err := r.db.Exec("DELETE FROM consolidated_edits WHERE team_id = ? AND report_date = ?", teamID, reportDate)
 	return err
+}
+
+// --- ConsolidationRule methods ---
+
+func (r *Repository) CreateConsolidationRule(teamID int64, req model.CreateConsolidationRuleRequest) (*model.ConsolidationRule, error) {
+	var nextOrder int
+	r.db.QueryRow("SELECT COALESCE(MAX(sort_order)+1, 0) FROM consolidation_rules WHERE team_id = ?", teamID).Scan(&nextOrder)
+
+	result, err := r.db.Exec(
+		`INSERT INTO consolidation_rules (team_id, rule_type, pattern, replacement, scope_title, sort_order)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		teamID, string(req.RuleType), req.Pattern, req.Replacement, req.ScopeTitle, nextOrder,
+	)
+	if err != nil {
+		return nil, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	return &model.ConsolidationRule{
+		ID:          id,
+		TeamID:      teamID,
+		RuleType:    req.RuleType,
+		Pattern:     req.Pattern,
+		Replacement: req.Replacement,
+		ScopeTitle:  req.ScopeTitle,
+		SortOrder:   nextOrder,
+		CreatedAt:   time.Now(),
+	}, nil
+}
+
+func (r *Repository) GetConsolidationRules(teamID int64) ([]model.ConsolidationRule, error) {
+	rows, err := r.db.Query(
+		`SELECT id, team_id, rule_type, pattern, replacement, scope_title, sort_order, created_at
+		 FROM consolidation_rules WHERE team_id = ? ORDER BY sort_order, id`,
+		teamID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	rules := []model.ConsolidationRule{}
+	for rows.Next() {
+		var c model.ConsolidationRule
+		var ruleType string
+		if err := rows.Scan(&c.ID, &c.TeamID, &ruleType, &c.Pattern, &c.Replacement, &c.ScopeTitle, &c.SortOrder, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		c.RuleType = model.ConsolidationRuleType(ruleType)
+		rules = append(rules, c)
+	}
+	return rules, rows.Err()
+}
+
+func (r *Repository) GetConsolidationRule(id int64) (*model.ConsolidationRule, error) {
+	var c model.ConsolidationRule
+	var ruleType string
+	err := r.db.QueryRow(
+		`SELECT id, team_id, rule_type, pattern, replacement, scope_title, sort_order, created_at
+		 FROM consolidation_rules WHERE id = ?`, id,
+	).Scan(&c.ID, &c.TeamID, &ruleType, &c.Pattern, &c.Replacement, &c.ScopeTitle, &c.SortOrder, &c.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	c.RuleType = model.ConsolidationRuleType(ruleType)
+	return &c, nil
+}
+
+func (r *Repository) UpdateConsolidationRule(id int64, req model.UpdateConsolidationRuleRequest) error {
+	_, err := r.db.Exec(
+		`UPDATE consolidation_rules SET rule_type = ?, pattern = ?, replacement = ?, scope_title = ? WHERE id = ?`,
+		string(req.RuleType), req.Pattern, req.Replacement, req.ScopeTitle, id,
+	)
+	return err
+}
+
+func (r *Repository) DeleteConsolidationRule(id int64) error {
+	_, err := r.db.Exec("DELETE FROM consolidation_rules WHERE id = ?", id)
+	return err
+}
+
+func (r *Repository) ReorderConsolidationRules(teamID int64, ids []int64) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare("UPDATE consolidation_rules SET sort_order = ? WHERE id = ? AND team_id = ?")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for i, id := range ids {
+		if _, err := stmt.Exec(i, id, teamID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
