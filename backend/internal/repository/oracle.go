@@ -1367,7 +1367,7 @@ func (r *OracleRepository) CreateSiteProject(teamID int64, req model.CreateSiteP
 }
 
 func (r *OracleRepository) GetSiteProjects(teamID int64, activeOnly bool) ([]model.SiteProject, error) {
-	query := "SELECT id, team_id, project_name, COALESCE(client_name, ''), is_active, sort_order, created_at FROM site_projects WHERE team_id = :1"
+	query := "SELECT id, team_id, project_name, client_name, is_active, sort_order, created_at FROM site_projects WHERE team_id = :1"
 	if activeOnly {
 		query += " AND is_active = 1"
 	}
@@ -1381,9 +1381,11 @@ func (r *OracleRepository) GetSiteProjects(teamID int64, activeOnly bool) ([]mod
 	for rows.Next() {
 		var p model.SiteProject
 		var isActive int
-		if err := rows.Scan(&p.ID, &p.TeamID, &p.ProjectName, &p.ClientName, &isActive, &p.SortOrder, &p.CreatedAt); err != nil {
+		var clientName sql.NullString
+		if err := rows.Scan(&p.ID, &p.TeamID, &p.ProjectName, &clientName, &isActive, &p.SortOrder, &p.CreatedAt); err != nil {
 			return nil, err
 		}
+		p.ClientName = clientName.String
 		p.IsActive = isActive == 1
 		projects = append(projects, p)
 	}
@@ -1403,12 +1405,14 @@ func (r *OracleRepository) GetSiteProjects(teamID int64, activeOnly bool) ([]mod
 func (r *OracleRepository) GetSiteProject(id int64) (*model.SiteProject, error) {
 	var p model.SiteProject
 	var isActive int
+	var clientName sql.NullString
 	err := r.db.QueryRow(
-		"SELECT id, team_id, project_name, COALESCE(client_name, ''), is_active, sort_order, created_at FROM site_projects WHERE id = :1", id,
-	).Scan(&p.ID, &p.TeamID, &p.ProjectName, &p.ClientName, &isActive, &p.SortOrder, &p.CreatedAt)
+		"SELECT id, team_id, project_name, client_name, is_active, sort_order, created_at FROM site_projects WHERE id = :1", id,
+	).Scan(&p.ID, &p.TeamID, &p.ProjectName, &clientName, &isActive, &p.SortOrder, &p.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
+	p.ClientName = clientName.String
 	p.IsActive = isActive == 1
 	authors, err := r.loadSiteProjectAuthors(p.ID)
 	if err != nil {
@@ -1459,7 +1463,7 @@ func (r *OracleRepository) DeleteSiteProject(id int64) error {
 
 func (r *OracleRepository) GetSiteProjectsByAuthor(teamID, userID int64) ([]model.SiteProject, error) {
 	rows, err := r.db.Query(
-		`SELECT sp.id, sp.team_id, sp.project_name, COALESCE(sp.client_name, ''), sp.is_active, sp.sort_order, sp.created_at
+		`SELECT sp.id, sp.team_id, sp.project_name, sp.client_name, sp.is_active, sp.sort_order, sp.created_at
 		 FROM site_projects sp
 		 JOIN site_project_authors spa ON spa.site_project_id = sp.id
 		 WHERE sp.team_id = :1 AND spa.user_id = :2 AND sp.is_active = 1
@@ -1473,9 +1477,11 @@ func (r *OracleRepository) GetSiteProjectsByAuthor(teamID, userID int64) ([]mode
 	for rows.Next() {
 		var p model.SiteProject
 		var isActive int
-		if err := rows.Scan(&p.ID, &p.TeamID, &p.ProjectName, &p.ClientName, &isActive, &p.SortOrder, &p.CreatedAt); err != nil {
+		var clientName sql.NullString
+		if err := rows.Scan(&p.ID, &p.TeamID, &p.ProjectName, &clientName, &isActive, &p.SortOrder, &p.CreatedAt); err != nil {
 			return nil, err
 		}
+		p.ClientName = clientName.String
 		p.IsActive = isActive == 1
 		projects = append(projects, p)
 	}
@@ -1593,12 +1599,30 @@ func (r *OracleRepository) SaveSiteReport(teamID, userID int64, req model.SaveSi
 
 func (r *OracleRepository) scanSiteReport(scan func(...any) error) (*model.SiteReport, error) {
 	var sr model.SiteReport
-	var authorNamesJSON, thisWeekJSON, nextWeekJSON string
-	if err := scan(&sr.ID, &sr.TeamID, &sr.SiteProjectID, &sr.AuthorUserID, &authorNamesJSON,
-		&sr.ProjectName, &sr.ReportDate, &sr.ReportDateText, &thisWeekJSON, &nextWeekJSON,
-		&sr.Notes, &sr.CreatedAt, &sr.UpdatedAt); err != nil {
+	// Oracle: nullable 텍스트/CLOB 컬럼은 NULL 가능 → sql.NullString으로 받아서 String 추출
+	var authorNamesNS, projectNameNS, reportDateTextNS, thisWeekNS, nextWeekNS, notesNS sql.NullString
+	if err := scan(&sr.ID, &sr.TeamID, &sr.SiteProjectID, &sr.AuthorUserID, &authorNamesNS,
+		&projectNameNS, &sr.ReportDate, &reportDateTextNS, &thisWeekNS, &nextWeekNS,
+		&notesNS, &sr.CreatedAt, &sr.UpdatedAt); err != nil {
 		return nil, err
 	}
+	sr.ProjectName = projectNameNS.String
+	sr.ReportDateText = reportDateTextNS.String
+	sr.Notes = notesNS.String
+
+	authorNamesJSON := authorNamesNS.String
+	if authorNamesJSON == "" {
+		authorNamesJSON = "[]"
+	}
+	thisWeekJSON := thisWeekNS.String
+	if thisWeekJSON == "" {
+		thisWeekJSON = "[]"
+	}
+	nextWeekJSON := nextWeekNS.String
+	if nextWeekJSON == "" {
+		nextWeekJSON = "[]"
+	}
+
 	if err := json.Unmarshal([]byte(authorNamesJSON), &sr.AuthorNames); err != nil {
 		sr.AuthorNames = []string{}
 	}
@@ -1617,11 +1641,11 @@ func (r *OracleRepository) scanSiteReport(scan func(...any) error) (*model.SiteR
 	return &sr, nil
 }
 
-// Oracle은 ''=NULL이라 빈 문자열이 NULL로 저장됨 → scan 시 NULL→string 변환 실패 방지를 위해 COALESCE
-const oracleSiteReportColumns = `id, team_id, site_project_id, author_user_id, COALESCE(author_names, '[]'),
-	COALESCE(project_name, ''), report_date, COALESCE(report_date_text, ''),
-	COALESCE(this_week, '[]'), COALESCE(next_week, '[]'), COALESCE(notes, ''),
-	created_at, updated_at`
+// Oracle은 ''=NULL이라 빈 문자열이 NULL로 저장됨.
+// COALESCE(clob_col, char_literal)은 Oracle에서 ORA-00932 (CLOB/CHAR 혼용)이라 SQL에서 안 쓰고
+// scanSiteReport에서 sql.NullString으로 NULL을 빈 문자열로 변환.
+const oracleSiteReportColumns = `id, team_id, site_project_id, author_user_id, author_names,
+	project_name, report_date, report_date_text, this_week, next_week, notes, created_at, updated_at`
 
 func (r *OracleRepository) GetSiteReport(id int64) (*model.SiteReport, error) {
 	row := r.db.QueryRow(`SELECT `+oracleSiteReportColumns+` FROM site_reports WHERE id = :1`, id)

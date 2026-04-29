@@ -964,7 +964,9 @@ function addSiteReportSlide(pptx: PptxGenJS, sr: SiteReport, fallbackDate: strin
   const right = sr.next_week || [];
   const rowCount = Math.max(left.length, right.length, 1);
 
-  // 행을 단일 셀의 멀티라인 텍스트로 누적 (행 분할 시 셀 높이 자동 분배가 까다로움)
+  // 행을 단일 셀의 멀티라인 텍스트로 누적.
+  // 계획업무가 멀티라인일 경우 같은 행의 다른 셀(소요일/시작일/완료일/실적)에 빈 줄을 채워
+  // 다음 행의 시작 라인이 좌우 모든 셀에서 동일하도록 정렬.
   const flatTitleL: PptxGenJS.TextProps[] = [];
   const flatElapsed: PptxGenJS.TextProps[] = [];
   const flatStartL: PptxGenJS.TextProps[] = [];
@@ -973,18 +975,36 @@ function addSiteReportSlide(pptx: PptxGenJS, sr: SiteReport, fallbackDate: strin
   const flatTitleR: PptxGenJS.TextProps[] = [];
   const flatStartR: PptxGenJS.TextProps[] = [];
   const flatDueR: PptxGenJS.TextProps[] = [];
+
+  const lineCount = (s: string) => (s ? s.split('\n').length : 1);
+  const padLines = (s: string, n: number) => s + '\n'.repeat(Math.max(0, n - 1));
+
   for (let i = 0; i < rowCount; i++) {
     const l = left[i];
     const r = right[i];
     const trail = i < rowCount - 1 ? '\n' : '';
-    flatTitleL.push({ text: (l?.title || ' ') + trail, options: baseOpts });
-    flatElapsed.push({ text: (l?.elapsed_days || ' ') + trail, options: baseOpts });
-    flatStartL.push({ text: (l?.start_date || ' ') + trail, options: baseOpts });
-    flatDueL.push({ text: (l?.due_date || ' ') + trail, options: baseOpts });
-    flatProg.push({ text: (l?.progress || ' ') + trail, options: baseOpts });
-    flatTitleR.push({ text: (r?.title || ' ') + trail, options: baseOpts });
-    flatStartR.push({ text: (r?.start_date || ' ') + trail, options: baseOpts });
-    flatDueR.push({ text: (r?.due_date || ' ') + trail, options: baseOpts });
+
+    // 좌측 행 높이 = 좌측 셀들 중 최대 라인 수 (실무상 거의 title이 가장 큼)
+    const lTitle = l?.title || ' ';
+    const lElapsed = l?.elapsed_days || ' ';
+    const lStart = l?.start_date || ' ';
+    const lDue = l?.due_date || ' ';
+    const lProg = l?.progress || ' ';
+    const lH = Math.max(lineCount(lTitle), lineCount(lElapsed), lineCount(lStart), lineCount(lDue), lineCount(lProg));
+
+    const rTitle = r?.title || ' ';
+    const rStart = r?.start_date || ' ';
+    const rDue = r?.due_date || ' ';
+    const rH = Math.max(lineCount(rTitle), lineCount(rStart), lineCount(rDue));
+
+    flatTitleL.push({ text: padLines(lTitle, lH) + trail, options: baseOpts });
+    flatElapsed.push({ text: padLines(lElapsed, lH) + trail, options: baseOpts });
+    flatStartL.push({ text: padLines(lStart, lH) + trail, options: baseOpts });
+    flatDueL.push({ text: padLines(lDue, lH) + trail, options: baseOpts });
+    flatProg.push({ text: padLines(lProg, lH) + trail, options: baseOpts });
+    flatTitleR.push({ text: padLines(rTitle, rH) + trail, options: baseOpts });
+    flatStartR.push({ text: padLines(rStart, rH) + trail, options: baseOpts });
+    flatDueR.push({ text: padLines(rDue, rH) + trail, options: baseOpts });
   }
 
   slide.addTable(
