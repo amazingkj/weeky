@@ -266,7 +266,7 @@ export default function ConsolidatedPptPreview({ data, leaderName }: Consolidate
                       <td className={`${brdCls} px-1 py-0 align-top`}>
                         {lr.bold
                           ? <span className="font-medium">{lr.body}</span>
-                          : <span className={lr.indent === 2 ? 'pl-6' : 'pl-2'}>{lr.body}</span>
+                          : <span className={`block ${lr.indent === 2 ? 'pl-6' : 'pl-2'}`}>{lr.body}</span>
                         }
                       </td>
                       <td className={`${brdCls} px-1 py-0 text-center align-top`}>{lr.date}</td>
@@ -274,7 +274,7 @@ export default function ConsolidatedPptPreview({ data, leaderName }: Consolidate
                       <td className={`${brdCls} px-1 py-0 align-top`}>
                         {rr.bold
                           ? <span className="font-medium">{rr.body}</span>
-                          : <span className={rr.indent === 2 ? 'pl-6' : 'pl-2'}>{rr.body}</span>
+                          : <span className={`block ${rr.indent === 2 ? 'pl-6' : 'pl-2'}`}>{rr.body}</span>
                         }
                       </td>
                       <td className={`${brdCls} px-1 py-0 text-center align-top`}>{rr.date}</td>

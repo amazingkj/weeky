@@ -428,13 +428,14 @@ function buildItemRows(items: ConsolidatedTaskItem[], indent: string): BodyRow[]
   return rows;
 }
 
-// NBSP( )를 사용하여 PPT 렌더 시 leading 공백 보존 보장
-// (일반 space는 splitTextToFit의 split(' ')에 의해 토큰화돼 leading 공백이 유실되고,
-//  일부 PPT 렌더러도 leading 일반공백을 시각적으로 무시할 수 있음)
-const NBSP = ' ';
-const INDENT_CLIENT_HEADER = NBSP.repeat(2);   // "  • 고객사"
-const INDENT_DETAIL_W_CLIENT = NBSP.repeat(6); // "      - 진행사항"
-const INDENT_DETAIL_NO_CLIENT = NBSP.repeat(2); // "  - 진행사항"
+// 전각공백(U+3000)으로 들여쓰기를 박는다.
+// - 일반 space는 splitTextToFit의 split(' ')에 토큰화돼 leading 공백이 유실됨
+// - NBSP(U+00A0)는 폭이 너무 좁아 PPT에서 들여쓰기가 거의 안 보임
+// - U+3000(전각공백)은 한글 1글자 폭과 동일하여 시각적으로 명확
+const IDEO_SP = '　';
+const INDENT_CLIENT_HEADER = IDEO_SP;             // "　• 고객사"
+const INDENT_DETAIL_W_CLIENT = IDEO_SP.repeat(3); // "　　　- 진행사항"
+const INDENT_DETAIL_NO_CLIENT = IDEO_SP;          // "　- 진행사항"
 
 // Build rows for one side independently (project → client → detail)
 function buildSideRows(groups: ConsolidatedGroup[]): BodyRow[] {
@@ -485,14 +486,14 @@ function measureTextWidth(text: string): number {
 }
 
 // 단어 단위로 텍스트를 셀 폭에 맞게 분할 (word-wrap 대체)
-// leading whitespace(NBSP/space)는 추출해두고 wrap된 모든 줄에 다시 prepend하여
+// leading whitespace(전각공백/NBSP/space)는 추출해두고 wrap된 모든 줄에 다시 prepend하여
 // 미리보기의 CSS pl-* 동작(둘째 줄도 들여쓰기)과 일치시킨다.
 function splitTextToFit(text: string, charsPerLine: number): string[] {
   if (!text) return [''];
   if (measureTextWidth(text) <= charsPerLine) return [text];
 
   let i = 0;
-  while (i < text.length && (text[i] === ' ' || text[i] === ' ')) i++;
+  while (i < text.length && (text[i] === '　' || text[i] === ' ' || text[i] === ' ')) i++;
   const indent = text.slice(0, i);
   const body = text.slice(i);
   const indentW = measureTextWidth(indent);
