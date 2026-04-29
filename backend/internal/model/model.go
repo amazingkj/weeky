@@ -98,12 +98,15 @@ type Config struct {
 }
 
 type SyncItem struct {
-	Title   string `json:"title"`
-	Content string `json:"content,omitempty"` // 메일 본문 등 상세 내용
-	Date    string `json:"date"`
-	URL     string `json:"url"`
-	Type    string `json:"type"`              // commit, pr, issue, email
-	Source  string `json:"source,omitempty"`   // 출처 프로젝트명 (e.g., "group/project")
+	Title    string `json:"title"`
+	Content  string `json:"content,omitempty"`  // 메일 본문 등 상세 내용
+	Date     string `json:"date"`
+	URL      string `json:"url"`
+	Type     string `json:"type"`               // commit, pr, issue, email
+	Source   string `json:"source,omitempty"`   // 출처 프로젝트명 (e.g., "group/project")
+	DueDate  string `json:"due_date,omitempty"` // Jira 기한
+	Solution string `json:"solution,omitempty"` // Jira 솔루션명 (e.g., "CruzAPIM 1.5")
+	Site     string `json:"site,omitempty"`     // Jira 요청사이트 (고객사 매핑)
 }
 
 type SyncResult struct {

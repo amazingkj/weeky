@@ -83,5 +83,46 @@ func TestGitLabService_Validation(t *testing.T) {
 	})
 }
 
+func TestJira_FindCustomFieldID(t *testing.T) {
+	fields := []jiraField{
+		{ID: "summary", Name: "Summary"},
+		{ID: "customfield_10081", Name: "솔루션명"},
+		{ID: "customfield_10082", Name: "요청사이트"},
+		{ID: "customfield_10090", Name: "기타"},
+	}
+	if got := findCustomFieldID(fields, "솔루션명"); got != "customfield_10081" {
+		t.Errorf("솔루션명: got %q, want customfield_10081", got)
+	}
+	if got := findCustomFieldID(fields, "요청사이트"); got != "customfield_10082" {
+		t.Errorf("요청사이트: got %q, want customfield_10082", got)
+	}
+	if got := findCustomFieldID(fields, "없는필드"); got != "" {
+		t.Errorf("없는필드: got %q, want empty", got)
+	}
+}
+
+func TestJira_DecodeFieldValue(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"null", `null`, ""},
+		{"plain string", `"한화손해보험"`, "한화손해보험"},
+		{"single-select option", `{"value":"CruzAPIM 1.5"}`, "CruzAPIM 1.5"},
+		{"named option", `{"name":"한화손해보험"}`, "한화손해보험"},
+		{"multi-value", `[{"value":"한화손해보험"},{"value":"흥국화재"}]`, "한화손해보험, 흥국화재"},
+		{"empty array", `[]`, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := decodeFieldValue([]byte(c.in))
+			if got != c.want {
+				t.Errorf("got %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
 // Note: Full integration tests would require actual API credentials
 // These tests verify the service structure and basic validation

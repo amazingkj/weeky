@@ -64,7 +64,10 @@ export interface SyncItem {
   date: string;
   url: string;
   type: 'commit' | 'pr' | 'mr' | 'issue' | 'issue_done' | 'issue_todo' | 'email';
-  source?: string; // 출처 프로젝트명 (e.g., "group/project")
+  source?: string;   // 출처 프로젝트명 (e.g., "group/project")
+  due_date?: string; // Jira 기한
+  solution?: string; // Jira 솔루션명 (e.g., "CruzAPIM 1.5")
+  site?: string;     // Jira 요청사이트 (Task.client로 매핑됨)
 }
 
 export interface SyncResult {

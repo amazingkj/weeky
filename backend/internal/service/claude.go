@@ -199,7 +199,17 @@ func buildPrompt(items []model.SyncItem, startDate, endDate, style string, proje
 			if status == "" {
 				status = "Unknown"
 			}
-			fmt.Fprintf(&b, "- [%s] %s (상태: %s)\n", i.Date, i.Title, status)
+			fmt.Fprintf(&b, "- [%s] %s (상태: %s", i.Date, i.Title, status)
+			if i.DueDate != "" {
+				fmt.Fprintf(&b, ", 기한: %s", i.DueDate)
+			}
+			if i.Solution != "" {
+				fmt.Fprintf(&b, ", 솔루션: %s", i.Solution)
+			}
+			if i.Site != "" {
+				fmt.Fprintf(&b, ", 요청사이트: %s", i.Site)
+			}
+			b.WriteString(")\n")
 		}
 		b.WriteString("\n")
 	}
@@ -225,6 +235,13 @@ func buildPrompt(items []model.SyncItem, startDate, endDate, style string, proje
 	}
 
 	b.WriteString("위 활동들을 분석하여 주간 업무 보고서를 작성해주세요.\n\n")
+
+	b.WriteString(`Jira 필드 매핑 규칙 (이 규칙은 어떤 스타일이든 동일하게 적용):
+- 요청사이트가 있으면 해당 Task의 client에 그대로 사용 (다른 단서로 추정하지 말 것)
+- 솔루션명이 있으면 title에 사용하되 버전 표기는 제거 (예: "CruzAPIM 1.5" → "CruzAPIM")
+- 기한이 있으면 due_date에 그대로 사용 (임의 추정 금지)
+
+`)
 
 	if style == "very_detailed" {
 		b.WriteString(`요구사항:
