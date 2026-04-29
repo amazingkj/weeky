@@ -290,6 +290,15 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
       setError(validationError);
       return;
     }
+    // 완료예정일 누락 차단 — 제출 시 팝업으로 명시 알림
+    const missingDue = [
+      ...report.this_week.filter(t => !t.due_date?.trim()),
+      ...report.next_week.filter(t => !t.due_date?.trim()),
+    ];
+    if (missingDue.length > 0) {
+      alert('완료예정일이 비어있는 항목이 있습니다.\n모두 작성한 후 제출해주세요.');
+      return;
+    }
     if (!selectedTeamId) {
       setError('제출할 팀을 선택해주세요.');
       return;
