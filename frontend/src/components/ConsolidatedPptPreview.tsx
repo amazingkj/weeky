@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { ConsolidatedReport, MemberReportData, Task } from '../types';
-import { formatDateShort, getWeekRange, getNextWeekRange } from '../utils/date';
+import { formatDateShort, getWeekRange, getNextWeekRange, formatDateMMDD } from '../utils/date';
 
 interface ConsolidatedPptPreviewProps {
   data: ConsolidatedReport;
@@ -49,13 +49,6 @@ function mergeText(members: MemberReportData[], field: 'issues' | 'notes' | 'nex
     .filter(m => m.report && m.report[field]?.trim())
     .map(m => m.user_name ? `[${m.user_name}] ${m.report![field]}` : m.report![field])
     .join('\n');
-}
-
-function formatDateMMDD(dateStr: string): string {
-  if (!dateStr) return '-';
-  const parts = dateStr.split('-');
-  if (parts.length >= 3) return `${parts[1]}/${parts[2]}`;
-  return dateStr;
 }
 
 function subGroupByClient(items: ConsolidatedTask['items']): Map<string, ConsolidatedTask['items']> {
@@ -183,10 +176,15 @@ export default function ConsolidatedPptPreview({ data, leaderName }: Consolidate
     const ISSUE_CELL_W = 9.4 - 1.5;
     const CHARS_PER_LINE = Math.floor(ISSUE_CELL_W * 14);
     const LINE_H = 0.22;
+    // 한글/CJK는 ascii 대비 2배 폭 → measureWidth로 가중 계산
+    function measureWidth(s: string): number {
+      let w = 0;
+      for (const ch of s) w += /[　-鿿가-힯！-｠]/.test(ch) ? 2 : 1;
+      return w;
+    }
     function calcWrappedLineCount(text: string): number {
       const lines = (text || '-').split('\n');
-      const charsPerLine = Math.floor(CHARS_PER_LINE * (8 / 8));
-      return lines.reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
+      return lines.reduce((sum, line) => sum + Math.max(1, Math.ceil(measureWidth(line) / CHARS_PER_LINE)), 0);
     }
     const issueLineCount = Math.max(calcWrappedLineCount(issuesLeft), calcWrappedLineCount(issuesRight));
     const noteLineCount = Math.max(calcWrappedLineCount(notesLeft), calcWrappedLineCount(notesRight));

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Task, SyncResult } from '../types';
 import { syncGitLab, syncJira, syncHiworks, getConfig, generateAIReport } from '../services/api';
+import { jiraItemsToTasks } from '../utils/jiraToTask';
 
 interface SyncPanelProps {
   onAIGenerate?: (thisWeek: Task[], nextWeek: Task[]) => void;
@@ -43,6 +44,7 @@ export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps
     return 'concise';
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [isJiraLoading, setIsJiraLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<Record<string, string>>({});
   const [configLoaded, setConfigLoaded] = useState(false);
@@ -68,6 +70,38 @@ export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps
     if (config.hiworks_password === '***configured***') list.push('Hiworks');
     return list;
   }, [config]);
+
+  const handleJiraOnly = useCallback(async () => {
+    setError(null);
+    if (config.jira_token !== '***configured***') {
+      setError('Jira 토큰이 설정되지 않았습니다. 설정 탭에서 Jira를 먼저 등록해주세요.');
+      return;
+    }
+    const baseUrl = config.jira_base_url || '';
+    if (!baseUrl) {
+      setError('Jira Base URL이 설정되지 않았습니다.');
+      return;
+    }
+
+    setIsJiraLoading(true);
+    try {
+      const result = await syncJira({
+        base_url: baseUrl,
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+      });
+      const tasks = jiraItemsToTasks(result.items);
+      if (tasks.length === 0) {
+        setError('해당 기간에 동기화된 Jira 티켓이 없습니다.');
+        return;
+      }
+      onAIGenerate?.(tasks, []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Jira 동기화에 실패했습니다.');
+    } finally {
+      setIsJiraLoading(false);
+    }
+  }, [config, dateRange, onAIGenerate]);
 
   const handleGenerate = useCallback(async () => {
     setError(null);
@@ -227,13 +261,27 @@ export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps
       {/* AI Generate Button */}
       <button
         onClick={handleGenerate}
-        disabled={isLoading || services.length === 0}
+        disabled={isLoading || isJiraLoading || services.length === 0}
         className="w-full px-4 py-3 bg-neutral-900 text-white text-sm font-medium rounded-lg
                    hover:bg-neutral-800 disabled:opacity-40 disabled:cursor-not-allowed
                    transition-colors flex items-center justify-center gap-2"
       >
         {isLoading ? spinner : aiIcon}
         {isLoading ? '데이터 수집 + AI 생성 중...' : 'AI 자동 생성'}
+      </button>
+
+      {/* Jira-only Button (AI 키 없이 Jira 티켓 1:1 변환) */}
+      <button
+        onClick={handleJiraOnly}
+        disabled={isLoading || isJiraLoading || config.jira_token !== '***configured***'}
+        className="w-full px-4 py-2 bg-white text-neutral-700 text-xs font-medium rounded-lg
+                   border border-neutral-200 hover:border-neutral-300
+                   disabled:opacity-40 disabled:cursor-not-allowed
+                   transition-colors flex items-center justify-center gap-2"
+        title="Claude API 없이 Jira 티켓을 그대로 Task로 변환합니다 (티켓 1개 = Task 1개)"
+      >
+        {isJiraLoading ? spinner : jiraIcon}
+        {isJiraLoading ? 'Jira 동기화 중...' : 'Jira만 가져오기 (AI 없이)'}
       </button>
 
       {/* Error */}
@@ -254,5 +302,10 @@ const spinner = (
   <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24">
     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+  </svg>
+);
+const jiraIcon = (
+  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
   </svg>
 );

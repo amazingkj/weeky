@@ -140,6 +140,57 @@ function groupTasksByTitle(tasks: Task[]): GroupedTask[] {
   return groups;
 }
 
+// title → client → task 순으로 각 task의 detail 라인을 펼친 row 배열을 생성.
+// 같은 title 하의 다른 client는 별도 client 헤더로 구분된다.
+interface RenderRow {
+  title: string;        // 좌측 셀에 표시할 텍스트 (빈 문자열 가능)
+  detail: string;       // 진행사항 셀
+  date: string;         // 완료일/완료예정일 셀
+  progress: string;     // 실적(%) 셀
+  isProjectHeader?: boolean; // 프로젝트 헤더 행 (굵게)
+  isClientHeader?: boolean;  // 거래처 헤더 행 (들여쓰기)
+}
+
+function buildRenderRows(groups: GroupedTask[], maxItems: number): RenderRow[] {
+  const rows: RenderRow[] = [];
+  const visibleGroups = groups.slice(0, maxItems);
+
+  for (let gi = 0; gi < visibleGroups.length; gi++) {
+    const g = visibleGroups[gi];
+
+    rows.push({ title: `${gi + 1}. ${g.title}`, detail: '', date: '', progress: '', isProjectHeader: true });
+
+    // 거래처별 sub-group (삽입 순서 보존)
+    const clientMap = new Map<string, Task[]>();
+    for (const t of g.items) {
+      const key = (t.client || '').trim();
+      if (!clientMap.has(key)) clientMap.set(key, []);
+      clientMap.get(key)!.push(t);
+    }
+
+    for (const [client, tasks] of clientMap) {
+      if (client) {
+        rows.push({ title: `• ${client}`, detail: '', date: '', progress: '', isClientHeader: true });
+      }
+      for (const t of tasks) {
+        const lines = getFullDetails(t).split('\n');
+        // 첫 라인: 완료일/진행률 표시. 이후 라인: 같은 task의 추가 detail.
+        rows.push({
+          title: '',
+          detail: lines[0] || '',
+          date: t.due_date || '-',
+          progress: `${t.progress}%`,
+        });
+        for (let li = 1; li < lines.length; li++) {
+          rows.push({ title: '', detail: lines[li], date: '', progress: '' });
+        }
+      }
+    }
+  }
+
+  return rows;
+}
+
 function TaskRows({ tasks, maxItems, dateRange, showProgress }: {
   tasks: Report['this_week'];
   maxItems: number;
@@ -148,6 +199,9 @@ function TaskRows({ tasks, maxItems, dateRange, showProgress }: {
 }) {
   const groups = groupTasksByTitle(tasks);
   const textSize = getPreviewTextSize(groups.length);
+  const rows = buildRenderRows(groups, maxItems);
+  const hasOverflow = groups.length > maxItems;
+
   return (
     <table className={`w-full border-collapse ${textSize} flex-1`}>
       <tbody>
@@ -160,70 +214,34 @@ function TaskRows({ tasks, maxItems, dateRange, showProgress }: {
           )}
         </tr>
         <tr>
-          {/* Title column */}
-          <Cell valign="top" className="whitespace-pre-line">
-            {groups.slice(0, maxItems).map((g, gi) => (
-              <div key={gi} className="mb-2">
-                <div>{gi + 1}. {g.title}{g.items[0]?.client ? ` - ${g.items[0].client}` : ''}</div>
-                {/* Spacer lines for all sub-items' detail lines (except first line of first item) */}
-                {g.items.map((t, ii) => {
-                  const lines = getFullDetails(t).split('\n');
-                  const spacers = ii === 0 ? lines.length - 1 : lines.length;
-                  return Array.from({ length: spacers }, (_, idx) => (
-                    <div key={`${ii}-${idx}`}>&nbsp;</div>
-                  ));
-                })}
+          <Cell valign="top">
+            {rows.map((r, i) => (
+              <div
+                key={i}
+                className={r.isClientHeader ? 'pl-2' : ''}
+                style={r.isProjectHeader ? { fontWeight: 500 } : undefined}
+              >
+                {r.title || ' '}
               </div>
             ))}
-            {groups.length > maxItems && (
+            {hasOverflow && (
               <div className="text-gray-500">+{groups.length - maxItems}개 더</div>
             )}
           </Cell>
-          {/* Details column */}
           <Cell valign="top" className="whitespace-pre-line">
-            {groups.slice(0, maxItems).map((g, gi) => (
-              <div key={gi} className="mb-2">
-                {g.items.map((t, ii) => (
-                  <div key={ii} className="whitespace-pre-line">{getFullDetails(t)}</div>
-                ))}
-              </div>
+            {rows.map((r, i) => (
+              <div key={i}>{r.detail || ' '}</div>
             ))}
           </Cell>
-          {/* Date column */}
           <Cell valign="top" align="center">
-            {groups.slice(0, maxItems).map((g, gi) => (
-              <div key={gi} className="mb-2">
-                {g.items.map((t, ii) => {
-                  const lines = getFullDetails(t).split('\n');
-                  return (
-                    <div key={ii}>
-                      <div>{t.due_date || '-'}</div>
-                      {lines.slice(1).map((_, idx) => (
-                        <div key={idx}>&nbsp;</div>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
+            {rows.map((r, i) => (
+              <div key={i}>{r.date || ' '}</div>
             ))}
           </Cell>
-          {/* Progress column */}
           {showProgress && (
             <Cell valign="top" align="center">
-              {groups.slice(0, maxItems).map((g, gi) => (
-                <div key={gi} className="mb-2">
-                  {g.items.map((t, ii) => {
-                    const lines = getFullDetails(t).split('\n');
-                    return (
-                      <div key={ii}>
-                        <div>{t.progress}%</div>
-                        {lines.slice(1).map((_, idx) => (
-                          <div key={idx}>&nbsp;</div>
-                        ))}
-                      </div>
-                    );
-                  })}
-                </div>
+              {rows.map((r, i) => (
+                <div key={i}>{r.progress || ' '}</div>
               ))}
             </Cell>
           )}

@@ -1,6 +1,6 @@
 import PptxGenJS from 'pptxgenjs';
 import { Report, TemplateStyle, Task, ConsolidatedReport, MemberReportData, SiteReport, defaultTemplateStyle } from '../types';
-import { formatDateShort, getWeekRange, getNextWeekRange } from './date';
+import { formatDateShort, getWeekRange, getNextWeekRange, formatDateMMDD, formatWeekRange, formatNextWeekRange, getFridayOfWeek } from './date';
 
 // Cross-browser file download (Safari compatible)
 function downloadBlob(blob: Blob, filename: string): void {
@@ -63,26 +63,29 @@ const ROW_H = {
 
 const HEADER_COL_W = [1.3, 2.2, 1.1, 1.5, 1.1, 2.2];
 
-// Group tasks by title (preserving order of first appearance)
+// 첫 등장 순서를 보존하면서 title 키로 그룹화. Task[]와 ConsolidatedTaskItem[]에서 공유.
+function groupByTitle<T>(items: T[], titleFn: (item: T) => string): { title: string; items: T[] }[] {
+  const groups: { title: string; items: T[] }[] = [];
+  const indexMap = new Map<string, number>();
+  for (const item of items) {
+    const key = titleFn(item).trim();
+    if (indexMap.has(key)) {
+      groups[indexMap.get(key)!].items.push(item);
+    } else {
+      indexMap.set(key, groups.length);
+      groups.push({ title: key, items: [item] });
+    }
+  }
+  return groups;
+}
+
 interface GroupedTask {
   title: string;
   items: Task[];
 }
 
 function groupTasksByTitle(tasks: Task[]): GroupedTask[] {
-  const groups: GroupedTask[] = [];
-  const indexMap = new Map<string, number>();
-
-  for (const task of tasks) {
-    const key = task.title.trim();
-    if (indexMap.has(key)) {
-      groups[indexMap.get(key)!].items.push(task);
-    } else {
-      indexMap.set(key, groups.length);
-      groups.push({ title: key, items: [task] });
-    }
-  }
-  return groups;
+  return groupByTitle(tasks, t => t.title);
 }
 
 // Get full detail text for a single task (details + description)
@@ -148,6 +151,72 @@ export async function generatePPT(report: Report, style: TemplateStyle = default
   downloadBlob(blob, filename);
 }
 
+// Single-member task slide의 한 행. wrap 정렬을 위해 row 단위로 풀어둠.
+interface TaskBodyRow {
+  title: string;
+  detail: string;
+  date: string;
+  progress: string;
+  bold: boolean;
+}
+
+// title → client → detail 순으로 row 풀기 (wrap 적용 전)
+function buildTaskBodyRows(groups: GroupedTask[]): TaskBodyRow[] {
+  const rows: TaskBodyRow[] = [];
+  for (let gi = 0; gi < groups.length; gi++) {
+    const g = groups[gi];
+    rows.push({ title: `${gi + 1}. ${g.title}`, detail: '', date: '', progress: '', bold: true });
+
+    const clientMap = new Map<string, Task[]>();
+    for (const t of g.items) {
+      const key = (t.client || '').trim();
+      if (!clientMap.has(key)) clientMap.set(key, []);
+      clientMap.get(key)!.push(t);
+    }
+
+    for (const [client, tasks] of clientMap) {
+      if (client) {
+        rows.push({ title: `${IDEO_SP}• ${client}`, detail: '', date: '', progress: '', bold: false });
+      }
+      for (const t of tasks) {
+        const detailLines = getTaskDetailText(t).split('\n');
+        // 첫 라인: due_date, progress 표시. 이후 라인: detail만.
+        rows.push({
+          title: '',
+          detail: detailLines[0] || '',
+          date: t.due_date || '-',
+          progress: `${t.progress}%`,
+          bold: false,
+        });
+        for (let i = 1; i < detailLines.length; i++) {
+          rows.push({ title: '', detail: detailLines[i], date: '', progress: '', bold: false });
+        }
+      }
+    }
+  }
+  return rows;
+}
+
+// detail 셀 폭에 맞춰 wrap → 각 셀에 동일 라인 수가 들어가도록 정렬
+function expandTaskBodyRows(rows: TaskBodyRow[], detailColW: number, marginW: number, fontSize: number): TaskBodyRow[] {
+  const cpi = getCharsPerInch(fontSize);
+  const cpl = Math.max(Math.floor((detailColW - marginW) * cpi), 1);
+  const expanded: TaskBodyRow[] = [];
+  for (const r of rows) {
+    const lines = r.detail ? splitTextToFit(r.detail, cpl) : [''];
+    for (let i = 0; i < lines.length; i++) {
+      expanded.push({
+        title: i === 0 ? r.title : '',
+        detail: lines[i],
+        date: i === 0 ? r.date : '',
+        progress: i === 0 ? r.progress : '',
+        bold: i === 0 && r.bold,
+      });
+    }
+  }
+  return expanded;
+}
+
 function createTaskSlide(pptx: PptxGenJS, report: Report, config: TaskSlideConfig): void {
   const slide = pptx.addSlide();
   let currentY = LAYOUT.y;
@@ -187,71 +256,11 @@ function createTaskSlide(pptx: PptxGenJS, report: Report, config: TaskSlideConfi
   );
   currentY += ROW_H.section;
 
-  // Row 3-4: Body (column headers + task content) — grouped by title, sub-grouped by client
   const bodyFontSize = getBodyFontSize(config.tasks);
   const groups = groupTasksByTitle(config.tasks);
 
-  const groupData = groups.map((g, gi) => {
-    const titleParts: string[] = [];
-    const detailParts: string[] = [];
-    const dateParts: string[] = [];
-    const progressParts: string[] = [];
-
-    // Project title (own line)
-    titleParts.push(`${gi + 1}. ${g.title}`);
-    detailParts.push('');
-    dateParts.push('');
-    progressParts.push('');
-
-    // Sub-group by client
-    const clientMap = new Map<string, Task[]>();
-    for (const t of g.items) {
-      const key = (t.client || '').trim();
-      if (!clientMap.has(key)) clientMap.set(key, []);
-      clientMap.get(key)!.push(t);
-    }
-
-    for (const [client, tasks] of clientMap) {
-      if (client) {
-        titleParts.push(`  • ${client}`);
-        detailParts.push('');
-        dateParts.push('');
-        progressParts.push('');
-      }
-
-      for (const t of tasks) {
-        const detailText = getTaskDetailText(t);
-        const detailLines = detailText.split('\n');
-
-        titleParts.push('');
-        for (let l = 1; l < detailLines.length; l++) titleParts.push('');
-
-        detailParts.push(...detailLines);
-
-        dateParts.push(t.due_date || '-');
-        for (let l = 1; l < detailLines.length; l++) dateParts.push('');
-
-        progressParts.push(`${t.progress}%`);
-        for (let l = 1; l < detailLines.length; l++) progressParts.push('');
-      }
-    }
-
-    return {
-      titleLines: titleParts,
-      detailLines: detailParts,
-      dateLines: dateParts,
-      progressLines: progressParts,
-    };
-  });
-
-  const taskTitles = groupData.map(d => d.titleLines.join('\n')).join('\n\n');
-  const taskDetails = groupData.map(d => d.detailLines.join('\n')).join('\n\n');
-  const taskDates = groupData.map(d => d.dateLines.join('\n')).join('\n\n');
-  const taskProgress = groupData.map(d => d.progressLines.join('\n')).join('\n\n');
-
   let bodyColW: number[];
   let bodyHeaderRow: PptxGenJS.TableCell[];
-  let bodyContentRow: PptxGenJS.TableCell[];
 
   if (config.showProgress) {
     bodyColW = [2.2, 5.0, 1.0, 1.2];
@@ -261,12 +270,6 @@ function createTaskSlide(pptx: PptxGenJS, report: Report, config: TaskSlideConfi
       { text: '완료일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
       { text: '실적(%)', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
     ];
-    bodyContentRow = [
-      { text: taskTitles, options: { valign: 'top' } },
-      { text: taskDetails, options: { valign: 'top' } },
-      { text: taskDates, options: { valign: 'top', align: 'center' } },
-      { text: taskProgress, options: { valign: 'top', align: 'center' } },
-    ];
   } else {
     bodyColW = [2.4, 5.0, 2.0];
     bodyHeaderRow = [
@@ -274,14 +277,9 @@ function createTaskSlide(pptx: PptxGenJS, report: Report, config: TaskSlideConfi
       { text: config.sectionTitle === '차주계획' ? '' : '진행 사항', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
       { text: config.sectionTitle === '차주계획' ? '완료\n예정일' : '완료일', options: { fill: { color: COLORS.headerBg }, bold: true, align: 'center', valign: 'middle' } },
     ];
-    bodyContentRow = [
-      { text: taskTitles, options: { valign: 'top' } },
-      { text: taskDetails, options: { valign: 'top' } },
-      { text: taskDates, options: { valign: 'top', align: 'center' } },
-    ];
   }
 
-  // Row 3: Column header — 별도 테이블 (rowH 최소높이 확장이 body에 영향 안 줌)
+  // Row 3: Column header
   slide.addTable(
       [bodyHeaderRow],
       {
@@ -294,9 +292,44 @@ function createTaskSlide(pptx: PptxGenJS, report: Report, config: TaskSlideConfi
   );
   currentY += ROW_H.colHeader;
 
-  // Row 4: Body — 단일 행, footerY까지 정확히 채움
+  // Row 4: Body — wrap 미리 끊어 컬럼 간 라인 정렬 보장
   const footerY = LAYOUT.y + LAYOUT.h - ROW_H.issue - ROW_H.note;
   const bodyH = footerY - currentY;
+
+  const cellMargin: [number, number, number, number] = [1, 3, 1, 3];
+  const marginW = (cellMargin[1] + cellMargin[3]) / 72;
+  const detailColW = bodyColW[1];
+
+  const rawRows = buildTaskBodyRows(groups);
+  const expandedRows = expandTaskBodyRows(rawRows, detailColW, marginW, bodyFontSize);
+
+  const lineH = bodyFontSize + 2;
+  const baseOpts = { breakLine: true as const, fontSize: bodyFontSize, paraSpaceBefore: 0, paraSpaceAfter: 0, lineSpacing: lineH };
+
+  const titleProps: PptxGenJS.TextProps[] = [];
+  const detailProps: PptxGenJS.TextProps[] = [];
+  const dateProps: PptxGenJS.TextProps[] = [];
+  const progressProps: PptxGenJS.TextProps[] = [];
+
+  for (const r of expandedRows) {
+    titleProps.push({ text: r.title || ' ', options: { ...baseOpts, ...(r.bold ? { bold: true } : {}) } });
+    detailProps.push({ text: r.detail || ' ', options: baseOpts });
+    dateProps.push({ text: r.date || ' ', options: baseOpts });
+    progressProps.push({ text: r.progress || ' ', options: baseOpts });
+  }
+
+  const bodyContentRow: PptxGenJS.TableCell[] = config.showProgress
+      ? [
+        { text: titleProps, options: { valign: 'top', margin: cellMargin } },
+        { text: detailProps, options: { valign: 'top', margin: cellMargin } },
+        { text: dateProps, options: { valign: 'top', align: 'center', margin: cellMargin } },
+        { text: progressProps, options: { valign: 'top', align: 'center', margin: cellMargin } },
+      ]
+      : [
+        { text: titleProps, options: { valign: 'top', margin: cellMargin } },
+        { text: detailProps, options: { valign: 'top', margin: cellMargin } },
+        { text: dateProps, options: { valign: 'top', align: 'center', margin: cellMargin } },
+      ];
 
   slide.addTable(
       [bodyContentRow],
@@ -354,28 +387,15 @@ function groupConsolidatedTasks(
     members: MemberReportData[],
     section: 'this_week' | 'next_week'
 ): ConsolidatedGroup[] {
-  const groups: ConsolidatedGroup[] = [];
-  const indexMap = new Map<string, number>();
-
+  const flat: ConsolidatedTaskItem[] = [];
   for (const m of members) {
     if (!m.report) continue;
     const tasks = section === 'this_week' ? m.report.this_week : m.report.next_week;
     for (const t of tasks) {
-      const key = t.title.trim();
-      const item: ConsolidatedTaskItem = {
-        task: t,
-        memberName: m.user_name,
-        roleCode: m.role_code,
-      };
-      if (indexMap.has(key)) {
-        groups[indexMap.get(key)!].items.push(item);
-      } else {
-        indexMap.set(key, groups.length);
-        groups.push({ title: key, items: [item] });
-      }
+      flat.push({ task: t, memberName: m.user_name, roleCode: m.role_code });
     }
   }
-  return groups;
+  return groupByTitle(flat, item => item.task.title);
 }
 
 function mergeIssuesNotes(
@@ -394,13 +414,7 @@ interface BodyRow {
   date: string;
   progress: string;
   bold: boolean;
-}
-
-function formatDateShortMMDD(dateStr: string): string {
-  if (!dateStr) return '-';
-  const parts = dateStr.split('-');
-  if (parts.length >= 3) return `${parts[1]}/${parts[2]}`;
-  return dateStr;
+  isProjectHeader?: boolean; // 페이지 경계가 이 행 직후로 떨어지면 다음 페이지로 미룸
 }
 
 function subGroupByClient(items: ConsolidatedTaskItem[]): Map<string, ConsolidatedTaskItem[]> {
@@ -421,7 +435,7 @@ function buildItemRows(items: ConsolidatedTaskItem[], indent: string): BodyRow[]
     const detail = item.task.details || '-';
     rows.push({
       body: `${indent}- ${detail}${memberTag}`,
-      date: formatDateShortMMDD(item.task.due_date),
+      date: formatDateMMDD(item.task.due_date),
       progress: `${item.task.progress}%`,
       bold: false,
     });
@@ -442,7 +456,7 @@ const INDENT_DETAIL_NO_CLIENT = IDEO_SP;          // "　- 진행사항"
 function buildSideRows(groups: ConsolidatedGroup[]): BodyRow[] {
   const rows: BodyRow[] = [];
   for (const g of groups) {
-    rows.push({ body: `[${g.title}]`, date: '', progress: '', bold: true });
+    rows.push({ body: `[${g.title}]`, date: '', progress: '', bold: true, isProjectHeader: true });
     const clientMap = subGroupByClient(g.items);
     for (const [client, items] of clientMap) {
       const indent = client ? INDENT_DETAIL_W_CLIENT : INDENT_DETAIL_NO_CLIENT;
@@ -534,6 +548,7 @@ function expandSideRows(rows: BodyRow[], cpl: number): BodyRow[] {
         date: j === 0 ? r.date : '',
         progress: j === 0 ? r.progress : '',
         bold: j === 0 && r.bold,
+        isProjectHeader: j === 0 ? r.isProjectHeader : false,
       });
     }
   }
@@ -637,7 +652,8 @@ export async function generateConsolidatedPPT(
   function calcWrappedLineCount(text: string, baseFontSize: number): number {
     const lines = (text || '-').split('\n');
     const charsPerLine = Math.floor(CHARS_PER_LINE * (8 / baseFontSize));
-    return lines.reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
+    // measureTextWidth: 한글/CJK 2배 가중 → ascii line.length보다 정확한 wrap 추정
+    return lines.reduce((sum, line) => sum + Math.max(1, Math.ceil(measureTextWidth(line) / charsPerLine)), 0);
   }
 
   const issueLineCount = Math.max(
@@ -662,8 +678,41 @@ export async function generateConsolidatedPPT(
   const cellMargin: [number, number, number, number] = [1, 3, 1, 3];
   const marginW = (cellMargin[1] + cellMargin[3]) / 72;
 
-  const { fontSize, pages, rowsPerPage, expandedLeft, expandedRight } =
+  const { fontSize, rowsPerPage: shortRowsPerPage, expandedLeft, expandedRight } =
       calcPagination(leftRows, rightRows, bodyH, leftColW[0], rightColW[0], marginW);
+
+  // 첫/중간 페이지는 footer 자리가 없으므로 더 많은 row를 담을 수 있음
+  const fullBodyH = LAYOUT.h - (ROW_H.header + ROW_H.section + ROW_H.colHeader);
+  const rowHForFont = getConsolidatedRowH(fontSize);
+  const fullRowsPerPage = Math.max(1, Math.floor(fullBodyH / rowHForFont));
+
+  // 페이지 분할:
+  //  - 남은 row가 shortRowsPerPage 이하면 → 마지막 페이지(footer 포함)로 끝
+  //  - 그렇지 않으면 → fullRowsPerPage만큼 담고 다음 페이지로
+  //  - 페이지 마지막 row가 project header면 다음 페이지로 미룸 (orphan 방지)
+  const totalRows = Math.max(expandedLeft.length, expandedRight.length);
+  const pageBoundaries: { start: number; end: number }[] = [];
+  {
+    let start = 0;
+    while (start < totalRows) {
+      const remaining = totalRows - start;
+      const limit = remaining <= shortRowsPerPage ? shortRowsPerPage : fullRowsPerPage;
+      let end = Math.min(start + limit, totalRows);
+      while (end > start + 1 && end < totalRows) {
+        const lLast = expandedLeft[end - 1];
+        const rLast = expandedRight[end - 1];
+        if ((lLast && lLast.isProjectHeader) || (rLast && rLast.isProjectHeader)) {
+          end -= 1;
+        } else {
+          break;
+        }
+      }
+      pageBoundaries.push({ start, end });
+      start = end;
+    }
+    if (pageBoundaries.length === 0) pageBoundaries.push({ start: 0, end: 0 });
+  }
+  const pages = pageBoundaries.length;
 
   const unifiedColW = [...leftColW, ...rightColW];
 
@@ -729,9 +778,7 @@ export async function generateConsolidatedPPT(
 
     // Body — 확장된 visual line 사용 (텍스트 미리 분할 → word-wrap 불일치 제거)
     const isLastPage = page === pages - 1;
-    const startIdx = page * rowsPerPage;
-    const maxSide = Math.max(expandedLeft.length, expandedRight.length, 1);
-    const endIdx = Math.min(startIdx + rowsPerPage, maxSide);
+    const { start: startIdx, end: endIdx } = pageBoundaries[page] || { start: 0, end: 0 };
     const emptyRow: BodyRow = { body: '', date: '', progress: '', bold: false };
 
     const pLeft = expandedLeft.slice(startIdx, endIdx);
@@ -833,44 +880,9 @@ const SITE_HEADER_COL_W = HEADER_COL_W; // 본사와 동일 (1.3 + 2.2 + 1.1 + 1
 const SITE_BODY_COL_W = [2.3, 0.7, 0.6, 0.6, 0.5, 3.5, 0.6, 0.6];
 const SITE_SECTION_COL_W = [4.6, 4.8];
 
-// 사이트 슬라이드 전용 날짜 포맷 (구분자 `/`, ~ 양옆 공백)
-function formatSlashDate(d: Date): string {
-  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function getSiteWeekRange(dateStr: string): string {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  const day = d.getDay();
-  const monday = new Date(d);
-  monday.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
-  const friday = new Date(monday);
-  friday.setDate(monday.getDate() + 4);
-  return `${formatSlashDate(monday)} ~ ${formatSlashDate(friday)}`;
-}
-
-function getSiteNextWeekRange(dateStr: string): string {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  const day = d.getDay();
-  const nextMonday = new Date(d);
-  nextMonday.setDate(d.getDate() - (day === 0 ? 6 : day - 1) + 7);
-  const nextFriday = new Date(nextMonday);
-  nextFriday.setDate(nextMonday.getDate() + 4);
-  return `${formatSlashDate(nextMonday)} ~ ${formatSlashDate(nextFriday)}`;
-}
-
-// report_date(월요일) 기준 그 주 금요일 → 보고일자 fallback용 (YYYY-MM-DD)
-function getFridayOfWeek(dateStr: string): string {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  const day = d.getDay();
-  const monday = new Date(d);
-  monday.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
-  const friday = new Date(monday);
-  friday.setDate(monday.getDate() + 4);
-  return `${friday.getFullYear()}-${String(friday.getMonth() + 1).padStart(2, '0')}-${String(friday.getDate()).padStart(2, '0')}`;
-}
+// 사이트 슬라이드는 `/` 구분자 + ~ 양옆 공백 양식
+const getSiteWeekRange = (dateStr: string) => formatWeekRange(dateStr, '/', true);
+const getSiteNextWeekRange = (dateStr: string) => formatNextWeekRange(dateStr, '/', true);
 
 function addSiteReportSlide(pptx: PptxGenJS, sr: SiteReport, fallbackDate: string): void {
   const slide = pptx.addSlide();

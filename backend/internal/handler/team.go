@@ -426,9 +426,8 @@ func (h *Handler) GetConsolidatedReport(c *fiber.Ctx) error {
 	}
 
 	userID := getUserID(c)
-	member, err := h.repo.GetTeamMember(teamID, userID)
-	if !isAdmin(c) && (err != nil || (member.Role != model.TeamRoleLeader && member.Role != model.TeamRoleGroupLeader)) {
-		return respondError(c, fiber.StatusForbidden, "팀장 또는 그룹장 권한이 필요합니다")
+	if _, err := h.repo.GetTeamMember(teamID, userID); !isAdmin(c) && err != nil {
+		return respondError(c, fiber.StatusForbidden, "팀 멤버가 아닙니다")
 	}
 
 	reportDate := c.Query("report_date")
@@ -985,9 +984,8 @@ func (h *Handler) GetConsolidatedEdit(c *fiber.Ctx) error {
 	}
 
 	userID := getUserID(c)
-	member, err := h.repo.GetTeamMember(teamID, userID)
-	if !isAdmin(c) && (err != nil || (member.Role != model.TeamRoleLeader && member.Role != model.TeamRoleGroupLeader)) {
-		return respondError(c, fiber.StatusForbidden, "팀장/그룹장 권한이 필요합니다")
+	if _, err := h.repo.GetTeamMember(teamID, userID); !isAdmin(c) && err != nil {
+		return respondError(c, fiber.StatusForbidden, "팀 멤버가 아닙니다")
 	}
 
 	reportDate := c.Query("report_date")

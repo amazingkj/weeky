@@ -8,6 +8,7 @@ import TeamSubmissionPanel from './TeamSubmissionPanel';
 import WeeklyHistoryPanel from './WeeklyHistoryPanel';
 import RulesEditor from './RulesEditor';
 import SiteProjectsManager from './SiteProjectsManager';
+import MemberConsolidatedView from './MemberConsolidatedView';
 import Loading from './ui/Loading';
 
 const ROLE_DISPLAY: Record<TeamRole, string> = {
@@ -658,6 +659,11 @@ export default function TeamPanel() {
                       </div>
                     </div>
                   )}
+                </div>
+
+                {/* 취합 결과 보기 — 본인 글이 어떻게 합쳐졌는지 read-only */}
+                <div className="pt-4 border-t border-neutral-100">
+                  <MemberConsolidatedView teamId={selectedTeam.id} myName={user?.name} />
                 </div>
               </div>
             )}
