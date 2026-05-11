@@ -980,7 +980,7 @@ function addSiteReportSlide(pptx: PptxGenJS, sr: SiteReport, fallbackDate: strin
   const rowCount = Math.max(left.length, right.length, 1);
 
   // 행을 단일 셀의 멀티라인 텍스트로 누적.
-  // 계획업무가 멀티라인일 경우 같은 행의 다른 셀(소요일/시작일/완료일/실적)에 빈 줄을 채워
+  // 계획업무가 멀티라인(또는 wrap)일 경우 같은 행의 다른 셀에 빈 줄을 채워
   // 다음 행의 시작 라인이 좌우 모든 셀에서 동일하도록 정렬.
   const flatTitleL: PptxGenJS.TextProps[] = [];
   const flatElapsed: PptxGenJS.TextProps[] = [];
@@ -992,24 +992,39 @@ function addSiteReportSlide(pptx: PptxGenJS, sr: SiteReport, fallbackDate: strin
   const flatDueR: PptxGenJS.TextProps[] = [];
 
   const lineCount = (s: string) => (s ? s.split('\n').length : 1);
-  const padLines = (s: string, n: number) => s + '\n'.repeat(Math.max(0, n - 1));
+  // FIX: 기존엔 항상 n-1개 \n을 추가해 이미 멀티라인인 셀에 줄이 과도하게 추가됐음.
+  //      n - lineCount(s) 만큼만 추가하여 정확히 n 라인이 되도록 한다.
+  const padLines = (s: string, n: number) => s + '\n'.repeat(Math.max(0, n - lineCount(s)));
+
+  // FIX: 셀 폭에 맞춰 word-wrap을 미리 끊어 명시적 라인 수 = 시각 라인 수가 되도록.
+  //      그래야 다른 컬럼의 padLines가 정확히 같은 라인 수로 정렬됨.
+  const cpi = getCharsPerInch(bodyFontSize);
+  const marginW = (cellMargin[1] + cellMargin[3]) / 72;
+  const cpl = (col: number) => Math.max(Math.floor((col - marginW) * cpi), 1);
+  const wrapText = (text: string, col: number): string => {
+    if (!text) return '';
+    const out: string[] = [];
+    for (const line of text.split('\n')) {
+      out.push(...splitTextToFit(line, cpl(col)));
+    }
+    return out.join('\n');
+  };
 
   for (let i = 0; i < rowCount; i++) {
     const l = left[i];
     const r = right[i];
     const trail = i < rowCount - 1 ? '\n' : '';
 
-    // 좌측 행 높이 = 좌측 셀들 중 최대 라인 수 (실무상 거의 title이 가장 큼)
-    const lTitle = l?.title || ' ';
-    const lElapsed = l?.elapsed_days || ' ';
-    const lStart = l?.start_date || ' ';
-    const lDue = l?.due_date || ' ';
-    const lProg = l?.progress || ' ';
+    const lTitle = wrapText(l?.title || ' ', SITE_BODY_COL_W[0]);
+    const lElapsed = wrapText(l?.elapsed_days || ' ', SITE_BODY_COL_W[1]);
+    const lStart = wrapText(l?.start_date || ' ', SITE_BODY_COL_W[2]);
+    const lDue = wrapText(l?.due_date || ' ', SITE_BODY_COL_W[3]);
+    const lProg = wrapText(l?.progress || ' ', SITE_BODY_COL_W[4]);
     const lH = Math.max(lineCount(lTitle), lineCount(lElapsed), lineCount(lStart), lineCount(lDue), lineCount(lProg));
 
-    const rTitle = r?.title || ' ';
-    const rStart = r?.start_date || ' ';
-    const rDue = r?.due_date || ' ';
+    const rTitle = wrapText(r?.title || ' ', SITE_BODY_COL_W[5]);
+    const rStart = wrapText(r?.start_date || ' ', SITE_BODY_COL_W[6]);
+    const rDue = wrapText(r?.due_date || ' ', SITE_BODY_COL_W[7]);
     const rH = Math.max(lineCount(rTitle), lineCount(rStart), lineCount(rDue));
 
     flatTitleL.push({ text: padLines(lTitle, lH) + trail, options: baseOpts });
@@ -1024,12 +1039,12 @@ function addSiteReportSlide(pptx: PptxGenJS, sr: SiteReport, fallbackDate: strin
 
   slide.addTable(
       [[
-        { text: flatTitleL, options: { valign: 'top' as const, margin: cellMargin } },
+        { text: flatTitleL, options: { valign: 'top' as const, align: 'left' as const, margin: cellMargin } },
         { text: flatElapsed, options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
         { text: flatStartL, options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
         { text: flatDueL, options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
         { text: flatProg, options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
-        { text: flatTitleR, options: { valign: 'top' as const, margin: cellMargin } },
+        { text: flatTitleR, options: { valign: 'top' as const, align: 'left' as const, margin: cellMargin } },
         { text: flatStartR, options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
         { text: flatDueR, options: { valign: 'top' as const, align: 'center' as const, margin: cellMargin } },
       ]],
