@@ -347,7 +347,9 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
     setShowPreview(!showPreview);
   };
 
-  const submittedCount = submissions.filter(s => s.submission).length;
+  // 본사 보고서(submission) 또는 사이트 보고서(site_submitted) 중 하나라도 있으면 제출완료로 카운트
+  const isMemberSubmitted = (m: TeamMemberWithSubmission) => Boolean(m.submission || m.site_submitted);
+  const submittedCount = submissions.filter(isMemberSubmitted).length;
 
   return (
     <div className="space-y-4">
@@ -407,26 +409,31 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100">
-                {submissions.map((m, idx) => (
-                  <tr key={m.id}
-                    onClick={() => handleMemberClick(m)}
-                    className={`transition-colors ${m.submission ? 'cursor-pointer hover:bg-neutral-50' : ''} ${selectedMemberId === m.id ? 'bg-blue-50' : idx % 2 === 1 ? 'bg-neutral-50' : ''}`}>
-                    <td className="px-3 py-2 font-medium text-neutral-900">{m.user_name}</td>
-                    <td className="px-3 py-2 text-neutral-500">{m.user_email}</td>
-                    <td className="px-3 py-2 text-center">
-                      <span className="px-1.5 py-0.5 bg-neutral-100 text-neutral-600 rounded text-[10px] font-medium">
-                        {m.role_code} ({ROLE_CODE_LABELS[m.role_code]})
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      {m.submission ? (
-                        <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium">제출완료</span>
-                      ) : (
-                        <span className="px-1.5 py-0.5 bg-neutral-100 text-neutral-400 rounded text-[10px] font-medium">미제출</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {submissions.map((m, idx) => {
+                  const submitted = isMemberSubmitted(m);
+                  const siteOnly = !m.submission && Boolean(m.site_submitted);
+                  return (
+                    <tr key={m.id}
+                      onClick={() => handleMemberClick(m)}
+                      title={siteOnly ? '사이트 보고서만 제출됨 — 본사 보고서는 미제출' : undefined}
+                      className={`transition-colors ${m.submission ? 'cursor-pointer hover:bg-neutral-50' : ''} ${selectedMemberId === m.id ? 'bg-blue-50' : idx % 2 === 1 ? 'bg-neutral-50' : ''}`}>
+                      <td className="px-3 py-2 font-medium text-neutral-900">{m.user_name}</td>
+                      <td className="px-3 py-2 text-neutral-500">{m.user_email}</td>
+                      <td className="px-3 py-2 text-center">
+                        <span className="px-1.5 py-0.5 bg-neutral-100 text-neutral-600 rounded text-[10px] font-medium">
+                          {m.role_code} ({ROLE_CODE_LABELS[m.role_code]})
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {submitted ? (
+                          <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium">제출완료</span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 bg-neutral-100 text-neutral-400 rounded text-[10px] font-medium">미제출</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

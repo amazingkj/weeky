@@ -163,3 +163,106 @@ func TestSiteReport_SaveAndRoundTrip(t *testing.T) {
 		t.Errorf("upsert failed: notes=%q author=%d", all[0].Notes, all[0].AuthorUserID)
 	}
 }
+
+func TestGetSiteSubmittersByTeamAndDate(t *testing.T) {
+	repo, cleanup := setupSiteTestDB(t)
+	defer cleanup()
+
+	leader := mkUser(t, repo, "lead@x.com", "팀장")
+	a1 := mkUser(t, repo, "a@x.com", "이민구")
+	a2 := mkUser(t, repo, "b@x.com", "문정현")
+	a3 := mkUser(t, repo, "c@x.com", "김지인")
+	team := mkTeam(t, repo, leader.ID)
+
+	// 다른 팀 — 격리 검증용
+	otherLeader := mkUser(t, repo, "other@x.com", "타팀장")
+	otherTeam, _ := repo.CreateTeam("타팀", "", otherLeader.ID)
+	repo.AddTeamMember(otherTeam.ID, otherLeader.ID, model.TeamRoleLeader, model.RoleCodeS)
+	otherProj, _ := repo.CreateSiteProject(otherTeam.ID, model.CreateSiteProjectRequest{
+		ProjectName: "타팀프로젝트",
+		AuthorIDs:   []int64{otherLeader.ID},
+	})
+
+	// Case A: 다중 author 프로젝트 — 한 명만 작성해도 등록된 모두가 제출자로 카운트
+	projMulti, _ := repo.CreateSiteProject(team.ID, model.CreateSiteProjectRequest{
+		ProjectName: "건강보험공단",
+		AuthorIDs:   []int64{a1.ID, a2.ID},
+	})
+	// Case B: 단일 author 프로젝트
+	projSingle, _ := repo.CreateSiteProject(team.ID, model.CreateSiteProjectRequest{
+		ProjectName: "한화손해보험",
+		AuthorIDs:   []int64{a3.ID},
+	})
+
+	weekDate := "2026-04-24" // 금요일
+
+	// 아직 보고서 없음 — 빈 집합
+	ids, err := repo.GetSiteSubmittersByTeamAndDate(team.ID, weekDate)
+	if err != nil {
+		t.Fatalf("empty case: %v", err)
+	}
+	if len(ids) != 0 {
+		t.Errorf("expected empty, got %v", ids)
+	}
+
+	// projMulti에 a1이 대표로 작성
+	if _, err := repo.SaveSiteReport(team.ID, a1.ID, model.SaveSiteReportRequest{
+		SiteProjectID: projMulti.ID,
+		ReportDate:    weekDate,
+		ThisWeek:      []model.SiteTask{{Title: "작업1", Progress: "100%"}},
+	}); err != nil {
+		t.Fatalf("save multi: %v", err)
+	}
+
+	ids, err = repo.GetSiteSubmittersByTeamAndDate(team.ID, weekDate)
+	if err != nil {
+		t.Fatalf("multi case: %v", err)
+	}
+	got := map[int64]bool{}
+	for _, id := range ids {
+		got[id] = true
+	}
+	// 다중 author 모두 제출자로 카운트
+	if !got[a1.ID] || !got[a2.ID] {
+		t.Errorf("expected a1+a2 in submitters, got %v", ids)
+	}
+	if got[a3.ID] {
+		t.Errorf("a3 not in this project — should NOT be submitter")
+	}
+	if len(ids) != 2 {
+		t.Errorf("len=%d, want 2", len(ids))
+	}
+
+	// projSingle도 작성
+	if _, err := repo.SaveSiteReport(team.ID, a3.ID, model.SaveSiteReportRequest{
+		SiteProjectID: projSingle.ID,
+		ReportDate:    weekDate,
+		ThisWeek:      []model.SiteTask{{Title: "작업2", Progress: "50%"}},
+	}); err != nil {
+		t.Fatalf("save single: %v", err)
+	}
+
+	ids, _ = repo.GetSiteSubmittersByTeamAndDate(team.ID, weekDate)
+	if len(ids) != 3 {
+		t.Errorf("len=%d, want 3 (a1+a2+a3)", len(ids))
+	}
+
+	// 다른 팀의 사이트 보고서는 격리되어야 함
+	if _, err := repo.SaveSiteReport(otherTeam.ID, otherLeader.ID, model.SaveSiteReportRequest{
+		SiteProjectID: otherProj.ID,
+		ReportDate:    weekDate,
+		ThisWeek:      []model.SiteTask{{Title: "타팀작업"}},
+	}); err != nil {
+		t.Fatalf("save other team: %v", err)
+	}
+	ids, _ = repo.GetSiteSubmittersByTeamAndDate(team.ID, weekDate)
+	if len(ids) != 3 {
+		t.Errorf("len=%d after other team save, want 3 (teamID 격리)", len(ids))
+	}
+
+	// 다른 주차는 빈 집합
+	ids, _ = repo.GetSiteSubmittersByTeamAndDate(team.ID, "2026-05-01")
+	if len(ids) != 0 {
+		t.Errorf("different week should be empty, got %v", ids)
+	}
+}

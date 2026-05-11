@@ -211,6 +211,8 @@ export interface ReportSubmission {
 
 export interface TeamMemberWithSubmission extends TeamMember {
   submission?: ReportSubmission;
+  // 사이트 보고서 기반 제출 — 본사 보고서가 없어도 사이트 보고서만 있으면 true
+  site_submitted?: boolean;
 }
 
 export interface MemberReportData {

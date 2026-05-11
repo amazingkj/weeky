@@ -1662,6 +1662,31 @@ func (r *OracleRepository) GetSiteReportByProjectAndDate(siteProjectID int64, re
 	return r.scanSiteReport(row.Scan)
 }
 
+// 해당 주차에 사이트 보고서가 있는 SiteProject의 모든 author user_id를 DISTINCT로 반환.
+func (r *OracleRepository) GetSiteSubmittersByTeamAndDate(teamID int64, reportDate string) ([]int64, error) {
+	mon, sun := weekRange(reportDate)
+	rows, err := r.db.Query(
+		`SELECT DISTINCT spa.user_id
+		 FROM site_reports sr
+		 JOIN site_project_authors spa ON spa.site_project_id = sr.site_project_id
+		 WHERE sr.team_id = :1 AND sr.report_date BETWEEN :2 AND :3`,
+		teamID, mon, sun,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	results := []int64{}
+	for rows.Next() {
+		var uid int64
+		if err := rows.Scan(&uid); err != nil {
+			return nil, err
+		}
+		results = append(results, uid)
+	}
+	return results, rows.Err()
+}
+
 func (r *OracleRepository) GetSiteReportsByTeamAndDate(teamID int64, reportDate string) ([]model.SiteReport, error) {
 	mon, sun := weekRange(reportDate)
 	rows, err := r.db.Query(

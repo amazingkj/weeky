@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -351,16 +352,32 @@ func (h *Handler) GetTeamSubmissions(c *fiber.Ctx) error {
 		subMap[s.UserID] = s
 	}
 
-	type MemberWithSubmission struct {
-		model.TeamMember
-		Submission *model.ReportSubmission `json:"submission"`
+	// 사이트 보고서 기반 제출자 — SiteProject author 다수 등록 시 대표 1명 작성으로 모두 제출 처리
+	siteSubmitterIDs, err := h.repo.GetSiteSubmittersByTeamAndDate(teamID, reportDate)
+	if err != nil {
+		// 사이트 조회 실패해도 본사 데이터는 보여줘야 함 → 빈 set으로 진행
+		siteSubmitterIDs = nil
+	}
+	siteSet := make(map[int64]bool, len(siteSubmitterIDs))
+	for _, uid := range siteSubmitterIDs {
+		siteSet[uid] = true
 	}
 
+	type MemberWithSubmission struct {
+		model.TeamMember
+		Submission    *model.ReportSubmission `json:"submission"`
+		SiteSubmitted bool                    `json:"site_submitted"`
+	}
+
+	// members 루프에서 set 조회 — 비-팀멤버는 자동으로 제외됨
 	result := make([]MemberWithSubmission, 0, len(members))
 	for _, m := range members {
 		ms := MemberWithSubmission{TeamMember: m}
 		if sub, ok := subMap[m.UserID]; ok {
 			ms.Submission = &sub
+		}
+		if siteSet[m.UserID] {
+			ms.SiteSubmitted = true
 		}
 		result = append(result, ms)
 	}
@@ -1058,6 +1075,12 @@ func (h *Handler) GetTeamHistory(c *fiber.Ctx) error {
 		return internalError(c, err)
 	}
 
+	// 현재 팀 멤버 user_id → user_name 맵. 사이트 author가 팀을 떠난 경우 자동 제외됨.
+	memberNames := make(map[int64]string, len(members))
+	for _, m := range members {
+		memberNames[m.UserID] = m.UserName
+	}
+
 	now := time.Now()
 	daysSinceMonday := int(now.Weekday()) - 1
 	if now.Weekday() == time.Sunday {
@@ -1077,17 +1100,34 @@ func (h *Handler) GetTeamHistory(c *fiber.Ctx) error {
 			continue
 		}
 
-		var submittedNames []string
+		// 본사 + 사이트 제출자 합집합, 단 현재 팀 멤버에 한정
+		submittedSet := make(map[int64]bool)
 		for _, s := range submissions {
-			if s.UserName != "" {
-				submittedNames = append(submittedNames, s.UserName)
+			if _, ok := memberNames[s.UserID]; ok {
+				submittedSet[s.UserID] = true
 			}
 		}
+		siteSubmitters, err := h.repo.GetSiteSubmittersByTeamAndDate(teamID, weekDate)
+		if err == nil {
+			for _, uid := range siteSubmitters {
+				if _, ok := memberNames[uid]; ok {
+					submittedSet[uid] = true
+				}
+			}
+		}
+
+		submittedNames := make([]string, 0, len(submittedSet))
+		for uid := range submittedSet {
+			if name := memberNames[uid]; name != "" {
+				submittedNames = append(submittedNames, name)
+			}
+		}
+		sort.Strings(submittedNames)
 
 		weekSummaries = append(weekSummaries, model.WeekSummary{
 			WeekDate:       weekDate,
 			FridayDate:     fridayDate,
-			SubmittedCount: len(submissions),
+			SubmittedCount: len(submittedSet),
 			TotalMembers:   len(members),
 			SubmittedNames: submittedNames,
 		})

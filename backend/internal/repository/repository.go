@@ -89,6 +89,9 @@ type IRepository interface {
 	GetSiteReport(id int64) (*model.SiteReport, error)
 	GetSiteReportByProjectAndDate(siteProjectID int64, reportDate string) (*model.SiteReport, error)
 	GetSiteReportsByTeamAndDate(teamID int64, reportDate string) ([]model.SiteReport, error)
+	// 해당 주차에 사이트 보고서가 있는 SiteProject의 모든 author user_id (DISTINCT).
+	// 단일 SiteProject에 author가 여러 명 등록된 경우 모두 포함.
+	GetSiteSubmittersByTeamAndDate(teamID int64, reportDate string) ([]int64, error)
 }
 
 var _ IRepository = (*Repository)(nil)
