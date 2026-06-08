@@ -230,6 +230,27 @@ func (h *Handler) GetSiteReport(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"exists": true, "report": report})
 }
 
+// GetMySiteReports: 본인이 작성자로 배정된 사이트 보고서 전체 이력 (내 히스토리용)
+func (h *Handler) GetMySiteReports(c *fiber.Ctx) error {
+	teamID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "잘못된 팀 ID입니다")
+	}
+	userID := getUserID(c)
+	if err := h.requireTeamMember(c, teamID, userID); err != nil {
+		return err
+	}
+
+	reports, err := h.repo.GetSiteReportsByUser(teamID, userID)
+	if err != nil {
+		return internalError(c, err)
+	}
+	if reports == nil {
+		reports = []model.SiteReport{}
+	}
+	return c.JSON(reports)
+}
+
 // GetTeamSiteReports: 팀 단위 사이트 보고서 조회 (취합 미리보기 + PPT 출력용)
 // 팀장/그룹장만 접근. 사이트 작성자도 본인 보고서만 보고 싶다면 GetSiteReport(단일) 사용.
 func (h *Handler) GetTeamSiteReports(c *fiber.Ctx) error {

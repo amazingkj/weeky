@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Team, TeamMember, TeamProject, ReportSubmission, Report, TEAM_ROLE_LABELS, ROLE_CODE_LABELS, TeamRole } from '../types';
-import { getMyTeams, getTeamMembers, getMySubmission, getMySubmissions, getReports, deleteTeam, updateTeam, getTeamProjects, createTeamProject, updateTeamProject, deleteTeamProject, reorderTeamProjects } from '../services/api';
+import { Team, TeamMember, TeamProject, TEAM_ROLE_LABELS, ROLE_CODE_LABELS, TeamRole } from '../types';
+import { getMyTeams, getTeamMembers, getMySubmission, deleteTeam, updateTeam, getTeamProjects, createTeamProject, updateTeamProject, deleteTeamProject, reorderTeamProjects } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import TeamCreateModal from './TeamCreateModal';
 import TeamMemberManager from './TeamMemberManager';
 import TeamSubmissionPanel from './TeamSubmissionPanel';
 import WeeklyHistoryPanel from './WeeklyHistoryPanel';
+import MyHistoryPanel from './MyHistoryPanel';
 import RulesEditor from './RulesEditor';
 import SiteProjectsManager from './SiteProjectsManager';
 import MemberConsolidatedView from './MemberConsolidatedView';
@@ -24,13 +25,9 @@ export default function TeamPanel() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [myRole, setMyRole] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'members' | 'submissions' | 'projects' | 'site_projects' | 'rules' | 'history'>('submissions');
+  const [activeView, setActiveView] = useState<'members' | 'submissions' | 'projects' | 'site_projects' | 'rules' | 'history' | 'myhistory'>('submissions');
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [mySubmissionStatus, setMySubmissionStatus] = useState<boolean>(false);
-  const [submissionHistory, setSubmissionHistory] = useState<ReportSubmission[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [viewingReport, setViewingReport] = useState<Report | null>(null);
-  const [viewingReportLoading, setViewingReportLoading] = useState(false);
   const [editingTeamName, setEditingTeamName] = useState(false);
   const [teamNameInput, setTeamNameInput] = useState('');
   const [teamDescInput, setTeamDescInput] = useState('');
@@ -71,13 +68,6 @@ export default function TeamPanel() {
     getMySubmission(selectedTeam.id, today).then((result) => {
       setMySubmissionStatus(result.submitted);
     }).catch(() => setMySubmissionStatus(false));
-
-    // Fetch submission history
-    setHistoryLoading(true);
-    setViewingReport(null);
-    getMySubmissions(selectedTeam.id).then((data) => {
-      setSubmissionHistory(data);
-    }).catch(() => setSubmissionHistory([])).finally(() => setHistoryLoading(false));
   }, [selectedTeam, user]);
 
   // Fetch team projects
@@ -317,6 +307,7 @@ export default function TeamPanel() {
               {[
                 { key: 'submissions' as const, label: '취합 현황', leaderOnly: false },
                 { key: 'history' as const, label: '히스토리', leaderOnly: false },
+                { key: 'myhistory' as const, label: '내 히스토리', leaderOnly: false },
                 { key: 'projects' as const, label: '프로젝트 관리', leaderOnly: true },
                 { key: 'site_projects' as const, label: '사이트 프로젝트', leaderOnly: false },
                 { key: 'rules' as const, label: '취합 변환 규칙', leaderOnly: true },
@@ -346,6 +337,9 @@ export default function TeamPanel() {
             )}
             {isLeaderOrGroupLeader && activeView === 'history' && (
               <WeeklyHistoryPanel teamId={selectedTeam.id} />
+            )}
+            {isLeaderOrGroupLeader && activeView === 'myhistory' && (
+              <MyHistoryPanel teamId={selectedTeam.id} />
             )}
             {(myRole === 'leader' || user?.is_admin) && activeView === 'rules' && (
               <RulesEditor teamId={selectedTeam.id} />
@@ -546,120 +540,8 @@ export default function TeamPanel() {
                   </div>
                 </div>
 
-                {/* Submission history */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <h4 className="text-sm font-semibold text-neutral-900">제출 이력</h4>
-                    <span className="px-1.5 py-0.5 bg-neutral-100 text-neutral-600 text-xs font-medium rounded">
-                      {submissionHistory.length}
-                    </span>
-                  </div>
-                  {historyLoading ? (
-                    <Loading text="이력 로딩 중..." />
-                  ) : submissionHistory.length === 0 ? (
-                    <p className="text-xs text-neutral-400">제출 이력이 없습니다.</p>
-                  ) : (
-                    <div className="space-y-1">
-                      {submissionHistory.map((sub) => (
-                        <div key={sub.id}
-                          className={`flex items-center justify-between px-3 py-2 rounded-lg border transition-colors ${
-                            viewingReport && viewingReport.report_date === sub.report_date
-                              ? 'bg-blue-50 border-blue-200'
-                              : 'bg-white border-neutral-100 hover:border-neutral-200'
-                          }`}>
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm font-medium text-neutral-900">{sub.report_date}</span>
-                            {sub.submitted_at && (
-                              <span className="text-xs text-neutral-400">
-                                {new Date(sub.submitted_at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            )}
-                            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium">
-                              {sub.status === 'submitted' ? '제출' : sub.status}
-                            </span>
-                          </div>
-                          <button
-                            onClick={async () => {
-                              if (viewingReport && viewingReport.report_date === sub.report_date) {
-                                setViewingReport(null);
-                                return;
-                              }
-                              setViewingReportLoading(true);
-                              try {
-                                const reports = await getReports();
-                                const report = reports.find(r => r.report_date === sub.report_date);
-                                setViewingReport(report || null);
-                              } catch {
-                                setViewingReport(null);
-                              } finally {
-                                setViewingReportLoading(false);
-                              }
-                            }}
-                            disabled={viewingReportLoading}
-                            className="text-xs text-neutral-600 hover:text-neutral-900 font-medium transition-colors disabled:opacity-40">
-                            {viewingReport && viewingReport.report_date === sub.report_date ? '접기' : '보기'}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Viewing a past report */}
-                  {viewingReportLoading && <div className="py-3"><Loading text="보고서 로딩 중..." /></div>}
-                  {viewingReport && !viewingReportLoading && (
-                    <div className="mt-3 bg-neutral-50 p-4 rounded-xl border border-neutral-200">
-                      <div className="flex items-center justify-between mb-3">
-                        <h5 className="text-sm font-semibold text-neutral-900">{viewingReport.report_date} 보고서</h5>
-                        <button onClick={() => setViewingReport(null)}
-                          className="p-1 text-neutral-400 hover:text-neutral-600 transition-colors">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 mb-3 text-xs">
-                        <div><span className="text-neutral-500">팀명:</span> {viewingReport.team_name}</div>
-                        <div><span className="text-neutral-500">작성자:</span> {viewingReport.author_name}</div>
-                        <div><span className="text-neutral-500">일자:</span> {viewingReport.report_date}</div>
-                      </div>
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm">
-                        <div className="space-y-2">
-                          <div className="font-semibold text-neutral-900 text-sm border-b border-neutral-300 pb-1">금주실적</div>
-                          {viewingReport.this_week.length === 0 ? (
-                            <p className="text-neutral-400 text-xs">없음</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {viewingReport.this_week.map((t, i) => (
-                                <div key={i} className="bg-white rounded-md px-3 py-2 border border-neutral-200 text-xs">
-                                  <div className="flex items-center justify-between">
-                                    <span className="font-semibold text-neutral-900">{t.title}</span>
-                                    <span className="text-neutral-500 font-medium">{t.progress}%</span>
-                                  </div>
-                                  {t.details && <div className="text-neutral-700 mt-1 whitespace-pre-line">{t.details}</div>}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <div className="space-y-2">
-                          <div className="font-semibold text-neutral-900 text-sm border-b border-neutral-300 pb-1">차주계획</div>
-                          {viewingReport.next_week.length === 0 ? (
-                            <p className="text-neutral-400 text-xs">없음</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {viewingReport.next_week.map((t, i) => (
-                                <div key={i} className="bg-white rounded-md px-3 py-2 border border-neutral-200 text-xs">
-                                  <div className="font-semibold text-neutral-900">{t.title}</div>
-                                  {t.details && <div className="text-neutral-700 mt-1 whitespace-pre-line">{t.details}</div>}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                {/* 내가 작성한 히스토리 (본사 제출 + 사이트 보고서 통합) */}
+                <MyHistoryPanel teamId={selectedTeam.id} />
 
                 {/* 취합 결과 보기 — 본인 글이 어떻게 합쳐졌는지 read-only */}
                 <div className="pt-4 border-t border-neutral-100">

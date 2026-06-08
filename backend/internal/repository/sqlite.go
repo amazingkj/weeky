@@ -1658,6 +1658,10 @@ func (r *Repository) scanSiteReport(scan func(...any) error) (*model.SiteReport,
 const siteReportColumns = `id, team_id, site_project_id, author_user_id, author_names,
 	project_name, report_date, report_date_text, this_week, next_week, notes, created_at, updated_at`
 
+// JOIN 쿼리에서 site_project_id 컬럼 모호성을 피하기 위한 sr. 프리픽스 버전.
+const siteReportColumnsSR = `sr.id, sr.team_id, sr.site_project_id, sr.author_user_id, sr.author_names,
+	sr.project_name, sr.report_date, sr.report_date_text, sr.this_week, sr.next_week, sr.notes, sr.created_at, sr.updated_at`
+
 func (r *Repository) GetSiteReport(id int64) (*model.SiteReport, error) {
 	row := r.db.QueryRow(`SELECT `+siteReportColumns+` FROM site_reports WHERE id = ?`, id)
 	return r.scanSiteReport(row.Scan)
@@ -1696,6 +1700,30 @@ func (r *Repository) GetSiteSubmittersByTeamAndDate(teamID int64, reportDate str
 			return nil, err
 		}
 		results = append(results, uid)
+	}
+	return results, rows.Err()
+}
+
+func (r *Repository) GetSiteReportsByUser(teamID, userID int64) ([]model.SiteReport, error) {
+	rows, err := r.db.Query(
+		`SELECT `+siteReportColumnsSR+` FROM site_reports sr
+		 JOIN site_project_authors spa ON spa.site_project_id = sr.site_project_id
+		 WHERE sr.team_id = ? AND spa.user_id = ?
+		 ORDER BY sr.report_date DESC, sr.site_project_id`,
+		teamID, userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	results := []model.SiteReport{}
+	for rows.Next() {
+		sr, err := r.scanSiteReport(rows.Scan)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, *sr)
 	}
 	return results, rows.Err()
 }

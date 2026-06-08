@@ -621,6 +621,10 @@ func (m *MockRepository) GetSiteReportsByTeamAndDate(teamID int64, reportDate st
 	return nil, nil
 }
 
+func (m *MockRepository) GetSiteReportsByUser(teamID, userID int64) ([]model.SiteReport, error) {
+	return nil, nil
+}
+
 func (m *MockRepository) GetSiteSubmittersByTeamAndDate(teamID int64, reportDate string) ([]int64, error) {
 	return nil, nil
 }

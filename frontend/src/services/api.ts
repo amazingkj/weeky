@@ -270,6 +270,12 @@ export async function getMySubmissions(teamId: number): Promise<ReportSubmission
   return res.json();
 }
 
+export async function getMySiteReports(teamId: number): Promise<SiteReport[]> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/my-site-reports`);
+  await throwIfNotOk(res, '사이트 보고서 이력 조회에 실패했습니다');
+  return res.json();
+}
+
 export async function getConfig(): Promise<ConfigMap> {
   const res = await apiFetch(`${API_BASE}/config`);
   await throwIfNotOk(res, 'Failed to fetch config');

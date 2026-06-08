@@ -162,6 +162,7 @@ func main() {
 
 	protected.Get("/teams/:id/site-reports", h.GetTeamSiteReports)
 	protected.Get("/teams/:id/site-reports/mine", h.GetSiteReport)
+	protected.Get("/teams/:id/my-site-reports", h.GetMySiteReports)
 	protected.Post("/teams/:id/site-reports", h.SaveSiteReport)
 
 	app.Use("/api", func(c *fiber.Ctx) error {
