@@ -696,8 +696,17 @@ export async function generateConsolidatedPPT(
     let start = 0;
     while (start < totalRows) {
       const remaining = totalRows - start;
-      const limit = remaining <= shortRowsPerPage ? shortRowsPerPage : fullRowsPerPage;
-      let end = Math.min(start + limit, totalRows);
+      // 마지막 페이지(푸터 포함)는 shortRowsPerPage만 담을 수 있다.
+      // 남은 행이 (short, full] 구간이면 전부 마지막 페이지에 욱여넣지 말고
+      // 다음 페이지에 정확히 short만 남도록 분할한다 → 초과분이 푸터 뒤로 가려지는 것 방지.
+      let end: number;
+      if (remaining <= shortRowsPerPage) {
+        end = totalRows;                              // 마지막 페이지 (푸터 자리 확보됨)
+      } else if (remaining <= fullRowsPerPage + shortRowsPerPage) {
+        end = start + (remaining - shortRowsPerPage); // 이번은 풀 높이, 다음이 마지막
+      } else {
+        end = start + fullRowsPerPage;                // 여유 충분 → 풀 페이지
+      }
       while (end > start + 1 && end < totalRows) {
         const lLast = expandedLeft[end - 1];
         const rLast = expandedRight[end - 1];
