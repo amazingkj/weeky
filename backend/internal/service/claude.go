@@ -76,7 +76,7 @@ func (s *ClaudeService) GenerateReport(req GenerateReportRequest) (*GenerateRepo
 		maxTokens = 6000
 	}
 	claudeReq := claudeRequest{
-		Model:     "claude-sonnet-4-20250514",
+		Model:     "claude-sonnet-4-6",
 		MaxTokens: maxTokens,
 		Messages: []claudeMessage{
 			{Role: "user", Content: prompt},
