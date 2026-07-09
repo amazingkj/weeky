@@ -84,7 +84,7 @@ export default function MemberConsolidatedView({ teamId, myName }: MemberConsoli
                 onClick={() => setReportDate(friday)}
                 className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
                   isSelected
-                    ? 'bg-neutral-900 text-white border-neutral-900'
+                    ? 'bg-ink-800 text-white border-ink-800'
                     : 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-300'
                 }`}>
                 {label}
@@ -95,7 +95,7 @@ export default function MemberConsolidatedView({ teamId, myName }: MemberConsoli
         <div className="flex items-center gap-2 mt-2">
           <span className="text-xs text-neutral-400">{reportDate} (금)</span>
           <button onClick={fetchConsolidated} disabled={loading}
-            className="px-3 py-1.5 text-xs font-medium text-white bg-neutral-900 rounded-lg hover:bg-neutral-800 disabled:opacity-40 transition-colors">
+            className="px-3 py-1.5 text-xs font-medium text-white bg-ink-800 rounded-lg hover:bg-ink-900 disabled:opacity-40 transition-colors">
             {loading ? '조회 중...' : '취합 결과 보기'}
           </button>
         </div>

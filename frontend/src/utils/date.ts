@@ -78,3 +78,22 @@ export function isSameWeek(dateA: string, dateB: string): boolean {
 export function getNextWeekRange(dateStr: string): string {
   return formatNextWeekRange(dateStr, '.', false);
 }
+
+// "M월 N주차" — ISO 8601 방식대로 그 주 목요일이 속한 달을 기준으로 주차를 매김
+// (예: 7/1이 수요일이면 7/6~7/10 주는 목요일 7/9 기준 → 7월 2주차)
+export function getWeekOfMonthLabel(dateStr: string): string {
+  if (!dateStr) return '';
+  const monday = getMondayDate(dateStr);
+  const thursday = new Date(monday);
+  thursday.setDate(monday.getDate() + 3);
+  const week = Math.ceil(thursday.getDate() / 7);
+  return `${thursday.getMonth() + 1}월 ${week}주차`;
+}
+
+// "MM.DD ~ MM.DD" — 헤더 주차 칩용 짧은 범위 (월~금)
+export function getWeekRangeShort(dateStr: string): string {
+  if (!dateStr) return '';
+  const monday = getMondayDate(dateStr);
+  const friday = getFridayDate(monday);
+  return `${pad2(monday.getMonth() + 1)}.${pad2(monday.getDate())} ~ ${pad2(friday.getMonth() + 1)}.${pad2(friday.getDate())}`;
+}

@@ -55,7 +55,7 @@ describe('ConfigPanel Component', () => {
     render(<ConfigPanel />);
 
     await waitFor(() => {
-      expect(screen.getByText('설정됨')).toBeInTheDocument();
+      expect(screen.getByText('저장됨')).toBeInTheDocument();
     });
   });
 
@@ -93,9 +93,9 @@ describe('ConfigPanel Component', () => {
       expect(screen.getByText('설정 저장')).toBeInTheDocument();
     });
 
-    // Fill in a field (GitLab namespace field is visible in expanded section)
-    const namespaceInput = screen.getByPlaceholderText('group 또는 username');
-    fireEvent.change(namespaceInput, { target: { value: 'test-org' } });
+    // Fill in a field (GitLab token field is visible in expanded section)
+    const tokenInput = screen.getByPlaceholderText('glpat-xxxxx...');
+    fireEvent.change(tokenInput, { target: { value: 'test-token' } });
 
     // Save
     fireEvent.click(screen.getByText('설정 저장'));
@@ -115,8 +115,8 @@ describe('ConfigPanel Component', () => {
     });
 
     // Fill in a field
-    const namespaceInput = screen.getByPlaceholderText('group 또는 username');
-    fireEvent.change(namespaceInput, { target: { value: 'test-org' } });
+    const tokenInput = screen.getByPlaceholderText('glpat-xxxxx...');
+    fireEvent.change(tokenInput, { target: { value: 'test-token' } });
 
     // Save
     fireEvent.click(screen.getByText('설정 저장'));
@@ -140,8 +140,8 @@ describe('ConfigPanel Component', () => {
     });
 
     // Fill in a field to enable saving
-    const namespaceInput = screen.getByPlaceholderText('group 또는 username');
-    fireEvent.change(namespaceInput, { target: { value: 'test-org' } });
+    const tokenInput = screen.getByPlaceholderText('glpat-xxxxx...');
+    fireEvent.change(tokenInput, { target: { value: 'test-token' } });
 
     // Click save
     fireEvent.click(screen.getByText('설정 저장'));

@@ -18,7 +18,7 @@ export default function Loading({ size = 'md', text, className = '' }: LoadingPr
       {/* Animate wrapper div instead of SVG for hardware acceleration (rendering-animate-svg-wrapper) */}
       <div className="relative">
         {/* Outer glow */}
-        <div className={`absolute inset-0 ${spinner} rounded-full bg-blue-500/20 blur-md animate-pulse`} />
+        <div className={`absolute inset-0 ${spinner} rounded-full bg-ink-500/20 blur-md animate-pulse`} />
 
         {/* Spinner */}
         <div className={`relative ${spinner} animate-spin`}>
@@ -44,8 +44,8 @@ export default function Loading({ size = 'md', text, className = '' }: LoadingPr
             />
             <defs>
               <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#3B82F6" />
-                <stop offset="100%" stopColor="#8B5CF6" />
+                <stop offset="0%" stopColor="#4463A4" />
+                <stop offset="100%" stopColor="#1D2A49" />
               </linearGradient>
             </defs>
           </svg>

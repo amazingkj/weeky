@@ -38,8 +38,7 @@ func getSecret() []byte {
 		jwtSecret = []byte(s)
 		return jwtSecret
 	}
-	jwtSecret = []byte("weeky-dev-secret-change-in-production")
-	return jwtSecret
+	panic("JWT_SECRET is not set")
 }
 
 func HashPassword(password string) (string, error) {

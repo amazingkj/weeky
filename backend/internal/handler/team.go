@@ -191,6 +191,14 @@ func (h *Handler) UpdateTeamMember(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusForbidden, "팀장 권한이 필요합니다")
 	}
 
+	target, err := h.repo.GetTeamMemberByID(memberID)
+	if err != nil {
+		return notFound(c, "멤버를 찾을 수 없습니다")
+	}
+	if target.TeamID != teamID {
+		return respondError(c, fiber.StatusForbidden, "해당 팀의 멤버가 아닙니다")
+	}
+
 	var req model.UpdateTeamMemberRequest
 	if err := c.BodyParser(&req); err != nil {
 		return badRequest(c, "잘못된 요청입니다")
@@ -216,6 +224,14 @@ func (h *Handler) RemoveTeamMember(c *fiber.Ctx) error {
 	member, err := h.repo.GetTeamMember(teamID, userID)
 	if !isAdmin(c) && (err != nil || member.Role != model.TeamRoleLeader) {
 		return respondError(c, fiber.StatusForbidden, "팀장 권한이 필요합니다")
+	}
+
+	target, err := h.repo.GetTeamMemberByID(memberID)
+	if err != nil {
+		return notFound(c, "멤버를 찾을 수 없습니다")
+	}
+	if target.TeamID != teamID {
+		return respondError(c, fiber.StatusForbidden, "해당 팀의 멤버가 아닙니다")
 	}
 
 	if err := h.repo.RemoveTeamMember(memberID); err != nil {
@@ -310,8 +326,18 @@ func (h *Handler) UnsubmitReport(c *fiber.Ctx) error {
 	}
 
 	userID := getUserID(c)
-	if _, err := h.repo.GetTeamMember(teamID, userID); err != nil {
+	member, err := h.repo.GetTeamMember(teamID, userID)
+	if err != nil {
 		return respondError(c, fiber.StatusForbidden, "팀 멤버가 아닙니다")
+	}
+
+	sub, err := h.repo.GetSubmissionByReport(reportID, teamID)
+	if err != nil {
+		return notFound(c, "제출 내역을 찾을 수 없습니다")
+	}
+	// 본인 제출이 아니면 팀장/그룹장만 취소 가능
+	if sub.UserID != userID && member.Role != model.TeamRoleLeader && member.Role != model.TeamRoleGroupLeader {
+		return respondError(c, fiber.StatusForbidden, "본인의 제출만 취소할 수 있습니다")
 	}
 
 	if err := h.repo.UnsubmitReport(reportID, teamID); err != nil {
@@ -401,6 +427,11 @@ func (h *Handler) GetTeamMemberReport(c *fiber.Ctx) error {
 		return respondError(c, fiber.StatusForbidden, "팀장 또는 그룹장 권한이 필요합니다")
 	}
 
+	// 해당 팀에 제출된 보고서만 열람 가능 (타 팀/미제출 보고서 IDOR 차단)
+	if _, err := h.repo.GetSubmissionByReport(reportID, teamID); err != nil {
+		return notFound(c, "보고서를 찾을 수 없습니다")
+	}
+
 	report, err := h.repo.GetReportByID(reportID)
 	if err != nil {
 		slog.Error("GetTeamMemberReport failed", "reportID", reportID, "error", err)
@@ -423,6 +454,11 @@ func (h *Handler) UpdateTeamMemberReport(c *fiber.Ctx) error {
 	member, err := h.repo.GetTeamMember(teamID, userID)
 	if !isAdmin(c) && (err != nil || (member.Role != model.TeamRoleLeader && member.Role != model.TeamRoleGroupLeader)) {
 		return respondError(c, fiber.StatusForbidden, "팀장 또는 그룹장 권한이 필요합니다")
+	}
+
+	// 해당 팀에 제출된 보고서만 수정 가능 (타 팀/미제출 보고서 IDOR 차단)
+	if _, err := h.repo.GetSubmissionByReport(reportID, teamID); err != nil {
+		return notFound(c, "보고서를 찾을 수 없습니다")
 	}
 
 	var req model.CreateReportRequest

@@ -120,8 +120,14 @@ async function throwIfNotOk(res: Response, message: string): Promise<void> {
 
 async function throwWithServerError(res: Response, fallback: string): Promise<void> {
   if (!res.ok) {
-    const body = await res.json();
-    throw new Error(body.error || fallback);
+    let message = fallback;
+    try {
+      const body = await res.json();
+      message = body.error || fallback;
+    } catch {
+      // 비-JSON 응답(프록시 에러 페이지 등)은 fallback 메시지 사용
+    }
+    throw new Error(message);
   }
 }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { User } from '../types';
 import { adminGetUsers, adminResetPassword, adminSetUserAdmin } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,6 +12,19 @@ export default function AdminUserManager() {
   const [isResetting, setIsResetting] = useState(false);
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
+  const successTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => {
+      if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    };
+  }, []);
+
+  const showSuccess = (msg: string) => {
+    setSuccessMsg(msg);
+    if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    successTimerRef.current = setTimeout(() => setSuccessMsg(''), 3000);
+  };
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -32,10 +45,9 @@ export default function AdminUserManager() {
     setError('');
     try {
       await adminResetPassword(resetTarget.id, newPassword);
-      setSuccessMsg(`${resetTarget.name}님의 비밀번호가 초기화되었습니다`);
+      showSuccess(`${resetTarget.name}님의 비밀번호가 초기화되었습니다`);
       setResetTarget(null);
       setNewPassword('');
-      setTimeout(() => setSuccessMsg(''), 3000);
     } catch {
       setError('비밀번호 초기화에 실패했습니다');
     } finally {
@@ -52,8 +64,7 @@ export default function AdminUserManager() {
     try {
       await adminSetUserAdmin(target.id, next);
       setUsers((prev) => prev.map((u) => u.id === target.id ? { ...u, is_admin: next } : u));
-      setSuccessMsg(`${target.name}님을 ${action}했습니다`);
-      setTimeout(() => setSuccessMsg(''), 3000);
+      showSuccess(`${target.name}님을 ${action}했습니다`);
     } catch (e: any) {
       setError(e?.message || '관리자 권한 변경에 실패했습니다');
     } finally {
@@ -83,7 +94,7 @@ export default function AdminUserManager() {
           {users.map(u => (
             <div
               key={u.id}
-              className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-neutral-200 bg-white"
+              className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 rounded-lg border border-neutral-200 bg-white"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center text-xs font-medium text-neutral-600 flex-shrink-0">
@@ -93,7 +104,7 @@ export default function AdminUserManager() {
                   <div className="text-sm font-medium text-neutral-900 flex items-center gap-1.5">
                     {u.name}
                     {u.is_admin && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-medium">관리자</span>
+                      <span className="text-[10px] px-1.5 py-0.5 bg-ink-50 text-ink-600 rounded font-medium">관리자</span>
                     )}
                   </div>
                   <div className="text-xs text-neutral-500 truncate">{u.email}</div>
@@ -107,7 +118,7 @@ export default function AdminUserManager() {
                   className={`px-2.5 py-1.5 text-xs border rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                     u.is_admin
                       ? 'text-red-600 border-red-200 hover:bg-red-50'
-                      : 'text-blue-600 border-blue-200 hover:bg-blue-50'
+                      : 'text-ink-600 border-ink-100 hover:bg-ink-50'
                   }`}
                 >
                   {togglingId === u.id ? '처리 중...' : (u.is_admin ? '관리자 해제' : '관리자 지정')}
@@ -136,7 +147,7 @@ export default function AdminUserManager() {
               value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
               placeholder="새 비밀번호 (6자 이상)"
-              className="w-full px-3 py-2 text-sm border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-3"
+              className="w-full px-3 py-2 text-sm border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-ink-500 focus:border-transparent mb-3"
               autoFocus
             />
             <div className="flex justify-end gap-2">
@@ -149,7 +160,7 @@ export default function AdminUserManager() {
               <button
                 onClick={handleReset}
                 disabled={newPassword.length < 6 || isResetting}
-                className="px-3 py-1.5 text-xs text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 text-xs text-white bg-ink-700 rounded-lg hover:bg-ink-800 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isResetting ? '처리 중...' : '초기화'}
               </button>

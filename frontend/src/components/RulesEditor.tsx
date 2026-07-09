@@ -154,59 +154,59 @@ export default function RulesEditor({ teamId }: RulesEditorProps) {
       <div className="border border-neutral-200 rounded-lg p-3 space-y-2 bg-neutral-50">
         <div className="text-xs font-medium text-neutral-700">새 규칙 추가</div>
         <div className="flex flex-wrap gap-2 items-end">
-          <div>
+          <div className="w-full sm:w-auto">
             <label className="block text-[10px] text-neutral-500 mb-0.5">유형</label>
             <select
               value={newType}
               onChange={e => setNewType(e.target.value as ConsolidationRuleType)}
-              className="text-xs px-2 py-1.5 border border-neutral-300 rounded">
+              className="w-full sm:w-auto text-xs px-2 py-1.5 border border-neutral-300 rounded">
               <option value="rename_title">{RULE_TYPE_LABEL.rename_title}</option>
               <option value="virtual_client">{RULE_TYPE_LABEL.virtual_client}</option>
             </select>
           </div>
           {newType === 'rename_title' ? (
             <>
-              <div>
+              <div className="w-full sm:w-auto">
                 <label className="block text-[10px] text-neutral-500 mb-0.5">원본 업무제목</label>
                 <input
                   value={newPattern}
                   onChange={e => setNewPattern(e.target.value)}
                   placeholder="MyData"
-                  className="text-xs px-2 py-1.5 border border-neutral-300 rounded w-40" />
+                  className="text-xs px-2 py-1.5 border border-neutral-300 rounded w-full sm:w-40" />
               </div>
-              <div>
+              <div className="w-full sm:w-auto">
                 <label className="block text-[10px] text-neutral-500 mb-0.5">변경 결과</label>
                 <input
                   value={newReplacement}
                   onChange={e => setNewReplacement(e.target.value)}
                   placeholder="마이데이터"
-                  className="text-xs px-2 py-1.5 border border-neutral-300 rounded w-40" />
+                  className="text-xs px-2 py-1.5 border border-neutral-300 rounded w-full sm:w-40" />
               </div>
             </>
           ) : (
             <>
-              <div>
+              <div className="w-full sm:w-auto">
                 <label className="block text-[10px] text-neutral-500 mb-0.5">적용 업무제목</label>
                 <input
                   value={newScopeTitle}
                   onChange={e => setNewScopeTitle(e.target.value)}
                   placeholder="CruzAPIM"
-                  className="text-xs px-2 py-1.5 border border-neutral-300 rounded w-40" />
+                  className="text-xs px-2 py-1.5 border border-neutral-300 rounded w-full sm:w-40" />
               </div>
-              <div>
+              <div className="w-full sm:w-auto">
                 <label className="block text-[10px] text-neutral-500 mb-0.5">가상 고객사명</label>
                 <input
                   value={newReplacement}
                   onChange={e => setNewReplacement(e.target.value)}
                   placeholder="본사"
-                  className="text-xs px-2 py-1.5 border border-neutral-300 rounded w-40" />
+                  className="text-xs px-2 py-1.5 border border-neutral-300 rounded w-full sm:w-40" />
               </div>
             </>
           )}
           <button
             onClick={handleCreate}
             disabled={creating}
-            className="text-xs px-3 py-1.5 bg-neutral-900 text-white rounded hover:bg-neutral-800 disabled:opacity-40">
+            className="text-xs px-3 py-1.5 bg-ink-800 text-white rounded hover:bg-ink-900 disabled:opacity-40">
             {creating ? '추가 중...' : '추가'}
           </button>
         </div>
@@ -223,8 +223,8 @@ export default function RulesEditor({ teamId }: RulesEditorProps) {
           등록된 규칙이 없습니다.
         </div>
       ) : (
-        <div className="border border-neutral-200 rounded-lg overflow-hidden">
-          <table className="w-full text-xs">
+        <div className="border border-neutral-200 rounded-lg overflow-x-auto">
+          <table className="w-full min-w-[480px] text-xs">
             <thead className="bg-neutral-50">
               <tr>
                 <th className="w-10 px-2 py-2 text-center font-medium text-neutral-600">#</th>
@@ -268,7 +268,7 @@ export default function RulesEditor({ teamId }: RulesEditorProps) {
                         </td>
                         <td className="px-2 py-2 text-right space-x-1">
                           <button onClick={() => handleSaveEdit(r.id)}
-                            className="text-xs px-2 py-1 bg-neutral-900 text-white rounded hover:bg-neutral-800">
+                            className="text-xs px-2 py-1 bg-ink-800 text-white rounded hover:bg-ink-900">
                             저장
                           </button>
                           <button onClick={() => { setEditingId(null); setEditDraft(null); }}
@@ -294,10 +294,10 @@ export default function RulesEditor({ teamId }: RulesEditorProps) {
                           <div className="inline-flex gap-1">
                             <button onClick={() => handleMove(i, 'up')} disabled={i === 0}
                               className="text-neutral-400 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed px-1"
-                              title="위로">↑</button>
+                              title="위로" aria-label="위로">↑</button>
                             <button onClick={() => handleMove(i, 'down')} disabled={i === rules.length - 1}
                               className="text-neutral-400 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed px-1"
-                              title="아래로">↓</button>
+                              title="아래로" aria-label="아래로">↓</button>
                             <button onClick={() => handleStartEdit(r)}
                               className="text-xs px-2 py-1 border border-neutral-200 rounded hover:bg-neutral-50">
                               수정

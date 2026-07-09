@@ -43,7 +43,7 @@ export default function TeamCreateModal({ isOpen, onClose, onCreated }: TeamCrea
       <div className="relative bg-white rounded-xl border border-neutral-200 shadow-lg w-full max-w-md mx-4 p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-neutral-900">팀 생성</h3>
-          <button onClick={onClose} className="p-1 text-neutral-400 hover:text-neutral-600 transition-colors">
+          <button onClick={onClose} className="p-2 sm:p-1 text-neutral-400 hover:text-neutral-600 transition-colors" aria-label="닫기">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -82,7 +82,7 @@ export default function TeamCreateModal({ isOpen, onClose, onCreated }: TeamCrea
               취소
             </button>
             <button type="submit" disabled={loading}
-              className="px-3 py-1.5 text-xs font-medium text-white bg-neutral-900 rounded-lg hover:bg-neutral-800 disabled:opacity-40 transition-colors">
+              className="px-3 py-1.5 text-xs font-medium text-white bg-ink-800 rounded-lg hover:bg-ink-900 disabled:opacity-40 transition-colors">
               {loading ? '생성 중...' : '팀 생성'}
             </button>
           </div>

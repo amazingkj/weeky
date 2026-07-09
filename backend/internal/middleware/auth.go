@@ -30,6 +30,13 @@ func RequireAuth() fiber.Handler {
 			})
 		}
 
+		// refresh 토큰으로는 보호된 API에 접근할 수 없음
+		if claims.TokenType != auth.AccessToken {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "유효하지 않은 토큰입니다",
+			})
+		}
+
 		c.Locals("userID", claims.UserID)
 		c.Locals("email", claims.Email)
 		c.Locals("isAdmin", claims.IsAdmin)

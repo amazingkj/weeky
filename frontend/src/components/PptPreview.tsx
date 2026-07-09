@@ -225,7 +225,7 @@ function TaskRows({ tasks, maxItems, dateRange, showProgress }: {
               </div>
             ))}
             {hasOverflow && (
-              <div className="text-gray-500">+{groups.length - maxItems}개 더</div>
+              <div className="text-neutral-500">+{groups.length - maxItems}개 더</div>
             )}
           </Cell>
           <Cell valign="top" className="whitespace-pre-line">
@@ -292,30 +292,27 @@ export default function PptPreview({ report, style = defaultTemplateStyle }: Ppt
 
   if (slides.length === 0) {
     return (
-      <div className="text-center text-gray-500 py-8">
+      <div className="text-center text-neutral-500 py-8">
         금주실적을 입력하면 미리보기가 표시됩니다.
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-gray-800">PPT 미리보기</h3>
-      <div className="space-y-6">
-        {slides.map((slide, idx) => (
-          <div
-            key={idx}
-            className="aspect-[4/3] bg-white rounded-lg shadow-lg border-2 border-gray-200 overflow-hidden max-w-4xl mx-auto"
-          >
+    <div className="space-y-6">
+      {/* 모바일: 슬라이드 비율을 유지한 채 가로 스크롤 */}
+      {slides.map((slide, idx) => (
+        <div key={idx} className="overflow-x-auto">
+          <div className="aspect-[4/3] bg-white rounded-lg shadow-lg border-2 border-neutral-200 overflow-hidden min-w-[560px] max-w-4xl mx-auto">
             <div className="h-full flex flex-col">
-              <div className="text-sm text-gray-600 font-medium px-4 py-2 bg-gray-50 border-b">
+              <div className="text-sm text-neutral-600 font-medium px-4 py-2 bg-neutral-50 border-b border-neutral-200">
                 슬라이드 {idx + 1}: {slide.title}
               </div>
               <div className="flex-1 overflow-hidden">{slide.content}</div>
             </div>
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
   );
 }

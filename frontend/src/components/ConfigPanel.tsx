@@ -253,7 +253,7 @@ export default function ConfigPanel() {
               {Array.from(selectedProjects).map(fp => (
                 <span key={fp} className="inline-flex items-center gap-1 px-2 py-1 bg-neutral-100 text-neutral-700 text-[11px] rounded-md">
                   {fp}
-                  <button type="button" onClick={() => toggleProject(fp)}
+                  <button type="button" onClick={() => toggleProject(fp)} aria-label={`${fp} 선택 해제`}
                     className="text-neutral-400 hover:text-red-500 transition-colors">
                     {closeIconSmall}
                   </button>
@@ -275,7 +275,7 @@ export default function ConfigPanel() {
                   >
                     <input type="checkbox" checked={isSelected}
                       onChange={() => toggleProject(p.full_path)}
-                      className="rounded border-neutral-300 text-neutral-900 focus:ring-neutral-500 w-3.5 h-3.5" />
+                      className="rounded border-neutral-300 text-ink-600 focus:ring-ink-500 w-3.5 h-3.5" />
                     <div className="min-w-0 flex-1">
                       <div className="text-xs font-medium text-neutral-800 truncate">{p.name}</div>
                       <div className="text-[10px] text-neutral-400 truncate">{p.full_path}</div>
@@ -467,6 +467,7 @@ function ConfigInput({ label, type = 'text', value, onChange, placeholder, confi
         />
         {type === 'password' && (
           <button type="button" onClick={() => setShowPassword(!showPassword)}
+            aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 표시'}
             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600">
             {showPassword ? eyeOffIcon : eyeIcon}
           </button>

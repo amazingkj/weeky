@@ -219,7 +219,7 @@ function SortableTaskItem({ id, ...rest }: SortableTaskItemProps) {
 
 function ProgressBadge({ progress }: { progress: number }) {
   if (progress === 100) {
-    return <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-neutral-900 text-white">완료</span>;
+    return <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-ink-800 text-white">완료</span>;
   }
   if (progress > 0) {
     return <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-neutral-200 text-neutral-700">진행중</span>;
@@ -285,13 +285,13 @@ const TaskItem = memo(function TaskItem({
           {/* 인덱스 배지 = 드래그 핸들 */}
           <span
             {...(dragHandleProps || {})}
-            className="w-5 h-5 flex items-center justify-center bg-neutral-200 text-neutral-600 text-xs font-mono rounded cursor-grab active:cursor-grabbing select-none"
+            className="w-7 h-7 sm:w-5 sm:h-5 flex items-center justify-center bg-neutral-200 text-neutral-600 text-xs font-mono rounded cursor-grab active:cursor-grabbing select-none touch-none"
             title="드래그해서 순서 변경"
           >
             {index + 1}
           </span>
           {task._carriedForward && (
-            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 text-[10px] font-medium rounded">
+            <span className="px-1.5 py-0.5 bg-ink-100 text-ink-700 text-[10px] font-medium rounded">
               이전 주
             </span>
           )}
@@ -304,20 +304,21 @@ const TaskItem = memo(function TaskItem({
             <ProgressBadge progress={task.progress} />
           )}
         </div>
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button type="button" onClick={onMoveUp} disabled={index === 0}
-            className="p-1 text-neutral-400 hover:text-neutral-600 disabled:opacity-30" title="위로">
+        {/* 터치 기기는 hover가 없으므로 항상 노출, 포인터 기기에서만 hover 노출 */}
+        <div className="flex items-center gap-0.5 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity">
+          <button type="button" onClick={onMoveUp} disabled={index === 0} aria-label="위로 이동"
+            className="p-2 sm:p-1 text-neutral-400 hover:text-neutral-600 disabled:opacity-30" title="위로">
             {upIcon}
           </button>
-          <button type="button" onClick={onMoveDown} disabled={index === totalCount - 1}
-            className="p-1 text-neutral-400 hover:text-neutral-600 disabled:opacity-30" title="아래로">
+          <button type="button" onClick={onMoveDown} disabled={index === totalCount - 1} aria-label="아래로 이동"
+            className="p-2 sm:p-1 text-neutral-400 hover:text-neutral-600 disabled:opacity-30" title="아래로">
             {downIcon}
           </button>
           {/* ⋯ 메뉴: 다른 업무제목/고객사로 빠른 이동 */}
           {((availableTitles && availableTitles.length > 0) || (availableClients && availableClients.length > 0)) && (
             <div ref={menuRef} className="relative">
-              <button type="button" onClick={() => setMenuOpen(o => !o)}
-                className="p-1 text-neutral-400 hover:text-neutral-600 transition-colors" title="이동/메뉴">
+              <button type="button" onClick={() => setMenuOpen(o => !o)} aria-label="이동 메뉴"
+                className="p-2 sm:p-1 text-neutral-400 hover:text-neutral-600 transition-colors" title="이동/메뉴">
                 {moreIcon}
               </button>
               {menuOpen && (
@@ -364,8 +365,8 @@ const TaskItem = memo(function TaskItem({
               )}
             </div>
           )}
-          <button type="button" onClick={onRemove}
-            className="p-1 text-neutral-400 hover:text-red-500 transition-colors" title="삭제">
+          <button type="button" onClick={onRemove} aria-label="항목 삭제"
+            className="p-2 sm:p-1 text-neutral-400 hover:text-red-500 transition-colors" title="삭제">
             {trashIcon}
           </button>
         </div>
@@ -454,7 +455,7 @@ const TaskItem = memo(function TaskItem({
         {showProgress && (
           <div className="flex items-center gap-2 flex-1">
             <span className="text-xs text-neutral-400">진척률</span>
-            <div className="flex-1 max-w-[160px] flex items-center gap-2">
+            <div className="flex-1 max-w-[220px] sm:max-w-[160px] flex items-center gap-2">
               <div className="flex-1 h-1.5 bg-neutral-200 rounded-full overflow-hidden">
                 <div
                   className={`h-full ${progressColor} transition-all duration-200`}
@@ -465,7 +466,8 @@ const TaskItem = memo(function TaskItem({
                 type="range" min="0" max="100" step="10"
                 value={task.progress}
                 onChange={(e) => onUpdate('progress', parseInt(e.target.value))}
-                className="w-14 accent-neutral-900"
+                aria-label="진척률"
+                className="w-20 sm:w-14 h-6 accent-ink-700"
               />
               <span className="text-xs font-mono text-neutral-600 w-8 text-right">
                 {task.progress}%

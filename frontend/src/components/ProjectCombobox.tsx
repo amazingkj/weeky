@@ -101,7 +101,7 @@ export default function ProjectCombobox({
                 setFilter('');
                 setOpen(false);
               }}
-              className="w-full text-left px-2.5 py-1.5 text-sm text-blue-600 hover:bg-blue-50 transition-colors border-t border-neutral-100"
+              className="w-full text-left px-2.5 py-1.5 text-sm text-ink-600 hover:bg-ink-50 transition-colors border-t border-neutral-100"
             >
               + "{filter}" 새 프로젝트로 추가
             </button>

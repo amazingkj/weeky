@@ -118,7 +118,7 @@ export default function TeamMemberManager({ team }: TeamMemberManagerProps) {
 
       {/* Add member form */}
       <form onSubmit={handleAdd} className="flex flex-wrap gap-2 items-end">
-        <div className="flex-1 min-w-[180px]">
+        <div className="w-full sm:flex-1 sm:min-w-[180px]">
           <label className="block text-xs text-neutral-500 mb-1">사용자</label>
           <select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)}
             className="input text-xs py-[7px]">
@@ -128,14 +128,14 @@ export default function TeamMemberManager({ team }: TeamMemberManagerProps) {
             ))}
           </select>
         </div>
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="block text-xs text-neutral-500 mb-1">역할</label>
           <select value={newRole} onChange={(e) => setNewRole(e.target.value as TeamRole)}
             className="input text-xs py-[7px]">
             {ROLES.map(r => <option key={r} value={r}>{TEAM_ROLE_LABELS[r]}</option>)}
           </select>
         </div>
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="block text-xs text-neutral-500 mb-1">직급</label>
           <select value={newRoleCode} onChange={(e) => setNewRoleCode(e.target.value as RoleCode)}
             className="input text-xs py-[7px]">
@@ -143,7 +143,7 @@ export default function TeamMemberManager({ team }: TeamMemberManagerProps) {
           </select>
         </div>
         <button type="submit" disabled={adding}
-          className="px-3 py-1.5 text-xs font-medium text-white bg-neutral-900 rounded-lg hover:bg-neutral-800 disabled:opacity-40 transition-colors">
+          className="px-3 py-1.5 text-xs font-medium text-white bg-ink-800 rounded-lg hover:bg-ink-900 disabled:opacity-40 transition-colors">
           {adding ? '추가 중...' : '추가'}
         </button>
       </form>
@@ -171,7 +171,7 @@ export default function TeamMemberManager({ team }: TeamMemberManagerProps) {
               {ROLE_CODES.map(rc => <option key={rc} value={rc}>{rc}</option>)}
             </select>
             <button onClick={() => handleRemove(m)}
-              className="opacity-0 group-hover:opacity-100 p-1 text-neutral-400 hover:text-red-500 transition-all" title="제거">
+              className="[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 p-2 sm:p-1 text-neutral-400 hover:text-red-500 transition-all" title="제거" aria-label="제거">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>

@@ -369,17 +369,17 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
 
       {/* Setup Guide Banner */}
       {hasConfiguredServices === false && (
-        <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-ink-50 border border-ink-100 rounded-xl px-4 py-3">
           <div className="flex items-center gap-2">
             {infoIcon}
-            <span className="text-sm text-blue-800">
+            <span className="text-sm text-ink-800">
               연동 서비스가 설정되지 않았습니다. 설정 탭에서 토큰을 먼저 등록해주세요.
             </span>
           </div>
           {onNavigateToConfig && (
             <button
               onClick={onNavigateToConfig}
-              className="shrink-0 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="shrink-0 px-3 py-1.5 bg-ink-700 text-white text-xs font-medium rounded-lg hover:bg-ink-800 transition-colors"
             >
               설정으로 이동
             </button>
@@ -392,7 +392,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
         <div className="flex items-center gap-3 text-xs text-neutral-500">
           <span className="font-medium text-neutral-700">금주 업무 <span className="text-neutral-900 font-semibold">{report.this_week.length}</span></span>
           <span>완료 <span className="text-green-600 font-semibold">{report.this_week.filter(t => t.progress === 100).length}</span></span>
-          <span>진행중 <span className="text-blue-600 font-semibold">{report.this_week.filter(t => t.progress > 0 && t.progress < 100).length}</span></span>
+          <span>진행중 <span className="text-ink-600 font-semibold">{report.this_week.filter(t => t.progress > 0 && t.progress < 100).length}</span></span>
           <span className="font-medium text-neutral-700">차주 계획 <span className="text-neutral-900 font-semibold">{report.next_week.length}</span></span>
         </div>
         <button
@@ -400,7 +400,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
           onClick={() => setShowAIPanel((p) => !p)}
           className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
             showAIPanel
-              ? 'bg-neutral-900 text-white border-neutral-900'
+              ? 'bg-ink-800 text-white border-ink-800'
               : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
           }`}
         >
@@ -496,12 +496,12 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
           <div className="space-y-5">
             <section className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm">
               {carriedForward && (
-                <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-4">
+                <div className="flex items-center justify-between bg-ink-50 border border-ink-100 rounded-lg px-3 py-2 mb-4">
                   <div className="flex items-center gap-2">
                     {infoIcon}
-                    <div className="text-xs text-blue-800">
+                    <div className="text-xs text-ink-800">
                       <p>지난주 차주계획에서 {report.this_week.filter(t => t._carriedForward).length}건 불러왔습니다.</p>
-                      <p className="text-blue-600 mt-0.5">같은 업무 제목을 사용하면 PPT에서 자동으로 합쳐집니다.</p>
+                      <p className="text-ink-500 mt-0.5">같은 업무 제목을 사용하면 PPT에서 자동으로 합쳐집니다.</p>
                     </div>
                   </div>
                   <button
@@ -510,7 +510,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
                       setReport(prev => ({ ...prev, this_week: prev.this_week.filter(t => !t._carriedForward) }));
                       setCarriedForward(false);
                     }}
-                    className="shrink-0 px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                    className="shrink-0 px-2 py-1 text-xs font-medium text-ink-600 hover:bg-ink-100 rounded transition-colors"
                   >
                     지우기
                   </button>
@@ -560,7 +560,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
                         updateField('next_week', [...existing, ...newTasks]);
                       }
                     }}
-                    className="px-2.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
+                    className="px-2.5 py-1.5 text-xs font-medium text-ink-600 bg-ink-50 hover:bg-ink-100 border border-ink-100 rounded-lg transition-colors"
                   >
                     미완료 업무 복사 ({report.this_week.filter(t => t.progress < 100).length}건)
                   </button>
@@ -580,8 +580,8 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-3 pt-2">
+        {/* Action Buttons — 모바일에서 줄바꿈 허용 */}
+        <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3 pt-2">
           {/* Save */}
           <button
             type="button"
@@ -597,11 +597,8 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
           {/* Submit to team */}
           {myTeams.length > 0 && selectedTeamId && (
             submittedTeams.has(selectedTeamId) ? (
-              <div className="flex items-center gap-2">
-                <span className="px-4 py-2 text-sm font-medium rounded-lg bg-green-50 text-green-700 border border-green-200 flex items-center gap-1.5">
-                  {checkIcon}
-                  제출완료
-                </span>
+              <div className="flex items-center gap-3">
+                <span className="stamp" aria-label="제출완료">제출완료</span>
                 <button
                   type="button"
                   onClick={handleUnsubmit}
@@ -619,7 +616,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
                 onClick={handleSubmitToTeam}
                 disabled={isSubmitting}
                 className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-2
-                           bg-white text-neutral-700 border-neutral-200 hover:border-neutral-400
+                           bg-ink-800 text-white border-ink-800 hover:bg-ink-900
                            disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? <>{spinnerIcon} 제출 중...</> : <>{submitIcon} 제출</>}
@@ -720,7 +717,7 @@ function TextSection({
 
 // Hoisted static SVG icons
 const infoIcon = (
-  <svg className="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg className="w-4 h-4 text-ink-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
@@ -783,12 +780,6 @@ const submitIcon = (
 const saveIcon = (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-  </svg>
-);
-
-const checkIcon = (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
   </svg>
 );
 

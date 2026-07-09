@@ -37,17 +37,15 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-neutral-100 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="inline-flex w-10 h-10 rounded-xl bg-neutral-900 items-center justify-center mb-3">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-            </svg>
+          <div className="inline-flex w-11 h-11 rounded-xl bg-ink-900 items-center justify-center mb-3">
+            <span className="font-serif font-bold text-white text-lg">주</span>
           </div>
-          <h1 className="text-xl font-semibold text-neutral-900">jugan</h1>
+          <h1 className="font-serif text-2xl font-bold text-neutral-900 tracking-tight">jugan</h1>
           <p className="text-sm text-neutral-500 mt-1">
-            {isFirstUser ? '첫 번째 관리자 계정을 만들어주세요' : '주간 보고서 자동화'}
+            {isFirstUser ? '첫 번째 관리자 계정을 만들어주세요' : '주간업무보고 자동화'}
           </p>
         </div>
 
@@ -57,7 +55,7 @@ export default function RegisterPage() {
           </h2>
 
           {isFirstUser && (
-            <div className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+            <div className="text-sm text-ink-800 bg-ink-50 border border-ink-100 rounded-lg px-3 py-2">
               첫 번째 사용자는 자동으로 관리자 권한을 부여받습니다. 초대 코드가 필요하지 않습니다.
             </div>
           )}
@@ -75,7 +73,7 @@ export default function RegisterPage() {
               value={name}
               onChange={e => setName(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent"
+              className="input"
               placeholder="홍길동"
             />
           </div>
@@ -87,7 +85,7 @@ export default function RegisterPage() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent"
+              className="input"
               placeholder="you@example.com"
             />
           </div>
@@ -100,7 +98,7 @@ export default function RegisterPage() {
               onChange={e => setPassword(e.target.value)}
               required
               minLength={6}
-              className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent"
+              className="input"
               placeholder="6자 이상"
             />
           </div>
@@ -113,7 +111,7 @@ export default function RegisterPage() {
                 value={inviteCode}
                 onChange={e => setInviteCode(e.target.value)}
                 required
-                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent font-mono"
+                className="input font-mono"
                 placeholder="관리자에게 받은 초대 코드"
               />
             </div>
@@ -122,14 +120,14 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-2 bg-neutral-900 text-white text-sm font-medium rounded-lg hover:bg-neutral-800 disabled:opacity-50 transition-colors"
+            className="w-full py-2.5 bg-ink-800 text-white text-sm font-medium rounded-lg hover:bg-ink-900 disabled:opacity-50 transition-colors"
           >
             {isLoading ? '가입 중...' : isFirstUser ? '관리자 계정 생성' : '회원가입'}
           </button>
 
           <p className="text-center text-sm text-neutral-500">
             이미 계정이 있으신가요?{' '}
-            <Link to="/login" className="text-neutral-900 font-medium hover:underline">
+            <Link to="/login" className="text-ink-700 font-medium hover:underline">
               로그인
             </Link>
           </p>

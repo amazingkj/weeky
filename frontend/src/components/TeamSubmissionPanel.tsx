@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { Team, TeamMemberWithSubmission, Report, ConsolidatedReport, Task, TeamProject, SiteReport, ROLE_CODE_LABELS, defaultTemplateStyle } from '../types';
 import { getTeamSubmissions, getTeamMemberReport, getConsolidatedReport, updateTeamMemberReport, getTeamProjects, saveConsolidatedEdit, getConsolidatedEdit, deleteConsolidatedEdit, getTeamSiteReports } from '../services/api';
 import TaskList from './TaskList';
@@ -82,6 +82,16 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
   const [flatNotes, setFlatNotes] = useState('');
   const [flatNextIssues, setFlatNextIssues] = useState('');
   const [flatNextNotes, setFlatNextNotes] = useState('');
+
+  // 저장 성공 배지 타이머 — 언마운트 시 정리
+  const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const editSaveSuccessTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => {
+    return () => {
+      if (saveSuccessTimerRef.current) clearTimeout(saveSuccessTimerRef.current);
+      if (editSaveSuccessTimerRef.current) clearTimeout(editSaveSuccessTimerRef.current);
+    };
+  }, []);
 
   // ESC로 전체화면 닫기
   useEffect(() => {
@@ -287,7 +297,8 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
       });
       setHasSavedEdit(true);
       setEditSaveSuccess(true);
-      setTimeout(() => setEditSaveSuccess(false), 2000);
+      if (editSaveSuccessTimerRef.current) clearTimeout(editSaveSuccessTimerRef.current);
+      editSaveSuccessTimerRef.current = setTimeout(() => setEditSaveSuccess(false), 2000);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -375,7 +386,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                 onClick={() => { setReportDate(friday); }}
                 className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
                   isSelected
-                    ? 'bg-neutral-900 text-white border-neutral-900'
+                    ? 'bg-ink-800 text-white border-ink-800'
                     : 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-300'
                 }`}>
                 {label}
@@ -386,7 +397,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
         <div className="flex items-center gap-2">
           <span className="text-xs text-neutral-400">{reportDate} (금)</span>
           <button onClick={fetchSubmissions} disabled={loading}
-            className="px-3 py-1.5 text-xs font-medium text-white bg-neutral-900 rounded-lg hover:bg-neutral-800 disabled:opacity-40 transition-colors">
+            className="px-3 py-1.5 text-xs font-medium text-white bg-ink-800 rounded-lg hover:bg-ink-900 disabled:opacity-40 transition-colors">
             {loading ? '조회 중...' : '조회'}
           </button>
         </div>
@@ -398,8 +409,8 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
           <div className="text-xs text-neutral-500">
             제출: {submittedCount}/{submissions.length}명
           </div>
-          <div className="border border-neutral-200 rounded-lg overflow-hidden">
-            <table className="w-full text-xs">
+          <div className="border border-neutral-200 rounded-lg overflow-x-auto">
+            <table className="w-full min-w-[480px] text-xs">
               <thead>
                 <tr className="bg-neutral-50 border-b border-neutral-200">
                   <th className="text-left px-3 py-2 font-medium text-neutral-600">이름</th>
@@ -416,7 +427,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                     <tr key={m.id}
                       onClick={() => handleMemberClick(m)}
                       title={siteOnly ? '사이트 보고서만 제출됨 — 본사 보고서는 미제출' : undefined}
-                      className={`transition-colors ${m.submission ? 'cursor-pointer hover:bg-neutral-50' : ''} ${selectedMemberId === m.id ? 'bg-blue-50' : idx % 2 === 1 ? 'bg-neutral-50' : ''}`}>
+                      className={`transition-colors ${m.submission ? 'cursor-pointer hover:bg-neutral-50' : ''} ${selectedMemberId === m.id ? 'bg-ink-50' : idx % 2 === 1 ? 'bg-neutral-50' : ''}`}>
                       <td className="px-3 py-2 font-medium text-neutral-900">{m.user_name}</td>
                       <td className="px-3 py-2 text-neutral-500">{m.user_email}</td>
                       <td className="px-3 py-2 text-center">
@@ -447,14 +458,14 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
             }>
               <div className="flex items-center justify-between mb-3">
                 <h4 className={`font-semibold text-neutral-900 ${fullscreen ? 'text-lg' : 'text-sm'}`}>{selectedMemberName}의 보고서</h4>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {!fullscreen && (
                     <>
                       <button
                         onClick={() => setShowMemberPreview(!showMemberPreview)}
                         className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
                           showMemberPreview
-                            ? 'bg-neutral-900 text-white border-neutral-900'
+                            ? 'bg-ink-800 text-white border-ink-800'
                             : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
                         }`}>
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -475,7 +486,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                         onClick={() => setEditingMember(!editingMember)}
                         className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
                           editingMember
-                            ? 'bg-neutral-900 text-white border-neutral-900'
+                            ? 'bg-ink-800 text-white border-ink-800'
                             : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
                         }`}>
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -499,7 +510,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                     {fullscreen ? '축소' : '전체화면'}
                   </button>
                   <button onClick={() => { setEditedReport(null); setSelectedMemberId(null); setEditingMember(false); setFullscreen(false); setSaveSuccess(false); }}
-                    className="p-1 text-neutral-400 hover:text-neutral-600 transition-colors">
+                    className="p-2 sm:p-1 text-neutral-400 hover:text-neutral-600 transition-colors" aria-label="닫기">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -508,7 +519,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
               </div>
               <div className={fullscreen ? 'text-base' : 'text-xs'}>
                 {/* 기본정보 (읽기전용) */}
-                <div className={`grid grid-cols-3 gap-2 mb-3 ${fullscreen ? 'text-sm' : ''}`}>
+                <div className={`grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3 ${fullscreen ? 'text-sm' : ''}`}>
                   <div><span className="text-neutral-500">팀명:</span> {editedReport.team_name}</div>
                   <div><span className="text-neutral-500">작성자:</span> {editedReport.author_name}</div>
                   <div><span className="text-neutral-500">일자:</span> {withDayOfWeek(editedReport.report_date)}</div>
@@ -559,7 +570,8 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                             setConsolidated(null);
                             setEditingConsolidated(false);
                             setSaveSuccess(true);
-                            setTimeout(() => setSaveSuccess(false), 2000);
+                            if (saveSuccessTimerRef.current) clearTimeout(saveSuccessTimerRef.current);
+                            saveSuccessTimerRef.current = setTimeout(() => setSaveSuccess(false), 2000);
                           } catch (err: any) {
                             setError(err.message);
                           } finally {
@@ -567,7 +579,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                           }
                         }}
                         disabled={saving}
-                        className="px-4 py-1.5 text-xs font-medium text-white bg-neutral-900 rounded-lg hover:bg-neutral-800 disabled:opacity-40 transition-colors"
+                        className="px-4 py-1.5 text-xs font-medium text-white bg-ink-800 rounded-lg hover:bg-ink-900 disabled:opacity-40 transition-colors"
                       >
                         {saving ? '저장 중...' : '저장'}
                       </button>
@@ -647,7 +659,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
               <button onClick={handleTogglePreview}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
                   showPreview
-                    ? 'bg-neutral-900 text-white border-neutral-900'
+                    ? 'bg-ink-800 text-white border-ink-800'
                     : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
                 }`}>
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -667,7 +679,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
               <button onClick={() => editingConsolidated ? setEditingConsolidated(false) : handleStartEditConsolidated()} disabled={pptLoading}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
                   editingConsolidated
-                    ? 'bg-neutral-900 text-white border-neutral-900'
+                    ? 'bg-ink-800 text-white border-ink-800'
                     : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
                 } disabled:opacity-40`}>
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -684,13 +696,13 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-semibold text-amber-900">취합 보고서 편집</h4>
                 <button onClick={() => setEditingConsolidated(false)}
-                  className="p-1 text-amber-400 hover:text-amber-600 transition-colors">
+                  className="p-2 sm:p-1 text-amber-400 hover:text-amber-600 transition-colors" aria-label="닫기">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <p className="text-xs text-amber-700 flex-1">
                   취합된 전체 내용을 직접 수정하세요. 수정 후 PPT 다운로드/미리보기에 바로 반영됩니다.
                   {hasSavedEdit && <span className="ml-1 text-amber-600 font-medium">(저장된 편집)</span>}

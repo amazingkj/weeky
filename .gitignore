@@ -10,6 +10,7 @@ node_modules/
 # Build outputs
 dist/
 backend/dist/
+coverage/
 
 # Database
 *.db

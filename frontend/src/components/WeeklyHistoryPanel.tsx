@@ -74,8 +74,8 @@ export default function WeeklyHistoryPanel({ teamId }: WeeklyHistoryPanelProps) 
           <p className="text-xs text-neutral-300 mt-1">팀원들이 보고서를 제출하면 주차별로 표시됩니다.</p>
         </div>
       ) : (
-        <div className="border border-neutral-200 rounded-lg overflow-hidden">
-          <table className="w-full text-xs">
+        <div className="border border-neutral-200 rounded-lg overflow-x-auto">
+          <table className="w-full min-w-[480px] text-xs">
             <thead>
               <tr className="bg-neutral-50 border-b border-neutral-200">
                 <th className="text-left px-3 py-2 font-medium text-neutral-600">주차 (금요일)</th>

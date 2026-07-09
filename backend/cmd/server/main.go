@@ -28,9 +28,11 @@ func main() {
 		log.Fatalf("ENCRYPTION_KEY is required: %v", err)
 	}
 
-	if secret := os.Getenv("JWT_SECRET"); secret != "" {
-		auth.SetSecret(secret)
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		log.Fatal("JWT_SECRET is required")
 	}
+	auth.SetSecret(secret)
 
 	repo, err := repository.NewFromEnv()
 	if err != nil {

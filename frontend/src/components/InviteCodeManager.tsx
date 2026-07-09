@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { InviteCode } from '../types';
 import { createInviteCode, getInviteCodes } from '../services/api';
 
@@ -7,6 +7,13 @@ export default function InviteCodeManager() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    };
+  }, []);
 
   const fetchCodes = useCallback(async () => {
     try {
@@ -49,7 +56,8 @@ export default function InviteCodeManager() {
       document.body.removeChild(textarea);
     }
     setCopiedCode(code);
-    setTimeout(() => setCopiedCode(null), 2000);
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = setTimeout(() => setCopiedCode(null), 2000);
   };
 
   return (
@@ -78,12 +86,12 @@ export default function InviteCodeManager() {
           {codes.map(ic => (
             <div
               key={ic.id}
-              className={`flex items-center justify-between px-3 py-2 rounded-lg border ${
+              className={`flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-lg border ${
                 ic.used_by ? 'bg-neutral-50 border-neutral-200' : 'bg-white border-neutral-200'
               }`}
             >
-              <div className="flex items-center gap-3">
-                <code className={`text-sm font-mono ${ic.used_by ? 'text-neutral-400 line-through' : 'text-neutral-900'}`}>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
+                <code className={`text-sm font-mono break-all ${ic.used_by ? 'text-neutral-400 line-through' : 'text-neutral-900'}`}>
                   {ic.code}
                 </code>
                 {ic.used_by ? (

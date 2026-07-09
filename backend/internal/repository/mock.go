@@ -17,6 +17,8 @@ type MockRepository struct {
 	reports     map[int64]model.Report
 	reportOwner map[int64]int64          // reportID -> userID
 	configs     map[string]model.Config  // key format: "userID:key"
+	teamMembers map[int64]model.TeamMember       // memberID -> member
+	submissions map[string]model.ReportSubmission // key format: "reportID:teamID"
 	nextID      int64
 }
 
@@ -28,6 +30,8 @@ func NewMock() *MockRepository {
 		reports:     make(map[int64]model.Report),
 		reportOwner: make(map[int64]int64),
 		configs:     make(map[string]model.Config),
+		teamMembers: make(map[int64]model.TeamMember),
+		submissions: make(map[string]model.ReportSubmission),
 		nextID:      1,
 	}
 }
@@ -392,30 +396,84 @@ func (m *MockRepository) AddTeamMember(teamID, userID int64, role model.TeamRole
 	defer m.mu.Unlock()
 	id := m.nextID
 	m.nextID++
-	return &model.TeamMember{ID: id, TeamID: teamID, UserID: userID, Role: role, RoleCode: roleCode, JoinedAt: time.Now()}, nil
+	tm := model.TeamMember{ID: id, TeamID: teamID, UserID: userID, Role: role, RoleCode: roleCode, JoinedAt: time.Now()}
+	m.teamMembers[id] = tm
+	return &tm, nil
 }
 
 func (m *MockRepository) GetTeamMembers(teamID int64) ([]model.TeamMember, error) {
-	return nil, nil
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var members []model.TeamMember
+	for _, tm := range m.teamMembers {
+		if tm.TeamID == teamID {
+			members = append(members, tm)
+		}
+	}
+	return members, nil
 }
 
 func (m *MockRepository) GetTeamMember(teamID, userID int64) (*model.TeamMember, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, tm := range m.teamMembers {
+		if tm.TeamID == teamID && tm.UserID == userID {
+			return &tm, nil
+		}
+	}
 	return nil, errors.New("not found")
 }
 
+func (m *MockRepository) GetTeamMemberByID(id int64) (*model.TeamMember, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	tm, ok := m.teamMembers[id]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	return &tm, nil
+}
+
 func (m *MockRepository) UpdateTeamMember(id int64, role model.TeamRole, roleCode model.RoleCode, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if tm, ok := m.teamMembers[id]; ok {
+		tm.Role = role
+		tm.RoleCode = roleCode
+		m.teamMembers[id] = tm
+	}
 	return nil
 }
 
 func (m *MockRepository) RemoveTeamMember(id int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.teamMembers, id)
 	return nil
 }
 
+func submissionKey(reportID, teamID int64) string {
+	return fmt.Sprintf("%d:%d", reportID, teamID)
+}
+
 func (m *MockRepository) SubmitReport(reportID, teamID, userID int64) (*model.ReportSubmission, error) {
-	return nil, errors.New("not implemented")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	id := m.nextID
+	m.nextID++
+	now := time.Now()
+	sub := model.ReportSubmission{
+		ID: id, ReportID: reportID, TeamID: teamID, UserID: userID,
+		Status: "submitted", SubmittedAt: &now, CreatedAt: now,
+	}
+	m.submissions[submissionKey(reportID, teamID)] = sub
+	return &sub, nil
 }
 
 func (m *MockRepository) UnsubmitReport(reportID, teamID int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.submissions, submissionKey(reportID, teamID))
 	return nil
 }
 
@@ -429,6 +487,16 @@ func (m *MockRepository) GetSubmissionByUser(teamID, userID int64, reportDate st
 
 func (m *MockRepository) GetSubmissionsByUser(teamID, userID int64) ([]model.ReportSubmission, error) {
 	return nil, nil
+}
+
+func (m *MockRepository) GetSubmissionByReport(reportID, teamID int64) (*model.ReportSubmission, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	sub, ok := m.submissions[submissionKey(reportID, teamID)]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	return &sub, nil
 }
 
 func (m *MockRepository) GetReportByID(id int64) (*model.Report, error) {

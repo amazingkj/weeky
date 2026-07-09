@@ -322,16 +322,17 @@ export default function ConsolidatedPptPreview({ data, leaderName }: Consolidate
       </h3>
       <div className="space-y-6">
         {slides.map((slide, idx) => (
-          <div key={idx}
-            className="aspect-[4/3] bg-white rounded-lg shadow-lg border-2 border-gray-200 overflow-hidden max-w-5xl mx-auto">
-            <div className="h-full flex flex-col">
-              <div className="text-xs text-gray-600 font-medium px-4 py-2 bg-gray-50 border-b flex items-center justify-between">
-                <span>슬라이드 {idx + 1}: {slide.title}</span>
-                {slides.length > 1 && (
-                  <span className="text-[10px] text-neutral-400">{idx + 1} / {slides.length}</span>
-                )}
+          <div key={idx} className="overflow-x-auto">
+            <div className="aspect-[4/3] bg-white rounded-lg shadow-lg border-2 border-neutral-200 overflow-hidden min-w-[560px] max-w-5xl mx-auto">
+              <div className="h-full flex flex-col">
+                <div className="text-xs text-neutral-600 font-medium px-4 py-2 bg-neutral-50 border-b flex items-center justify-between">
+                  <span>슬라이드 {idx + 1}: {slide.title}</span>
+                  {slides.length > 1 && (
+                    <span className="text-[10px] text-neutral-400">{idx + 1} / {slides.length}</span>
+                  )}
+                </div>
+                <div className="flex-1 overflow-auto">{slide.content}</div>
               </div>
-              <div className="flex-1 overflow-auto">{slide.content}</div>
             </div>
           </div>
         ))}

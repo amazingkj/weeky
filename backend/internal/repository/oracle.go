@@ -907,6 +907,20 @@ func (r *OracleRepository) GetTeamMember(teamID, userID int64) (*model.TeamMembe
 	return &m, nil
 }
 
+func (r *OracleRepository) GetTeamMemberByID(id int64) (*model.TeamMember, error) {
+	var m model.TeamMember
+	err := r.db.QueryRow(
+		`SELECT tm.id, tm.team_id, tm.user_id, tm.role, tm.role_code, tm.joined_at, u.name, u.email
+		 FROM team_members tm
+		 JOIN users u ON tm.user_id = u.id
+		 WHERE tm.id = :1`, id,
+	).Scan(&m.ID, &m.TeamID, &m.UserID, &m.Role, &m.RoleCode, &m.JoinedAt, &m.UserName, &m.UserEmail)
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
 func (r *OracleRepository) UpdateTeamMember(id int64, role model.TeamRole, roleCode model.RoleCode, name string) error {
 	_, err := r.db.Exec("UPDATE team_members SET role = :1, role_code = :2 WHERE id = :3", string(role), string(roleCode), id)
 	if err != nil {
@@ -1024,6 +1038,18 @@ func (r *OracleRepository) GetSubmissionsByUser(teamID, userID int64) ([]model.R
 		results = append(results, s)
 	}
 	return results, rows.Err()
+}
+
+func (r *OracleRepository) GetSubmissionByReport(reportID, teamID int64) (*model.ReportSubmission, error) {
+	var s model.ReportSubmission
+	err := r.db.QueryRow(
+		`SELECT id, report_id, team_id, user_id, status, submitted_at, created_at
+		 FROM report_submissions WHERE report_id = :1 AND team_id = :2`, reportID, teamID,
+	).Scan(&s.ID, &s.ReportID, &s.TeamID, &s.UserID, &s.Status, &s.SubmittedAt, &s.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
 }
 
 // --- TeamProject methods ---

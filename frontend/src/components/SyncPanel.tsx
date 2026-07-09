@@ -199,7 +199,7 @@ export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps
       {/* Date Range */}
       <div className="flex flex-wrap items-center gap-3 pb-4 border-b border-neutral-100">
         <span className="text-xs font-medium text-neutral-500">조회 기간</span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             type="date"
             value={dateRange.start}
@@ -217,9 +217,9 @@ export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps
       </div>
 
       {/* Report Style */}
-      <div className="flex items-center gap-3 pb-4 border-b border-neutral-100">
+      <div className="flex flex-wrap items-center gap-3 pb-4 border-b border-neutral-100">
         <span className="text-xs font-medium text-neutral-500">보고서 스타일</span>
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {REPORT_STYLE_OPTIONS.map(({ value, label }) => (
             <button
               key={value}
@@ -227,7 +227,7 @@ export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps
               onClick={() => { setReportStyle(value); localStorage.setItem('reportStyle', value); }}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
                 reportStyle === value
-                  ? 'bg-neutral-900 text-white border-neutral-900'
+                  ? 'bg-ink-800 text-white border-ink-800'
                   : 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-300'
               }`}
             >
@@ -262,8 +262,8 @@ export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps
       <button
         onClick={handleGenerate}
         disabled={isLoading || isJiraLoading || services.length === 0}
-        className="w-full px-4 py-3 bg-neutral-900 text-white text-sm font-medium rounded-lg
-                   hover:bg-neutral-800 disabled:opacity-40 disabled:cursor-not-allowed
+        className="w-full px-4 py-3 bg-ink-800 text-white text-sm font-medium rounded-lg
+                   hover:bg-ink-900 disabled:opacity-40 disabled:cursor-not-allowed
                    transition-colors flex items-center justify-center gap-2"
       >
         {isLoading ? spinner : aiIcon}

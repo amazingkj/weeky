@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Team, SiteProject, SiteTask, SiteNextTask } from '../types';
 import { getMyTeams, getMySiteProjects, getMySiteReport, saveSiteReport } from '../services/api';
 import Loading from './ui/Loading';
@@ -49,6 +49,13 @@ export default function SiteReportForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => {
+      if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    };
+  }, []);
 
   // 모든 팀에서 내가 작성자로 등록된 사이트 프로젝트 수집
   useEffect(() => {
@@ -137,7 +144,8 @@ export default function SiteReportForm() {
         notes: state.notes,
       });
       setSuccess('저장되었습니다.');
-      setTimeout(() => setSuccess(null), 2000);
+      if (successTimerRef.current) clearTimeout(successTimerRef.current);
+      successTimerRef.current = setTimeout(() => setSuccess(null), 2000);
     } catch (e: any) {
       setError(e?.message || '저장에 실패했습니다.');
     } finally {
@@ -236,42 +244,44 @@ export default function SiteReportForm() {
           <h3 className="text-sm font-semibold text-neutral-900">금주실적 <span className="text-xs text-neutral-400 font-normal">(5컬럼)</span></h3>
           <button onClick={addThisRow} className="px-2 py-1 text-xs font-medium text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded">+ 행 추가</button>
         </div>
-        <table className="w-full text-xs border border-neutral-200">
-          <thead className="bg-neutral-50">
-            <tr>
-              <th className="border border-neutral-200 px-2 py-1 text-left w-[45%]">계획업무</th>
-              <th className="border border-neutral-200 px-2 py-1 text-left w-[10%]">소요일</th>
-              <th className="border border-neutral-200 px-2 py-1 text-left w-[12%]">시작일</th>
-              <th className="border border-neutral-200 px-2 py-1 text-left w-[12%]">완료일</th>
-              <th className="border border-neutral-200 px-2 py-1 text-left w-[10%]">실적</th>
-              <th className="border border-neutral-200 px-2 py-1 w-[6%]"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {state.thisWeek.length === 0 ? (
-              <tr><td colSpan={6} className="text-center text-neutral-400 py-3">행이 없습니다. "+ 행 추가"를 눌러 시작하세요.</td></tr>
-            ) : state.thisWeek.map((row, idx) => (
-              <tr key={idx} className="align-top">
-                <td className="border border-neutral-200 p-1">
-                  <textarea
-                    value={row.title}
-                    onChange={(e) => updateThisRow(idx, { title: e.target.value })}
-                    rows={3}
-                    placeholder="■ 한화손해보험&#10;<OpenAPI>&#10;1. DB 이관 배치 작업&#10;  - 배치 실행 환경에 맞게 재개발"
-                    className={inputCls + ' font-mono'}
-                  />
-                </td>
-                <td className="border border-neutral-200 p-1"><input value={row.elapsed_days} onChange={(e) => updateThisRow(idx, { elapsed_days: e.target.value })} className={inputCls} placeholder="2M / 1 / -" /></td>
-                <td className="border border-neutral-200 p-1"><input value={row.start_date} onChange={(e) => updateThisRow(idx, { start_date: e.target.value })} className={inputCls} placeholder="03/04" /></td>
-                <td className="border border-neutral-200 p-1"><input value={row.due_date} onChange={(e) => updateThisRow(idx, { due_date: e.target.value })} className={inputCls} placeholder="04/30" /></td>
-                <td className="border border-neutral-200 p-1"><input value={row.progress} onChange={(e) => updateThisRow(idx, { progress: e.target.value })} className={inputCls} placeholder="80%" /></td>
-                <td className="border border-neutral-200 p-1 text-center">
-                  <button onClick={() => removeThisRow(idx)} className="text-neutral-400 hover:text-red-500" title="행 삭제">×</button>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-xs border border-neutral-200">
+            <thead className="bg-neutral-50">
+              <tr>
+                <th className="border border-neutral-200 px-2 py-1 text-left w-[45%]">계획업무</th>
+                <th className="border border-neutral-200 px-2 py-1 text-left w-[10%]">소요일</th>
+                <th className="border border-neutral-200 px-2 py-1 text-left w-[12%]">시작일</th>
+                <th className="border border-neutral-200 px-2 py-1 text-left w-[12%]">완료일</th>
+                <th className="border border-neutral-200 px-2 py-1 text-left w-[10%]">실적</th>
+                <th className="border border-neutral-200 px-2 py-1 w-[6%]"></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {state.thisWeek.length === 0 ? (
+                <tr><td colSpan={6} className="text-center text-neutral-400 py-3">행이 없습니다. "+ 행 추가"를 눌러 시작하세요.</td></tr>
+              ) : state.thisWeek.map((row, idx) => (
+                <tr key={idx} className="align-top">
+                  <td className="border border-neutral-200 p-1">
+                    <textarea
+                      value={row.title}
+                      onChange={(e) => updateThisRow(idx, { title: e.target.value })}
+                      rows={3}
+                      placeholder="■ 한화손해보험&#10;<OpenAPI>&#10;1. DB 이관 배치 작업&#10;  - 배치 실행 환경에 맞게 재개발"
+                      className={inputCls + ' font-mono'}
+                    />
+                  </td>
+                  <td className="border border-neutral-200 p-1"><input value={row.elapsed_days} onChange={(e) => updateThisRow(idx, { elapsed_days: e.target.value })} className={inputCls} placeholder="2M / 1 / -" /></td>
+                  <td className="border border-neutral-200 p-1"><input value={row.start_date} onChange={(e) => updateThisRow(idx, { start_date: e.target.value })} className={inputCls} placeholder="03/04" /></td>
+                  <td className="border border-neutral-200 p-1"><input value={row.due_date} onChange={(e) => updateThisRow(idx, { due_date: e.target.value })} className={inputCls} placeholder="04/30" /></td>
+                  <td className="border border-neutral-200 p-1"><input value={row.progress} onChange={(e) => updateThisRow(idx, { progress: e.target.value })} className={inputCls} placeholder="80%" /></td>
+                  <td className="border border-neutral-200 p-1 text-center">
+                    <button onClick={() => removeThisRow(idx)} className="text-neutral-400 hover:text-red-500" title="행 삭제" aria-label="행 삭제">×</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* 차주계획 */}
@@ -280,37 +290,39 @@ export default function SiteReportForm() {
           <h3 className="text-sm font-semibold text-neutral-900">차주계획 <span className="text-xs text-neutral-400 font-normal">(3컬럼)</span></h3>
           <button onClick={addNextRow} className="px-2 py-1 text-xs font-medium text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded">+ 행 추가</button>
         </div>
-        <table className="w-full text-xs border border-neutral-200">
-          <thead className="bg-neutral-50">
-            <tr>
-              <th className="border border-neutral-200 px-2 py-1 text-left w-[60%]">계획업무</th>
-              <th className="border border-neutral-200 px-2 py-1 text-left w-[15%]">시작예정일</th>
-              <th className="border border-neutral-200 px-2 py-1 text-left w-[15%]">완료예정일</th>
-              <th className="border border-neutral-200 px-2 py-1 w-[10%]"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {state.nextWeek.length === 0 ? (
-              <tr><td colSpan={4} className="text-center text-neutral-400 py-3">행이 없습니다.</td></tr>
-            ) : state.nextWeek.map((row, idx) => (
-              <tr key={idx} className="align-top">
-                <td className="border border-neutral-200 p-1">
-                  <textarea
-                    value={row.title}
-                    onChange={(e) => updateNextRow(idx, { title: e.target.value })}
-                    rows={2}
-                    className={inputCls + ' font-mono'}
-                  />
-                </td>
-                <td className="border border-neutral-200 p-1"><input value={row.start_date} onChange={(e) => updateNextRow(idx, { start_date: e.target.value })} className={inputCls} placeholder="05/04" /></td>
-                <td className="border border-neutral-200 p-1"><input value={row.due_date} onChange={(e) => updateNextRow(idx, { due_date: e.target.value })} className={inputCls} placeholder="05/08" /></td>
-                <td className="border border-neutral-200 p-1 text-center">
-                  <button onClick={() => removeNextRow(idx)} className="text-neutral-400 hover:text-red-500" title="행 삭제">×</button>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-xs border border-neutral-200">
+            <thead className="bg-neutral-50">
+              <tr>
+                <th className="border border-neutral-200 px-2 py-1 text-left w-[60%]">계획업무</th>
+                <th className="border border-neutral-200 px-2 py-1 text-left w-[15%]">시작예정일</th>
+                <th className="border border-neutral-200 px-2 py-1 text-left w-[15%]">완료예정일</th>
+                <th className="border border-neutral-200 px-2 py-1 w-[10%]"></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {state.nextWeek.length === 0 ? (
+                <tr><td colSpan={4} className="text-center text-neutral-400 py-3">행이 없습니다.</td></tr>
+              ) : state.nextWeek.map((row, idx) => (
+                <tr key={idx} className="align-top">
+                  <td className="border border-neutral-200 p-1">
+                    <textarea
+                      value={row.title}
+                      onChange={(e) => updateNextRow(idx, { title: e.target.value })}
+                      rows={2}
+                      className={inputCls + ' font-mono'}
+                    />
+                  </td>
+                  <td className="border border-neutral-200 p-1"><input value={row.start_date} onChange={(e) => updateNextRow(idx, { start_date: e.target.value })} className={inputCls} placeholder="05/04" /></td>
+                  <td className="border border-neutral-200 p-1"><input value={row.due_date} onChange={(e) => updateNextRow(idx, { due_date: e.target.value })} className={inputCls} placeholder="05/08" /></td>
+                  <td className="border border-neutral-200 p-1 text-center">
+                    <button onClick={() => removeNextRow(idx)} className="text-neutral-400 hover:text-red-500" title="행 삭제" aria-label="행 삭제">×</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* 특이사항 */}
@@ -325,11 +337,11 @@ export default function SiteReportForm() {
         />
       </div>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <button
           onClick={handleSave}
           disabled={saving || !selected}
-          className="px-4 py-2 text-sm font-medium text-white bg-neutral-900 rounded-lg hover:bg-neutral-800 disabled:opacity-40 transition-colors"
+          className="px-4 py-2 text-sm font-medium text-white bg-ink-800 rounded-lg hover:bg-ink-900 disabled:opacity-40 transition-colors"
         >
           {saving ? '저장 중...' : '저장'}
         </button>
