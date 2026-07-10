@@ -19,7 +19,7 @@ type ClaudeService struct {
 
 func NewClaudeService(apiKey string) *ClaudeService {
 	return &ClaudeService{
-		client: &http.Client{Timeout: 60 * time.Second},
+		client: &http.Client{Timeout: 120 * time.Second},
 		apiKey: apiKey,
 	}
 }
@@ -39,7 +39,8 @@ type claudeResponse struct {
 	Content []struct {
 		Text string `json:"text"`
 	} `json:"content"`
-	Error *struct {
+	StopReason string `json:"stop_reason"`
+	Error      *struct {
 		Message string `json:"message"`
 	} `json:"error"`
 }
@@ -69,11 +70,11 @@ func (s *ClaudeService) GenerateReport(req GenerateReportRequest) (*GenerateRepo
 	}
 	prompt := buildPrompt(req.Items, req.StartDate, req.EndDate, style, req.ProjectNames)
 
-	maxTokens := 2000
+	maxTokens := 8000
 	if style == "detailed" {
-		maxTokens = 4000
+		maxTokens = 12000
 	} else if style == "very_detailed" {
-		maxTokens = 6000
+		maxTokens = 16000
 	}
 	claudeReq := claudeRequest{
 		Model:     "claude-sonnet-4-6",
@@ -123,6 +124,10 @@ func (s *ClaudeService) GenerateReport(req GenerateReportRequest) (*GenerateRepo
 
 	if len(claudeResp.Content) == 0 {
 		return nil, fmt.Errorf("Claude 응답이 비어있습니다")
+	}
+
+	if claudeResp.StopReason == "max_tokens" {
+		return nil, fmt.Errorf("생성할 항목이 많아 응답이 최대 길이를 초과해 잘렸습니다. 기간을 좁히거나 더 간결한 스타일로 다시 시도해주세요")
 	}
 
 	return parseClaudeResponse(claudeResp.Content[0].Text)
