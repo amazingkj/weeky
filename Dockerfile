@@ -18,6 +18,7 @@ RUN CGO_ENABLED=0 go build -tags oracle -o jugan -ldflags="-s -w" ./cmd/server
 # 3단계: 최소 런타임
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates tzdata
+ENV TZ=Asia/Seoul
 WORKDIR /app
 COPY --from=backend-builder /app/jugan .
 COPY --from=backend-builder /app/dist ./dist

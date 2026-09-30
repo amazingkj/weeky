@@ -181,22 +181,36 @@ func (m *MockRepository) GetInviteCodeByCode(code string) (*model.InviteCode, er
 	return &ic, nil
 }
 
-func (m *MockRepository) UseInviteCode(code string, usedBy int64) error {
+func (m *MockRepository) CreateUserWithInviteCode(code, email, passwordHash, name string) (*model.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	ic, ok := m.inviteCodes[code]
-	if !ok {
-		return errors.New("invite code not found")
+	if !ok || ic.UsedBy != nil {
+		return nil, ErrInviteCodeUsed
 	}
-	if ic.UsedBy != nil {
-		return errors.New("invite code already used")
+	for _, u := range m.users {
+		if u.Email == email {
+			return nil, errors.New("email already exists")
+		}
 	}
+
+	id := m.nextID
+	m.nextID++
+	user := model.User{
+		ID:           id,
+		Email:        email,
+		PasswordHash: passwordHash,
+		Name:         name,
+		CreatedAt:    time.Now(),
+	}
+	m.users[id] = user
+
 	now := time.Now()
-	ic.UsedBy = &usedBy
+	ic.UsedBy = &id
 	ic.UsedAt = &now
 	m.inviteCodes[code] = ic
-	return nil
+	return &user, nil
 }
 
 func (m *MockRepository) GetInviteCodes(createdBy int64) ([]model.InviteCode, error) {

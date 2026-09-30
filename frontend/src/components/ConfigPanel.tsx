@@ -3,6 +3,7 @@ import { useConfig } from '../hooks';
 import Loading from './ui/Loading';
 import Alert from './ui/Alert';
 import { ConfigMap, GitLabProject } from '../types';
+import { toLocalYMD } from '../utils/date';
 import { listGitLabProjects, syncJira, testHiworks } from '../services/api';
 
 interface FormData {
@@ -122,7 +123,7 @@ export default function ConfigPanel() {
           // base_url은 저장된 값 사용 (config), email/token은 빈값 → 서버 저장값 fallback
           const baseUrl = config.jira_base_url || formData.jira_base_url;
           if (!baseUrl) throw new Error('Jira Base URL이 저장되지 않았습니다. 먼저 설정을 저장하세요.');
-          const today = new Date().toISOString().split('T')[0];
+          const today = toLocalYMD();
           await syncJira({ base_url: baseUrl, email: '', token: '', start_date: today, end_date: today });
           break;
         }

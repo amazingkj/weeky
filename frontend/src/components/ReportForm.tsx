@@ -3,7 +3,7 @@ import { Report, Task, Team, TeamProject, defaultTemplateStyle } from '../types'
 import { generatePPT } from '../utils/pptGenerator';
 import { getConfig, saveReport, getMyTeams, getReports, getMySubmission, submitReport as apiSubmitReport, unsubmitReport as apiUnsubmitReport, getTeamProjects, autoCreateTeamProject } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { isSameWeek } from '../utils/date';
+import { isSameWeek, toLocalYMD } from '../utils/date';
 import TaskList from './TaskList';
 import SyncPanel from './SyncPanel';
 import PptPreview from './PptPreview';
@@ -14,7 +14,7 @@ const STORAGE_KEYS = {
 };
 
 const getDefaultDate = (): string => {
-  return new Date().toISOString().split('T')[0];
+  return toLocalYMD();
 };
 
 const getCachedValue = (key: string): string => {
@@ -36,7 +36,7 @@ const setCachedValue = (key: string, value: string): void => {
 function findPreviousWeekReport(reports: Report[], currentDate: string): Report | null {
   const prevDate = new Date(currentDate);
   prevDate.setDate(prevDate.getDate() - 7);
-  const prevDateStr = prevDate.toISOString().split('T')[0];
+  const prevDateStr = toLocalYMD(prevDate);
   return reports.find(r => isSameWeek(r.report_date, prevDateStr)) || null;
 }
 
@@ -70,6 +70,8 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
   const [submittedTeams, setSubmittedTeams] = useState<Map<number, number>>(new Map()); // teamId -> reportId
   const [isSaving, setIsSaving] = useState(false);
   const [existingReports, setExistingReports] = useState<Report[]>([]);
+  // 기존 보고서 목록을 못 불러온 상태에서 저장하면 서버의 보고서를 빈 폼으로 덮어쓰므로 저장/제출 차단
+  const [reportsLoadFailed, setReportsLoadFailed] = useState(false);
   const [carriedForward, setCarriedForward] = useState(false);
   const [teamProjects, setTeamProjects] = useState<TeamProject[]>([]);
   const successTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -86,9 +88,14 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
     // Load teams and reports together to avoid race conditions
     Promise.all([
       getMyTeams().catch(() => [] as Team[]),
-      getReports().catch(() => [] as Report[]),
+      getReports().catch(() => null),
     ]).then(([teams, reports]) => {
       setMyTeams(teams);
+      if (reports === null) {
+        setReportsLoadFailed(true);
+        setError('기존 보고서를 불러오지 못했습니다. 덮어쓰기 방지를 위해 저장이 비활성화됩니다. 새로고침 후 다시 시도해주세요.');
+        return;
+      }
       setExistingReports(reports);
 
       const today = getDefaultDate();
@@ -586,7 +593,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
           <button
             type="button"
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={isSaving || reportsLoadFailed}
             className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-2
                        bg-white text-neutral-700 border-neutral-200 hover:border-neutral-400
                        disabled:opacity-40 disabled:cursor-not-allowed"
@@ -614,7 +621,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
               <button
                 type="button"
                 onClick={handleSubmitToTeam}
-                disabled={isSubmitting}
+                disabled={isSubmitting || reportsLoadFailed}
                 className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-2
                            bg-ink-800 text-white border-ink-800 hover:bg-ink-900
                            disabled:opacity-40 disabled:cursor-not-allowed"

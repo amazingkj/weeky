@@ -3,7 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import Loading from './components/ui/Loading';
-import { getWeekOfMonthLabel, getWeekRangeShort } from './utils/date';
+import { getWeekOfMonthLabel, getWeekRangeShort, toLocalYMD } from './utils/date';
 
 const ReportForm = lazy(() => import('./components/ReportForm'));
 const SiteReportForm = lazy(() => import('./components/SiteReportForm'));
@@ -128,7 +128,7 @@ function ConfigWithInvite() {
 
 function Header() {
   const { user, logout } = useAuth();
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalYMD();
 
   return (
     <header className="border-b border-neutral-200 bg-white/95 backdrop-blur">

@@ -11,6 +11,7 @@ import RulesEditor from './RulesEditor';
 import SiteProjectsManager from './SiteProjectsManager';
 import MemberConsolidatedView from './MemberConsolidatedView';
 import Loading from './ui/Loading';
+import { toLocalYMD } from '../utils/date';
 
 const ROLE_DISPLAY: Record<TeamRole, string> = {
   leader: '팀장',
@@ -64,7 +65,7 @@ export default function TeamPanel() {
     }).catch(() => { setMyRole(null); setTeamMembers([]); });
 
     // Check my submission status for current week
-    const today = new Date().toISOString().split('T')[0];
+    const today = toLocalYMD();
     getMySubmission(selectedTeam.id, today).then((result) => {
       setMySubmissionStatus(result.submitted);
     }).catch(() => setMySubmissionStatus(false));

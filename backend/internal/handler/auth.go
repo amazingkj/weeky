@@ -3,12 +3,14 @@ package handler
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"log/slog"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/jiin/weeky/internal/auth"
 	"github.com/jiin/weeky/internal/model"
+	"github.com/jiin/weeky/internal/repository"
 )
 
 func (h *Handler) CheckSetup(c *fiber.Ctx) error {
@@ -79,12 +81,11 @@ func (h *Handler) Register(c *fiber.Ctx) error {
 		return badRequest(c, "이미 사용된 초대 코드입니다")
 	}
 
-	user, err = h.repo.CreateUser(req.Email, passwordHash, req.Name, false)
-	if err != nil {
-		return internalError(c, err)
+	user, err = h.repo.CreateUserWithInviteCode(req.InviteCode, req.Email, passwordHash, req.Name)
+	if errors.Is(err, repository.ErrInviteCodeUsed) {
+		return badRequest(c, "이미 사용된 초대 코드입니다")
 	}
-
-	if err := h.repo.UseInviteCode(req.InviteCode, user.ID); err != nil {
+	if err != nil {
 		return internalError(c, err)
 	}
 

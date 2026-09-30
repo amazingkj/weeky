@@ -528,12 +528,47 @@ func (r *Repository) GetInviteCodeByCode(code string) (*model.InviteCode, error)
 	return &ic, nil
 }
 
-func (r *Repository) UseInviteCode(code string, usedBy int64) error {
-	_, err := r.db.Exec(
-		"UPDATE invite_codes SET used_by = ?, used_at = CURRENT_TIMESTAMP WHERE code = ? AND used_by IS NULL",
-		usedBy, code,
+func (r *Repository) CreateUserWithInviteCode(code, email, passwordHash, name string) (*model.User, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	result, err := tx.Exec(
+		"INSERT INTO users (email, password_hash, name, is_admin) VALUES (?, ?, ?, 0)",
+		email, passwordHash, name,
 	)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := tx.Exec(
+		"UPDATE invite_codes SET used_by = ?, used_at = CURRENT_TIMESTAMP WHERE code = ? AND used_by IS NULL",
+		id, code,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return nil, err
+	} else if n == 0 {
+		return nil, ErrInviteCodeUsed
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &model.User{
+		ID:        id,
+		Email:     email,
+		Name:      name,
+		CreatedAt: time.Now(),
+	}, nil
 }
 
 func (r *Repository) GetInviteCodes(createdBy int64) ([]model.InviteCode, error) {

@@ -6,6 +6,11 @@ function formatDate(d: Date, sep: string): string {
   return `${d.getFullYear()}${sep}${pad2(d.getMonth() + 1)}${sep}${pad2(d.getDate())}`;
 }
 
+// 로컬 시간대 기준 YYYY-MM-DD (toISOString은 UTC라 KST 09시 이전엔 하루 밀림)
+export function toLocalYMD(d: Date = new Date()): string {
+  return formatDate(d, '-');
+}
+
 function getMondayDate(dateStr: string): Date {
   const date = new Date(dateStr);
   const dayOfWeek = date.getDay();

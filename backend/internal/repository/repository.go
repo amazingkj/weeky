@@ -1,6 +1,13 @@
 package repository
 
-import "github.com/jiin/weeky/internal/model"
+import (
+	"errors"
+
+	"github.com/jiin/weeky/internal/model"
+)
+
+// ErrInviteCodeUsed: 초대 코드가 없거나 이미 사용됨 (동시 가입 경쟁에서 진 경우 포함)
+var ErrInviteCodeUsed = errors.New("invite code not found or already used")
 
 type IRepository interface {
 	Close() error
@@ -16,7 +23,8 @@ type IRepository interface {
 
 	CreateInviteCode(code string, createdBy int64) (*model.InviteCode, error)
 	GetInviteCodeByCode(code string) (*model.InviteCode, error)
-	UseInviteCode(code string, usedBy int64) error
+	// 사용자 생성과 초대 코드 소모를 한 트랜잭션으로 처리. 코드가 이미 쓰였으면 ErrInviteCodeUsed.
+	CreateUserWithInviteCode(code, email, passwordHash, name string) (*model.User, error)
 	GetInviteCodes(createdBy int64) ([]model.InviteCode, error)
 
 	GetTemplates() ([]model.Template, error)

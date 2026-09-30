@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Task, SyncResult } from '../types';
 import { syncGitLab, syncJira, syncHiworks, getConfig, generateAIReport } from '../services/api';
 import { jiraItemsToTasks } from '../utils/jiraToTask';
+import { toLocalYMD } from '../utils/date';
 
 interface SyncPanelProps {
   onAIGenerate?: (thisWeek: Task[], nextWeek: Task[]) => void;
@@ -17,8 +18,8 @@ const getWeekRange = () => {
   friday.setDate(monday.getDate() + 4);
 
   return {
-    start: monday.toISOString().split('T')[0],
-    end: friday.toISOString().split('T')[0],
+    start: toLocalYMD(monday),
+    end: toLocalYMD(friday),
   };
 };
 

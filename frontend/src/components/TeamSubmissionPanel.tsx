@@ -5,6 +5,7 @@ import TaskList from './TaskList';
 import { generatePPT, generateConsolidatedPPT } from '../utils/pptGenerator';
 import { useAuth } from '../contexts/AuthContext';
 import Loading from './ui/Loading';
+import { toLocalYMD } from '../utils/date';
 
 const ConsolidatedPptPreview = lazy(() => import('./ConsolidatedPptPreview'));
 const PptPreview = lazy(() => import('./PptPreview'));
@@ -36,7 +37,7 @@ function getRecentFridays(count = 8): string[] {
   for (let i = 0; i < count; i++) {
     const d = new Date(thisFriday);
     d.setDate(thisFriday.getDate() - i * 7);
-    fridays.push(d.toISOString().split('T')[0]);
+    fridays.push(toLocalYMD(d));
   }
   return fridays;
 }
@@ -114,8 +115,8 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
     getTeamSiteReports(team.id, reportDate).then(setSiteReports).catch(() => setSiteReports([]));
   }, [team.id, reportDate]);
 
-  const fetchSubmissions = async () => {
-    setLoading(true);
+  // 주차 단위 state 초기화 — 이전 주 취합본이 다른 주 날짜로 저장/출력되지 않도록
+  const resetWeekState = () => {
     setError(null);
     setEditedReport(null);
     setSelectedMemberId(null);
@@ -123,6 +124,19 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
     setEditingConsolidated(false);
     setShowPreview(false);
     setHasSavedEdit(false);
+  };
+
+  const handleWeekChange = (friday: string) => {
+    if (friday === reportDate) return;
+    resetWeekState();
+    setSubmissions([]);
+    setLoaded(false);
+    setReportDate(friday);
+  };
+
+  const fetchSubmissions = async () => {
+    setLoading(true);
+    resetWeekState();
     try {
       const data = await getTeamSubmissions(team.id, reportDate);
       setSubmissions(data);
@@ -383,7 +397,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
             const isSelected = reportDate === friday;
             return (
               <button key={friday}
-                onClick={() => { setReportDate(friday); }}
+                onClick={() => handleWeekChange(friday)}
                 className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
                   isSelected
                     ? 'bg-ink-800 text-white border-ink-800'

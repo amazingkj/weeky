@@ -467,12 +467,47 @@ func (r *OracleRepository) GetInviteCodeByCode(code string) (*model.InviteCode, 
 	return &ic, nil
 }
 
-func (r *OracleRepository) UseInviteCode(code string, usedBy int64) error {
-	_, err := r.db.Exec(
-		"UPDATE invite_codes SET used_by = :1, used_at = CURRENT_TIMESTAMP WHERE code = :2 AND used_by IS NULL",
-		usedBy, code,
+func (r *OracleRepository) CreateUserWithInviteCode(code, email, passwordHash, name string) (*model.User, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var id int64
+	_, err = tx.Exec(
+		`INSERT INTO users (email, password_hash, name, is_admin)
+		 VALUES (:1, :2, :3, 0)
+		 RETURNING id INTO :4`,
+		email, passwordHash, name, go_ora.Out{Dest: &id, Size: 8},
 	)
-	return err
+	if err != nil {
+		return nil, err
+	}
+
+	// 동시 요청 시 행 잠금 대기 후 조건 재평가 → 늦은 쪽은 0행
+	res, err := tx.Exec(
+		"UPDATE invite_codes SET used_by = :1, used_at = CURRENT_TIMESTAMP WHERE code = :2 AND used_by IS NULL",
+		id, code,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return nil, err
+	} else if n == 0 {
+		return nil, ErrInviteCodeUsed
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &model.User{
+		ID:        id,
+		Email:     email,
+		Name:      name,
+		CreatedAt: time.Now(),
+	}, nil
 }
 
 func (r *OracleRepository) GetInviteCodes(createdBy int64) ([]model.InviteCode, error) {
@@ -782,12 +817,14 @@ func (r *OracleRepository) CreateTeam(name, description string, createdBy int64)
 
 func (r *OracleRepository) GetTeam(id int64) (*model.Team, error) {
 	var t model.Team
+	var description sql.NullString // Oracle은 ''를 NULL로 저장
 	err := r.db.QueryRow(
 		"SELECT id, name, description, created_by, created_at FROM teams WHERE id = :1", id,
-	).Scan(&t.ID, &t.Name, &t.Description, &t.CreatedBy, &t.CreatedAt)
+	).Scan(&t.ID, &t.Name, &description, &t.CreatedBy, &t.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
+	t.Description = description.String
 	return &t, nil
 }
 
@@ -807,9 +844,11 @@ func (r *OracleRepository) GetTeamsByUser(userID int64) ([]model.Team, error) {
 	var teams []model.Team
 	for rows.Next() {
 		var t model.Team
-		if err := rows.Scan(&t.ID, &t.Name, &t.Description, &t.CreatedBy, &t.CreatedAt); err != nil {
+		var description sql.NullString
+		if err := rows.Scan(&t.ID, &t.Name, &description, &t.CreatedBy, &t.CreatedAt); err != nil {
 			return nil, err
 		}
+		t.Description = description.String
 		teams = append(teams, t)
 	}
 	return teams, rows.Err()

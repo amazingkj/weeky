@@ -3,6 +3,7 @@ import { ConsolidatedReport, Task } from '../types';
 import { getConsolidatedReport, getConsolidatedEdit } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import Loading from './ui/Loading';
+import { toLocalYMD } from '../utils/date';
 
 const ConsolidatedPptPreview = lazy(() => import('./ConsolidatedPptPreview'));
 
@@ -18,7 +19,7 @@ function getRecentFridays(count = 8): string[] {
   for (let i = 0; i < count; i++) {
     const d = new Date(thisFriday);
     d.setDate(thisFriday.getDate() - i * 7);
-    fridays.push(d.toISOString().split('T')[0]);
+    fridays.push(toLocalYMD(d));
   }
   return fridays;
 }

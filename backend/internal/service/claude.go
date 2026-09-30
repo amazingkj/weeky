@@ -19,15 +19,21 @@ type ClaudeService struct {
 
 func NewClaudeService(apiKey string) *ClaudeService {
 	return &ClaudeService{
-		client: &http.Client{Timeout: 120 * time.Second},
+		client: &http.Client{Timeout: 300 * time.Second},
 		apiKey: apiKey,
 	}
 }
 
 type claudeRequest struct {
-	Model     string           `json:"model"`
-	MaxTokens int              `json:"max_tokens"`
-	Messages  []claudeMessage  `json:"messages"`
+	Model        string             `json:"model"`
+	MaxTokens    int                `json:"max_tokens"`
+	Messages     []claudeMessage    `json:"messages"`
+	OutputConfig claudeOutputConfig `json:"output_config"`
+	Fallbacks    string             `json:"fallbacks,omitempty"`
+}
+
+type claudeOutputConfig struct {
+	Effort string `json:"effort"`
 }
 
 type claudeMessage struct {
@@ -37,6 +43,7 @@ type claudeMessage struct {
 
 type claudeResponse struct {
 	Content []struct {
+		Type string `json:"type"`
 		Text string `json:"text"`
 	} `json:"content"`
 	StopReason string `json:"stop_reason"`
@@ -70,18 +77,21 @@ func (s *ClaudeService) GenerateReport(req GenerateReportRequest) (*GenerateRepo
 	}
 	prompt := buildPrompt(req.Items, req.StartDate, req.EndDate, style, req.ProjectNames)
 
-	maxTokens := 8000
+	// Sonnet 5.5는 기본으로 thinking이 켜져 있어 max_tokens에 thinking 토큰도 포함됨
+	maxTokens := 16000
 	if style == "detailed" {
-		maxTokens = 12000
+		maxTokens = 24000
 	} else if style == "very_detailed" {
-		maxTokens = 16000
+		maxTokens = 32000
 	}
 	claudeReq := claudeRequest{
-		Model:     "claude-sonnet-4-6",
+		Model:     "claude-sonnet-5-5",
 		MaxTokens: maxTokens,
 		Messages: []claudeMessage{
 			{Role: "user", Content: prompt},
 		},
+		OutputConfig: claudeOutputConfig{Effort: "medium"},
+		Fallbacks:    "default",
 	}
 
 	jsonBody, err := json.Marshal(claudeReq)
@@ -97,6 +107,7 @@ func (s *ClaudeService) GenerateReport(req GenerateReportRequest) (*GenerateRepo
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("x-api-key", s.apiKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
+	httpReq.Header.Set("anthropic-beta", "server-side-fallback-2026-07-01")
 
 	resp, err := s.client.Do(httpReq)
 	if err != nil {
@@ -122,15 +133,26 @@ func (s *ClaudeService) GenerateReport(req GenerateReportRequest) (*GenerateRepo
 		return nil, fmt.Errorf("Claude API 오류: %s", claudeResp.Error.Message)
 	}
 
-	if len(claudeResp.Content) == 0 {
-		return nil, fmt.Errorf("Claude 응답이 비어있습니다")
+	if claudeResp.StopReason == "refusal" {
+		return nil, fmt.Errorf("Claude가 이 요청에 대한 응답을 거부했습니다")
 	}
 
 	if claudeResp.StopReason == "max_tokens" {
 		return nil, fmt.Errorf("생성할 항목이 많아 응답이 최대 길이를 초과해 잘렸습니다. 기간을 좁히거나 더 간결한 스타일로 다시 시도해주세요")
 	}
 
-	return parseClaudeResponse(claudeResp.Content[0].Text)
+	// thinking/fallback 블록이 앞에 올 수 있으므로 text 블록만 모음
+	var text strings.Builder
+	for _, block := range claudeResp.Content {
+		if block.Type == "text" {
+			text.WriteString(block.Text)
+		}
+	}
+	if text.Len() == 0 {
+		return nil, fmt.Errorf("Claude 응답이 비어있습니다")
+	}
+
+	return parseClaudeResponse(text.String())
 }
 
 func buildPrompt(items []model.SyncItem, startDate, endDate, style string, projectNames []string) string {
