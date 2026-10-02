@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { ReportSubmission, SiteReport, Report } from '../types';
-import { getMySubmissions, getMySiteReports, getReport } from '../services/api';
+import { ReportSubmission, SiteReport, Report, SiteProject } from '../types';
+import { getMySubmissions, getMySiteReports, getReport, getReports, getSiteProjects } from '../services/api';
 import Loading from './ui/Loading';
 
 interface MyHistoryPanelProps {
@@ -18,11 +18,23 @@ function itemDate(it: HistoryItem): string {
   return it.kind === 'site' ? it.report.report_date : it.date;
 }
 
+// 본사 보고서는 업무(task)별 client, 사이트 보고서는 사이트 프로젝트의 고객사
+function reportClients(report: Report | null | undefined): string[] {
+  if (!report) return [];
+  const set = new Set<string>();
+  for (const t of [...report.this_week, ...report.next_week]) {
+    if (t.client?.trim()) set.add(t.client.trim());
+  }
+  return Array.from(set);
+}
+
 export default function MyHistoryPanel({ teamId }: MyHistoryPanelProps) {
   const [loading, setLoading] = useState(true);
   const [submissions, setSubmissions] = useState<ReportSubmission[]>([]);
   const [siteReports, setSiteReports] = useState<SiteReport[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
+  const [clientFilter, setClientFilter] = useState('');
+  const [siteClientByProject, setSiteClientByProject] = useState<Record<number, string>>({});
 
   // 펼친 항목 key + 본사 보고서 본문 캐시(report_id 기준)
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -31,20 +43,30 @@ export default function MyHistoryPanel({ teamId }: MyHistoryPanelProps) {
   const [loadingReportId, setLoadingReportId] = useState<number | null>(null);
 
   useEffect(() => {
+    // 팀을 빠르게 전환하면 이전 팀의 늦은 응답이 현재 목록을 덮어쓰지 않도록
+    let cancelled = false;
     setLoading(true);
     setExpanded(null);
+    setClientFilter('');
     Promise.all([
       getMySubmissions(teamId).catch(() => [] as ReportSubmission[]),
       getMySiteReports(teamId).catch(() => [] as SiteReport[]),
+      // 고객사 필터용 — 실패해도 히스토리 자체는 표시
+      getReports().catch(() => [] as Report[]),
+      getSiteProjects(teamId).catch(() => [] as SiteProject[]),
     ])
-      .then(([subs, sites]) => {
+      .then(([subs, sites, reports, siteProjects]) => {
+        if (cancelled) return;
         setSubmissions(subs);
         setSiteReports(sites);
+        setReportCache(Object.fromEntries(reports.map((r) => [r.id, r])));
+        setSiteClientByProject(Object.fromEntries(siteProjects.map((p) => [p.id, p.client_name])));
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [teamId]);
 
-  const items: HistoryItem[] = [
+  const allItems: HistoryItem[] = [
     ...submissions.map<HistoryItem>((s) => ({
       kind: 'report',
       key: `r-${s.id}`,
@@ -61,7 +83,17 @@ export default function MyHistoryPanel({ teamId }: MyHistoryPanelProps) {
       projectName: sr.project_name,
       report: sr,
     })),
-  ]
+  ];
+
+  const clientsOf = (it: HistoryItem): string[] => {
+    if (it.kind === 'report') return reportClients(reportCache[it.reportId]);
+    const client = siteClientByProject[it.report.site_project_id]?.trim();
+    return client ? [client] : [];
+  };
+  const clientOptions = Array.from(new Set(allItems.flatMap(clientsOf))).sort((a, b) => a.localeCompare(b, 'ko'));
+  const clientItems = clientFilter ? allItems.filter((it) => clientsOf(it).includes(clientFilter)) : allItems;
+
+  const items = clientItems
     .filter((it) => filter === 'all' || it.kind === filter)
     .sort((a, b) => itemDate(b).localeCompare(itemDate(a)));
 
@@ -89,16 +121,29 @@ export default function MyHistoryPanel({ teamId }: MyHistoryPanelProps) {
   if (loading) return <Loading text="내 히스토리 로딩 중..." />;
 
   const counts = {
-    all: submissions.length + siteReports.length,
-    report: submissions.length,
-    site: siteReports.length,
+    all: clientItems.length,
+    report: clientItems.filter((it) => it.kind === 'report').length,
+    site: clientItems.filter((it) => it.kind === 'site').length,
   };
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="text-sm font-semibold text-neutral-900">내 보고서 히스토리</h4>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap items-center gap-1">
+          {clientOptions.length > 0 && (
+            <select
+              value={clientFilter}
+              onChange={(e) => { setClientFilter(e.target.value); setExpanded(null); }}
+              aria-label="고객사 필터"
+              className="px-2 py-1 text-[11px] font-medium rounded-md border border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300"
+            >
+              <option value="">고객사 전체</option>
+              {clientOptions.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          )}
           {([
             ['all', '전체'],
             ['report', '본사'],
@@ -121,7 +166,7 @@ export default function MyHistoryPanel({ teamId }: MyHistoryPanelProps) {
 
       {items.length === 0 ? (
         <p className="text-xs text-neutral-400 py-6 text-center">
-          {filter === 'all' ? '작성한 보고서가 없습니다.' : '해당 유형의 보고서가 없습니다.'}
+          {filter === 'all' && !clientFilter ? '작성한 보고서가 없습니다.' : '조건에 맞는 보고서가 없습니다.'}
         </p>
       ) : (
         <div className="space-y-1">
@@ -205,7 +250,10 @@ function ReportBody({ report, loading }: { report: Report | null | undefined; lo
             {report.this_week.map((t, i) => (
               <div key={i} className="bg-white rounded-md px-3 py-2 border border-neutral-200 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-neutral-900">{t.title}</span>
+                  <span className="font-semibold text-neutral-900">
+                    {t.title}
+                    {t.client && <span className="ml-1.5 font-normal text-neutral-500">{t.client}</span>}
+                  </span>
                   <span className="text-neutral-500 font-medium">{t.progress}%</span>
                 </div>
                 {t.details && <div className="text-neutral-700 mt-1 whitespace-pre-line">{t.details}</div>}
@@ -222,7 +270,10 @@ function ReportBody({ report, loading }: { report: Report | null | undefined; lo
           <div className="space-y-2">
             {report.next_week.map((t, i) => (
               <div key={i} className="bg-white rounded-md px-3 py-2 border border-neutral-200 text-xs">
-                <div className="font-semibold text-neutral-900">{t.title}</div>
+                <div className="font-semibold text-neutral-900">
+                  {t.title}
+                  {t.client && <span className="ml-1.5 font-normal text-neutral-500">{t.client}</span>}
+                </div>
                 {t.details && <div className="text-neutral-700 mt-1 whitespace-pre-line">{t.details}</div>}
               </div>
             ))}

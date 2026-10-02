@@ -1,4 +1,4 @@
-import { Template, Report, SyncResult, SyncItem, Task, GitHubSyncRequest, GitLabSyncRequest, JiraSyncRequest, HiworksSyncRequest, ConfigMap, AuthResponse, LoginRequest, RegisterRequest, User, InviteCode, GitLabProject, Team, TeamMember, TeamRole, RoleCode, ReportSubmission, TeamMemberWithSubmission, ConsolidatedReport, TeamProject, TeamHistoryResponse, ConsolidationRule, CreateConsolidationRuleRequest, SiteProject, SiteReport, CreateSiteProjectRequest, UpdateSiteProjectRequest, SaveSiteReportRequest } from '../types';
+import { Template, Report, SyncResult, SyncItem, Task, GitHubSyncRequest, GitLabSyncRequest, JiraSyncRequest, HiworksSyncRequest, ConfigMap, AuthResponse, LoginRequest, RegisterRequest, User, InviteCode, GitLabProject, Team, TeamMember, TeamRole, RoleCode, ReportSubmission, TeamMemberWithSubmission, ConsolidatedReport, TeamProject, TeamHistoryResponse, ClientHistoryResponse, ConsolidationRule, CreateConsolidationRuleRequest, SiteProject, SiteReport, CreateSiteProjectRequest, UpdateSiteProjectRequest, SaveSiteReportRequest } from '../types';
 
 export interface GenerateReportRequest {
   items: SyncItem[];
@@ -586,6 +586,12 @@ export async function deleteConsolidatedEdit(teamId: number, reportDate: string)
 export async function getTeamHistory(teamId: number, weeks = 8): Promise<TeamHistoryResponse> {
   const res = await apiFetch(`${API_BASE}/teams/${teamId}/history?weeks=${weeks}`);
   await throwIfNotOk(res, '히스토리 조회에 실패했습니다');
+  return res.json();
+}
+
+export async function getClientHistory(teamId: number, weeks = 12): Promise<ClientHistoryResponse> {
+  const res = await apiFetch(`${API_BASE}/teams/${teamId}/client-history?weeks=${weeks}`);
+  await throwIfNotOk(res, '고객사 히스토리 조회에 실패했습니다');
   return res.json();
 }
 

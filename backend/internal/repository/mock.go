@@ -711,4 +711,32 @@ func (m *MockRepository) GetSiteSubmittersByTeamAndDate(teamID int64, reportDate
 	return nil, nil
 }
 
+func (m *MockRepository) GetSubmittedReportsByTeamRange(teamID int64, from, to string) ([]model.SubmittedReport, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	results := []model.SubmittedReport{}
+	for _, sub := range m.submissions {
+		if sub.TeamID != teamID {
+			continue
+		}
+		r, ok := m.reports[sub.ReportID]
+		if !ok || r.ReportDate < from || r.ReportDate > to {
+			continue
+		}
+		results = append(results, model.SubmittedReport{
+			UserID:     sub.UserID,
+			UserName:   m.users[sub.UserID].Name,
+			ReportDate: r.ReportDate,
+			ThisWeek:   r.ThisWeek,
+			NextWeek:   r.NextWeek,
+		})
+	}
+	return results, nil
+}
+
+func (m *MockRepository) GetSiteReportsByTeamRange(teamID int64, from, to string) ([]model.SiteReport, error) {
+	return nil, nil
+}
+
 var _ IRepository = (*MockRepository)(nil)

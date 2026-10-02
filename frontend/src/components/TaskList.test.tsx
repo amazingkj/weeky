@@ -58,6 +58,35 @@ describe('TaskList Component', () => {
     ]);
   });
 
+  it('adds a task from the button below the last card', () => {
+    render(
+      <TaskList
+        title="금주실적"
+        tasks={defaultTasks}
+        onChange={mockOnChange}
+      />
+    );
+
+    fireEvent.click(screen.getByText('항목 추가'));
+
+    expect(mockOnChange).toHaveBeenCalledWith([
+      ...defaultTasks,
+      { title: '', details: '', due_date: '', progress: 0 },
+    ]);
+  });
+
+  it('hides the bottom add button when there are no tasks', () => {
+    render(
+      <TaskList
+        title="금주실적"
+        tasks={[]}
+        onChange={mockOnChange}
+      />
+    );
+
+    expect(screen.queryByText('항목 추가')).not.toBeInTheDocument();
+  });
+
   it('calls onChange when removing a task', () => {
     render(
       <TaskList

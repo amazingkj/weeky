@@ -276,6 +276,25 @@ export interface TeamHistoryResponse {
   weeks: WeekSummary[];
 }
 
+// 고객사 히스토리 (팀장용) — 팀에 제출된 원본 보고서 + 사이트 보고서
+export interface ClientHistoryEntry {
+  client: string;
+  report_date: string;
+  kind: 'report' | 'site';
+  section: 'this_week' | 'next_week';
+  authors: string[]; // 사이트 보고서는 작성자가 여러 명일 수 있음
+  project: string;
+  work: string;
+  progress: string;
+  due_date: string;
+}
+
+export interface ClientHistoryResponse {
+  from: string;
+  to: string;
+  entries: ClientHistoryEntry[];
+}
+
 // ============ Site Dispatch Report types ============
 // 본사 양식과는 별도. 취합 PPT 뒤에 편집 없이 그대로 append됨.
 

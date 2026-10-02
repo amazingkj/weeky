@@ -1779,6 +1779,66 @@ func (r *OracleRepository) GetSiteReportsByUser(teamID, userID int64) ([]model.S
 	return results, rows.Err()
 }
 
+func (r *OracleRepository) GetSubmittedReportsByTeamRange(teamID int64, from, to string) ([]model.SubmittedReport, error) {
+	// report_submissions 행은 제출 상태일 때만 존재 (제출 취소 시 삭제)
+	rows, err := r.db.Query(
+		`SELECT rs.user_id, u.name, r.report_date, r.this_week, r.next_week
+		 FROM report_submissions rs
+		 JOIN users u ON rs.user_id = u.id
+		 JOIN reports r ON rs.report_id = r.id
+		 WHERE rs.team_id = :1 AND rs.status = 'submitted' AND r.report_date BETWEEN :2 AND :3
+		 ORDER BY r.report_date DESC, u.name`,
+		teamID, from, to,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	results := []model.SubmittedReport{}
+	for rows.Next() {
+		var sr model.SubmittedReport
+		var thisWeekJSON, nextWeekJSON sql.NullString // Oracle은 ''를 NULL로 저장
+		if err := rows.Scan(&sr.UserID, &sr.UserName, &sr.ReportDate, &thisWeekJSON, &nextWeekJSON); err != nil {
+			return nil, err
+		}
+		if thisWeekJSON.String != "" {
+			if err := json.Unmarshal([]byte(thisWeekJSON.String), &sr.ThisWeek); err != nil {
+				return nil, err
+			}
+		}
+		if nextWeekJSON.String != "" {
+			if err := json.Unmarshal([]byte(nextWeekJSON.String), &sr.NextWeek); err != nil {
+				return nil, err
+			}
+		}
+		results = append(results, sr)
+	}
+	return results, rows.Err()
+}
+
+func (r *OracleRepository) GetSiteReportsByTeamRange(teamID int64, from, to string) ([]model.SiteReport, error) {
+	rows, err := r.db.Query(
+		`SELECT `+oracleSiteReportColumns+` FROM site_reports
+		 WHERE team_id = :1 AND report_date BETWEEN :2 AND :3
+		 ORDER BY report_date DESC, site_project_id`,
+		teamID, from, to,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	results := []model.SiteReport{}
+	for rows.Next() {
+		sr, err := r.scanSiteReport(rows.Scan)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, *sr)
+	}
+	return results, rows.Err()
+}
+
 func (r *OracleRepository) GetSiteReportsByTeamAndDate(teamID int64, reportDate string) ([]model.SiteReport, error) {
 	mon, sun := weekRange(reportDate)
 	rows, err := r.db.Query(

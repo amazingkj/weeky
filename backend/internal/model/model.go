@@ -303,6 +303,35 @@ type TeamHistoryResponse struct {
 	Weeks    []WeekSummary `json:"weeks"`
 }
 
+// SubmittedReport: 팀에 제출된 원본 보고서 (고객사 히스토리용)
+type SubmittedReport struct {
+	UserID     int64
+	UserName   string
+	ReportDate string
+	ThisWeek   []Task
+	NextWeek   []Task
+}
+
+// ClientHistoryEntry: 고객사 히스토리의 업무 1건.
+// 본사 보고서는 Project=task.title, Work=task.details / 사이트 보고서는 Project=사이트 프로젝트명, Work=task.title
+type ClientHistoryEntry struct {
+	Client     string   `json:"client"`
+	ReportDate string   `json:"report_date"`
+	Kind       string   `json:"kind"`    // report | site
+	Section    string   `json:"section"` // this_week | next_week
+	Authors    []string `json:"authors"` // 사이트 보고서는 작성자가 여러 명일 수 있음
+	Project    string   `json:"project"`
+	Work       string   `json:"work"`
+	Progress   string   `json:"progress"`
+	DueDate    string   `json:"due_date"`
+}
+
+type ClientHistoryResponse struct {
+	From    string               `json:"from"`
+	To      string               `json:"to"`
+	Entries []ClientHistoryEntry `json:"entries"`
+}
+
 type ConsolidationRuleType string
 
 const (

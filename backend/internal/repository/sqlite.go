@@ -1789,6 +1789,63 @@ func (r *Repository) GetSiteReportsByUser(teamID, userID int64) ([]model.SiteRep
 	return results, rows.Err()
 }
 
+func (r *Repository) GetSubmittedReportsByTeamRange(teamID int64, from, to string) ([]model.SubmittedReport, error) {
+	// report_submissions 행은 제출 상태일 때만 존재 (제출 취소 시 삭제)
+	rows, err := r.db.Query(
+		`SELECT rs.user_id, u.name, r.report_date, COALESCE(r.this_week, '[]'), COALESCE(r.next_week, '[]')
+		 FROM report_submissions rs
+		 JOIN users u ON rs.user_id = u.id
+		 JOIN reports r ON rs.report_id = r.id
+		 WHERE rs.team_id = ? AND rs.status = 'submitted' AND r.report_date BETWEEN ? AND ?
+		 ORDER BY r.report_date DESC, u.name`,
+		teamID, from, to,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	results := []model.SubmittedReport{}
+	for rows.Next() {
+		var sr model.SubmittedReport
+		var thisWeekJSON, nextWeekJSON string
+		if err := rows.Scan(&sr.UserID, &sr.UserName, &sr.ReportDate, &thisWeekJSON, &nextWeekJSON); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(thisWeekJSON), &sr.ThisWeek); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(nextWeekJSON), &sr.NextWeek); err != nil {
+			return nil, err
+		}
+		results = append(results, sr)
+	}
+	return results, rows.Err()
+}
+
+func (r *Repository) GetSiteReportsByTeamRange(teamID int64, from, to string) ([]model.SiteReport, error) {
+	rows, err := r.db.Query(
+		`SELECT `+siteReportColumns+` FROM site_reports
+		 WHERE team_id = ? AND report_date BETWEEN ? AND ?
+		 ORDER BY report_date DESC, site_project_id`,
+		teamID, from, to,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	results := []model.SiteReport{}
+	for rows.Next() {
+		sr, err := r.scanSiteReport(rows.Scan)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, *sr)
+	}
+	return results, rows.Err()
+}
+
 func (r *Repository) GetSiteReportsByTeamAndDate(teamID int64, reportDate string) ([]model.SiteReport, error) {
 	mon, sun := weekRange(reportDate)
 	rows, err := r.db.Query(

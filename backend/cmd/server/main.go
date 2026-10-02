@@ -155,6 +155,7 @@ func main() {
 	protected.Delete("/teams/:id/rules/:rid", h.DeleteConsolidationRule)
 
 	protected.Get("/teams/:id/history", h.GetTeamHistory)
+	protected.Get("/teams/:id/client-history", h.GetClientHistory)
 
 	protected.Get("/teams/:id/site-projects", h.GetSiteProjects)
 	protected.Get("/teams/:id/site-projects/mine", h.GetMySiteProjects)

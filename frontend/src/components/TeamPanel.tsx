@@ -7,6 +7,7 @@ import TeamMemberManager from './TeamMemberManager';
 import TeamSubmissionPanel from './TeamSubmissionPanel';
 import WeeklyHistoryPanel from './WeeklyHistoryPanel';
 import MyHistoryPanel from './MyHistoryPanel';
+import ClientHistoryPanel from './ClientHistoryPanel';
 import RulesEditor from './RulesEditor';
 import SiteProjectsManager from './SiteProjectsManager';
 import MemberConsolidatedView from './MemberConsolidatedView';
@@ -26,7 +27,7 @@ export default function TeamPanel() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [myRole, setMyRole] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'members' | 'submissions' | 'projects' | 'site_projects' | 'rules' | 'history' | 'myhistory'>('submissions');
+  const [activeView, setActiveView] = useState<'members' | 'submissions' | 'projects' | 'site_projects' | 'rules' | 'history' | 'client_history' | 'myhistory'>('submissions');
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [mySubmissionStatus, setMySubmissionStatus] = useState<boolean>(false);
   const [editingTeamName, setEditingTeamName] = useState(false);
@@ -308,6 +309,7 @@ export default function TeamPanel() {
               {[
                 { key: 'submissions' as const, label: '취합 현황', leaderOnly: false },
                 { key: 'history' as const, label: '히스토리', leaderOnly: false },
+                { key: 'client_history' as const, label: '고객사 히스토리', leaderOnly: false },
                 { key: 'myhistory' as const, label: '내 히스토리', leaderOnly: false },
                 { key: 'projects' as const, label: '프로젝트 관리', leaderOnly: true },
                 { key: 'site_projects' as const, label: '사이트 프로젝트', leaderOnly: false },
@@ -338,6 +340,9 @@ export default function TeamPanel() {
             )}
             {isLeaderOrGroupLeader && activeView === 'history' && (
               <WeeklyHistoryPanel teamId={selectedTeam.id} />
+            )}
+            {isLeaderOrGroupLeader && activeView === 'client_history' && (
+              <ClientHistoryPanel teamId={selectedTeam.id} />
             )}
             {isLeaderOrGroupLeader && activeView === 'myhistory' && (
               <MyHistoryPanel teamId={selectedTeam.id} />

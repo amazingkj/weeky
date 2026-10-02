@@ -189,6 +189,16 @@ export default function TaskList({
                   availableClients={availableClients}
                 />
               ))}
+              {/* 마지막 카드 바로 아래 추가 버튼 — 긴 목록에서 헤더까지 스크롤하지 않도록 */}
+              <button
+                type="button"
+                onClick={addTask}
+                className="w-full flex items-center justify-center gap-1 py-2.5 text-xs font-medium text-neutral-500
+                           border border-dashed border-neutral-200 rounded-lg hover:border-neutral-400 hover:text-neutral-700 transition-colors"
+              >
+                {plusIcon}
+                항목 추가
+              </button>
             </div>
               </SortableContext>
             </DndContext>
