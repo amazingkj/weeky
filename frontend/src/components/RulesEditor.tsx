@@ -7,6 +7,7 @@ import {
   deleteConsolidationRule,
   reorderConsolidationRules,
 } from '../services/api';
+import { useConfirm } from './ui/ConfirmDialog';
 
 interface RulesEditorProps {
   teamId: number;
@@ -27,6 +28,7 @@ const RULE_TYPE_HINT: Record<ConsolidationRuleType, string> = {
 };
 
 export default function RulesEditor({ teamId }: RulesEditorProps) {
+  const confirm = useConfirm();
   const [rules, setRules] = useState<ConsolidationRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,7 +119,7 @@ export default function RulesEditor({ teamId }: RulesEditorProps) {
   };
 
   const handleDelete = async (rid: number) => {
-    if (!confirm('이 규칙을 삭제하시겠습니까?')) return;
+    if (!(await confirm({ title: '이 규칙을 삭제하시겠습니까?', confirmLabel: '삭제', danger: true }))) return;
     setError(null);
     try {
       await deleteConsolidationRule(teamId, rid);
@@ -206,7 +208,7 @@ export default function RulesEditor({ teamId }: RulesEditorProps) {
           <button
             onClick={handleCreate}
             disabled={creating}
-            className="text-xs px-3 py-1.5 bg-ink-800 text-white rounded hover:bg-ink-900 disabled:opacity-40">
+            className="btn-primary btn-sm">
             {creating ? '추가 중...' : '추가'}
           </button>
         </div>
@@ -214,7 +216,7 @@ export default function RulesEditor({ teamId }: RulesEditorProps) {
       </div>
 
       {error && (
-        <div className="text-xs text-red-600 p-2 bg-red-50 border border-red-200 rounded">{error}</div>
+        <div className="text-xs text-danger-600 p-2 bg-danger-50 border border-danger-200 rounded">{error}</div>
       )}
 
       {/* Rules list */}
@@ -268,11 +270,11 @@ export default function RulesEditor({ teamId }: RulesEditorProps) {
                         </td>
                         <td className="px-2 py-2 text-right space-x-1">
                           <button onClick={() => handleSaveEdit(r.id)}
-                            className="text-xs px-2 py-1 bg-ink-800 text-white rounded hover:bg-ink-900">
+                            className="btn-primary btn-sm">
                             저장
                           </button>
                           <button onClick={() => { setEditingId(null); setEditDraft(null); }}
-                            className="text-xs px-2 py-1 border border-neutral-200 rounded hover:bg-neutral-50">
+                            className="btn-secondary btn-sm">
                             취소
                           </button>
                         </td>
@@ -299,11 +301,11 @@ export default function RulesEditor({ teamId }: RulesEditorProps) {
                               className="text-neutral-400 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed px-1"
                               title="아래로" aria-label="아래로">↓</button>
                             <button onClick={() => handleStartEdit(r)}
-                              className="text-xs px-2 py-1 border border-neutral-200 rounded hover:bg-neutral-50">
+                              className="btn-secondary btn-sm">
                               수정
                             </button>
                             <button onClick={() => handleDelete(r.id)}
-                              className="text-xs px-2 py-1 text-red-600 border border-red-200 rounded hover:bg-red-50">
+                              className="btn-danger-outline btn-sm">
                               삭제
                             </button>
                           </div>

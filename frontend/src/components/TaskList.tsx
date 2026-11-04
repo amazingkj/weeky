@@ -28,6 +28,8 @@ interface TaskListProps {
   emptyIcon?: React.ReactNode;
   projectSuggestions?: TeamProject[];
   onAutoCreateProject?: (name: string) => void;
+  // 제출 시 완료예정일 누락 항목 강조
+  highlightMissingDue?: boolean;
 }
 
 export default function TaskList({
@@ -38,7 +40,8 @@ export default function TaskList({
   showProgress = true,
   emptyIcon,
   projectSuggestions,
-  onAutoCreateProject
+  onAutoCreateProject,
+  highlightMissingDue = false,
 }: TaskListProps) {
   const idCounter = useRef(0);
   const taskIdsRef = useRef<number[]>([]);
@@ -128,8 +131,7 @@ export default function TaskList({
         <button
           type="button"
           onClick={addTask}
-          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-neutral-600
-                     bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors"
+          className="btn-subtle btn-sm gap-1"
         >
           {plusIcon}
           추가
@@ -187,6 +189,7 @@ export default function TaskList({
                   onAutoCreateProject={onAutoCreateProject}
                   availableTitles={availableTitles}
                   availableClients={availableClients}
+                  highlightMissingDue={highlightMissingDue}
                 />
               ))}
               {/* 마지막 카드 바로 아래 추가 버튼 — 긴 목록에서 헤더까지 스크롤하지 않도록 */}
@@ -252,6 +255,7 @@ interface TaskItemProps {
   availableTitles?: string[];
   availableClients?: string[];
   dragHandleProps?: React.HTMLAttributes<HTMLElement>;
+  highlightMissingDue?: boolean;
 }
 
 const TaskItem = memo(function TaskItem({
@@ -269,6 +273,7 @@ const TaskItem = memo(function TaskItem({
   availableTitles,
   availableClients,
   dragHandleProps,
+  highlightMissingDue,
 }: TaskItemProps) {
   const [showDescription, setShowDescription] = useState(() => !!task.description);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -287,8 +292,13 @@ const TaskItem = memo(function TaskItem({
   if (task.progress === 100) progressColor = 'bg-neutral-900';
   else if (task.progress >= 50) progressColor = 'bg-neutral-500';
 
+  const dueMissing = highlightMissingDue && !task.due_date?.trim();
+  const dueLabel = showProgress ? '완료일' : '예정일';
+
   return (
-    <div className="group bg-neutral-50 hover:bg-neutral-100/80 p-4 rounded-lg border border-neutral-200 shadow-sm transition-colors">
+    <div className={`group bg-neutral-50 hover:bg-neutral-100/80 p-4 rounded-lg border shadow-sm transition-colors ${
+      dueMissing ? 'border-danger-300' : 'border-neutral-200'
+    }`}>
       {/* Header Row */}
       <div className="flex items-center justify-between mb-2.5">
         <div className="flex items-center gap-2">
@@ -376,7 +386,7 @@ const TaskItem = memo(function TaskItem({
             </div>
           )}
           <button type="button" onClick={onRemove} aria-label="항목 삭제"
-            className="p-2 sm:p-1 text-neutral-400 hover:text-red-500 transition-colors" title="삭제">
+            className="p-2 sm:p-1 text-neutral-400 hover:text-danger-500 transition-colors" title="삭제">
             {trashIcon}
           </button>
         </div>
@@ -451,15 +461,21 @@ const TaskItem = memo(function TaskItem({
 
       {/* Bottom Row */}
       <div className="flex flex-wrap items-center gap-4 mt-2.5">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-neutral-400">{showProgress ? '완료일' : '예정일'}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`text-xs ${dueMissing ? 'text-danger-600 font-medium' : 'text-neutral-400'}`}>{dueLabel}</span>
           <input
             type="date"
             value={task.due_date}
             onChange={(e) => onUpdate('due_date', e.target.value)}
-            className="px-2 py-1 bg-white border border-neutral-200 rounded-md text-xs text-neutral-600
-                       focus:outline-none focus:ring-1 focus:ring-neutral-400"
+            aria-label={dueLabel}
+            aria-invalid={dueMissing || undefined}
+            data-missing-due={dueMissing || undefined}
+            className={`px-2 py-1 bg-white border rounded-md text-xs text-neutral-600
+                       focus:outline-none focus:ring-1 ${
+                         dueMissing ? 'border-danger-400 ring-1 ring-danger-200 focus:ring-danger-400' : 'border-neutral-200 focus:ring-neutral-400'
+                       }`}
           />
+          {dueMissing && <span className="text-[11px] text-danger-600">날짜를 입력해주세요</span>}
         </div>
 
         {showProgress && (

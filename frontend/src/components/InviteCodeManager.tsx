@@ -67,14 +67,14 @@ export default function InviteCodeManager() {
         <button
           onClick={handleCreate}
           disabled={isLoading}
-          className="px-3 py-1.5 bg-white text-neutral-700 text-xs font-medium rounded-lg border border-neutral-300 hover:bg-neutral-50 hover:border-neutral-400 disabled:opacity-50 transition-colors"
+          className="btn-secondary btn-sm"
         >
           {isLoading ? '생성 중...' : '새 초대 코드'}
         </button>
       </div>
 
       {error && (
-        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+        <div className="text-sm text-danger-600 bg-danger-50 border border-danger-200 rounded-lg px-3 py-2">
           {error}
         </div>
       )}
@@ -97,7 +97,7 @@ export default function InviteCodeManager() {
                 {ic.used_by ? (
                   <span className="text-xs text-neutral-400">사용됨</span>
                 ) : (
-                  <span className="text-xs text-green-600">사용 가능</span>
+                  <span className="text-xs text-success-600">사용 가능</span>
                 )}
               </div>
               {!ic.used_by && (

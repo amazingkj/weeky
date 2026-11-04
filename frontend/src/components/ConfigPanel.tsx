@@ -245,7 +245,7 @@ export default function ConfigPanel() {
           )}
 
           {projectError && (
-            <p className="text-[11px] text-red-500 mb-2">{projectError}</p>
+            <p className="text-[11px] text-danger-500 mb-2">{projectError}</p>
           )}
 
           {/* Selected projects summary */}
@@ -255,7 +255,7 @@ export default function ConfigPanel() {
                 <span key={fp} className="inline-flex items-center gap-1 px-2 py-1 bg-neutral-100 text-neutral-700 text-[11px] rounded-md">
                   {fp}
                   <button type="button" onClick={() => toggleProject(fp)} aria-label={`${fp} 선택 해제`}
-                    className="text-neutral-400 hover:text-red-500 transition-colors">
+                    className="text-neutral-400 hover:text-danger-500 transition-colors">
                     {closeIconSmall}
                   </button>
                 </span>
@@ -351,8 +351,7 @@ export default function ConfigPanel() {
 
       <div className="flex justify-end pt-2">
         <button onClick={handleSave} disabled={isSaving}
-          className="px-5 py-2.5 bg-white text-neutral-700 text-sm font-medium rounded-lg border border-neutral-300
-                     hover:bg-neutral-50 hover:border-neutral-400 disabled:opacity-40 transition-colors flex items-center gap-2"
+          className="btn-secondary px-5 py-2.5 gap-2"
         >
           {isSaving ? spinner : saveIcon}
           {isSaving ? '저장 중...' : '설정 저장'}
@@ -378,14 +377,14 @@ interface ConfigSectionProps {
 function getStatusBadge(verified: boolean | null | undefined, configuredCount: number, totalCount: number): React.ReactNode {
   if (verified === true) {
     return (
-      <span className="flex items-center gap-1 px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] font-medium rounded">
+      <span className="flex items-center gap-1 px-1.5 py-0.5 bg-success-100 text-success-700 text-[10px] font-medium rounded">
         {checkIcon} 연결 확인
       </span>
     );
   }
   if (verified === false) {
     return (
-      <span className="flex items-center gap-1 px-1.5 py-0.5 bg-red-100 text-red-600 text-[10px] font-medium rounded">
+      <span className="flex items-center gap-1 px-1.5 py-0.5 bg-danger-100 text-danger-600 text-[10px] font-medium rounded">
         {warnIcon} 연결 실패
       </span>
     );
@@ -498,8 +497,8 @@ function TestConnectionButton({ section, testing, verified, onTest }: TestConnec
         {isTesting ? spinner : plugIcon}
         {isTesting ? '테스트 중...' : '연결 테스트'}
       </button>
-      {verified === true && <span className="text-[11px] text-green-600 font-medium flex items-center gap-1">{checkIcon} 연결 성공</span>}
-      {verified === false && <span className="text-[11px] text-red-500 font-medium flex items-center gap-1">{warnIcon} 연결 실패 - 설정을 확인하세요</span>}
+      {verified === true && <span className="text-[11px] text-success-600 font-medium flex items-center gap-1">{checkIcon} 연결 성공</span>}
+      {verified === false && <span className="text-[11px] text-danger-500 font-medium flex items-center gap-1">{warnIcon} 연결 실패 - 설정을 확인하세요</span>}
     </div>
   );
 }

@@ -67,19 +67,49 @@
            transition-colors;
   }
 
-  /* Button base */
+  /* Button — 변형(primary/secondary/danger/danger-outline/subtle) 하나 + 필요하면 btn-sm.
+     포커스 링은 base의 :focus-visible 규칙이 담당 */
   .btn {
-    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg
-           transition-colors focus:outline-none focus:ring-2 focus:ring-ink-500/20;
+    @apply inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg border
+           transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
   }
 
   .btn-primary {
-    @apply btn bg-ink-800 text-white hover:bg-ink-900;
+    @apply btn bg-ink-800 text-white border-ink-800 hover:bg-ink-900 hover:border-ink-900;
   }
 
   .btn-secondary {
-    @apply btn bg-white text-neutral-700 border border-neutral-200
-           hover:bg-neutral-50 hover:border-neutral-300;
+    @apply btn bg-white text-neutral-700 border-neutral-200 hover:border-neutral-400;
+  }
+
+  /* 되돌릴 수 없는 동작 확정 (확인 다이얼로그 등) */
+  .btn-danger {
+    @apply btn bg-danger-600 text-white border-danger-600 hover:bg-danger-700 hover:border-danger-700;
+  }
+
+  /* 취소·해제처럼 위험하지만 화면에 늘 떠 있는 버튼 */
+  .btn-danger-outline {
+    @apply btn bg-white text-danger-600 border-danger-200 hover:bg-danger-50;
+  }
+
+  /* 추가 같은 보조 동작 */
+  .btn-subtle {
+    @apply btn bg-neutral-100 text-neutral-600 border-transparent hover:bg-neutral-200;
+  }
+
+  /* 변형 뒤에 선언해야 크기가 덮어써짐 */
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+
+  /* 필터·선택 칩 (팀/고객사/보고 유형 고르기 등) — 선택된 칩은 chip-on 추가 */
+  .chip {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border
+           bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400 transition-colors;
+  }
+
+  .chip-on {
+    @apply bg-ink-800 text-white border-ink-800 hover:border-ink-800;
   }
 
   /* Section card */

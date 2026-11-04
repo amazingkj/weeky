@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { ClientHistoryEntry, ClientHistoryResponse } from '../types';
 import { getClientHistory } from '../services/api';
 import { getMonday, getWeekOfMonthLabel, getWeekRangeShort } from '../utils/date';
-import Loading from './ui/Loading';
+import { SkeletonList } from './ui/Skeleton';
 
 interface ClientHistoryPanelProps {
   teamId: number;
@@ -83,9 +83,9 @@ export default function ClientHistoryPanel({ teamId }: ClientHistoryPanelProps) 
       </p>
 
       {loading ? (
-        <Loading text="고객사 히스토리 로딩 중..." />
+        <SkeletonList label="고객사 히스토리 불러오는 중" />
       ) : error ? (
-        <p className="text-xs text-red-500 py-6 text-center">{error}</p>
+        <p className="text-xs text-danger-500 py-6 text-center">{error}</p>
       ) : summaries.length === 0 ? (
         <p className="text-xs text-neutral-400 py-6 text-center">기간 내 고객사가 지정된 업무가 없습니다.</p>
       ) : (
@@ -95,11 +95,7 @@ export default function ClientHistoryPanel({ teamId }: ClientHistoryPanelProps) 
               <button
                 key={s.client}
                 onClick={() => setSelected(s.client)}
-                className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                  activeClient === s.client
-                    ? 'bg-ink-800 text-white border-ink-800'
-                    : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
-                }`}
+                className={`chip ${activeClient === s.client ? 'chip-on' : ''}`}
               >
                 {s.client}
                 <span className={`ml-1.5 ${activeClient === s.client ? 'text-white/70' : 'text-neutral-400'}`}>

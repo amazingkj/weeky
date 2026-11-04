@@ -226,11 +226,7 @@ export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps
               key={value}
               type="button"
               onClick={() => { setReportStyle(value); localStorage.setItem('reportStyle', value); }}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                reportStyle === value
-                  ? 'bg-ink-800 text-white border-ink-800'
-                  : 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-300'
-              }`}
+              className={`chip ${reportStyle === value ? 'chip-on' : ''}`}
             >
               {label}
             </button>
@@ -263,9 +259,7 @@ export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps
       <button
         onClick={handleGenerate}
         disabled={isLoading || isJiraLoading || services.length === 0}
-        className="w-full px-4 py-3 bg-ink-800 text-white text-sm font-medium rounded-lg
-                   hover:bg-ink-900 disabled:opacity-40 disabled:cursor-not-allowed
-                   transition-colors flex items-center justify-center gap-2"
+        className="btn-primary w-full py-3 gap-2"
       >
         {isLoading ? spinner : aiIcon}
         {isLoading ? '데이터 수집 + AI 생성 중...' : 'AI 자동 생성'}
@@ -275,10 +269,7 @@ export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps
       <button
         onClick={handleJiraOnly}
         disabled={isLoading || isJiraLoading || config.jira_token !== '***configured***'}
-        className="w-full px-4 py-2 bg-white text-neutral-700 text-xs font-medium rounded-lg
-                   border border-neutral-200 hover:border-neutral-300
-                   disabled:opacity-40 disabled:cursor-not-allowed
-                   transition-colors flex items-center justify-center gap-2"
+        className="btn-secondary btn-sm w-full py-2 gap-2"
         title="Claude API 없이 Jira 티켓을 그대로 Task로 변환합니다 (티켓 1개 = Task 1개)"
       >
         {isJiraLoading ? spinner : jiraIcon}
@@ -287,7 +278,7 @@ export default function SyncPanel({ onAIGenerate, projectNames }: SyncPanelProps
 
       {/* Error */}
       {error && (
-        <p className="text-sm text-red-600 p-3 bg-red-50 rounded-lg border border-red-200">{error}</p>
+        <p className="text-sm text-danger-600 p-3 bg-danger-50 rounded-lg border border-danger-200">{error}</p>
       )}
     </div>
   );

@@ -5,6 +5,7 @@ import TaskList from './TaskList';
 import { generatePPT, generateConsolidatedPPT } from '../utils/pptGenerator';
 import { useAuth } from '../contexts/AuthContext';
 import Loading from './ui/Loading';
+import { useConfirm } from './ui/ConfirmDialog';
 import { toLocalYMD } from '../utils/date';
 
 const ConsolidatedPptPreview = lazy(() => import('./ConsolidatedPptPreview'));
@@ -48,6 +49,7 @@ function getDefaultDate(): string {
 
 export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) {
   const { user } = useAuth();
+  const confirm = useConfirm();
   const [reportDate, setReportDate] = useState(getDefaultDate);
   const [submissions, setSubmissions] = useState<TeamMemberWithSubmission[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -321,7 +323,12 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
   };
 
   const handleReconsolidate = async () => {
-    if (!confirm('저장된 편집 내용을 삭제하고 팀원 보고서에서 다시 취합하시겠습니까?')) return;
+    if (!(await confirm({
+      title: '다시 취합하시겠습니까?',
+      message: '저장된 편집 내용을 삭제하고 팀원 보고서에서 다시 취합합니다.',
+      confirmLabel: '다시 취합',
+      danger: true,
+    }))) return;
     setPptLoading(true);
     try {
       await deleteConsolidatedEdit(team.id, reportDate);
@@ -383,7 +390,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
       </div>
 
       {error && (
-        <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{error}
+        <div className="p-2 bg-danger-50 border border-danger-200 rounded-lg text-xs text-danger-700">{error}
           <button onClick={() => setError(null)} className="ml-2 underline">닫기</button>
         </div>
       )}
@@ -398,11 +405,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
             return (
               <button key={friday}
                 onClick={() => handleWeekChange(friday)}
-                className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
-                  isSelected
-                    ? 'bg-ink-800 text-white border-ink-800'
-                    : 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-300'
-                }`}>
+                className={`chip ${isSelected ? 'chip-on' : ''}`}>
                 {label}
               </button>
             );
@@ -411,7 +414,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
         <div className="flex items-center gap-2">
           <span className="text-xs text-neutral-400">{reportDate} (금)</span>
           <button onClick={fetchSubmissions} disabled={loading}
-            className="px-3 py-1.5 text-xs font-medium text-white bg-ink-800 rounded-lg hover:bg-ink-900 disabled:opacity-40 transition-colors">
+            className="btn-primary btn-sm">
             {loading ? '조회 중...' : '조회'}
           </button>
         </div>
@@ -451,7 +454,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                       </td>
                       <td className="px-3 py-2 text-center">
                         {submitted ? (
-                          <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium">제출완료</span>
+                          <span className="px-1.5 py-0.5 bg-success-100 text-success-700 rounded text-[10px] font-medium">제출완료</span>
                         ) : (
                           <span className="px-1.5 py-0.5 bg-neutral-100 text-neutral-400 rounded text-[10px] font-medium">미제출</span>
                         )}
@@ -477,11 +480,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                     <>
                       <button
                         onClick={() => setShowMemberPreview(!showMemberPreview)}
-                        className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
-                          showMemberPreview
-                            ? 'bg-ink-800 text-white border-ink-800'
-                            : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
-                        }`}>
+                        className={`${showMemberPreview ? 'btn-primary' : 'btn-secondary'} btn-sm px-2.5 py-1 gap-1`}>
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -490,7 +489,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                       </button>
                       <button
                         onClick={() => generatePPT(editedReport, defaultTemplateStyle)}
-                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300">
+                        className="btn-secondary btn-sm px-2.5 py-1 gap-1">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
@@ -498,11 +497,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                       </button>
                       <button
                         onClick={() => setEditingMember(!editingMember)}
-                        className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
-                          editingMember
-                            ? 'bg-ink-800 text-white border-ink-800'
-                            : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
-                        }`}>
+                        className={`${editingMember ? 'btn-primary' : 'btn-secondary'} btn-sm px-2.5 py-1 gap-1`}>
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
@@ -511,7 +506,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                     </>
                   )}
                   <button onClick={() => setFullscreen(!fullscreen)}
-                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300">
+                    className="btn-secondary btn-sm px-2.5 py-1 gap-1">
                     {fullscreen ? (
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
@@ -593,11 +588,11 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
                           }
                         }}
                         disabled={saving}
-                        className="px-4 py-1.5 text-xs font-medium text-white bg-ink-800 rounded-lg hover:bg-ink-900 disabled:opacity-40 transition-colors"
+                        className="btn-primary btn-sm px-4"
                       >
                         {saving ? '저장 중...' : '저장'}
                       </button>
-                      {saveSuccess && <span className="text-xs text-green-600 font-medium">저장되었습니다</span>}
+                      {saveSuccess && <span className="text-xs text-success-600 font-medium">저장되었습니다</span>}
                     </div>
                   </div>
                 ) : (
@@ -671,11 +666,7 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
           {submittedCount > 0 && (
             <div className="flex gap-2 flex-wrap items-center">
               <button onClick={handleTogglePreview}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                  showPreview
-                    ? 'bg-ink-800 text-white border-ink-800'
-                    : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
-                }`}>
+                className={`${showPreview ? 'btn-primary' : 'btn-secondary'} btn-sm`}>
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -684,18 +675,14 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
               </button>
               <div className="flex-1" />
               <button onClick={handleDownloadPPT} disabled={pptLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300 disabled:opacity-40">
+                className="btn-secondary btn-sm">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
                 {pptLoading ? '생성 중...' : '취합 PPT 다운로드'}
               </button>
               <button onClick={() => editingConsolidated ? setEditingConsolidated(false) : handleStartEditConsolidated()} disabled={pptLoading}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                  editingConsolidated
-                    ? 'bg-ink-800 text-white border-ink-800'
-                    : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
-                } disabled:opacity-40`}>
+                className={`${editingConsolidated ? 'btn-primary' : 'btn-secondary'} btn-sm`}>
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
@@ -706,32 +693,32 @@ export default function TeamSubmissionPanel({ team }: TeamSubmissionPanelProps) 
 
           {/* Consolidated edit mode (flat view) */}
           {editingConsolidated && (
-            <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 space-y-4">
+            <div className="bg-warning-50 p-4 rounded-xl border border-warning-200 space-y-4">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-amber-900">취합 보고서 편집</h4>
+                <h4 className="text-sm font-semibold text-warning-900">취합 보고서 편집</h4>
                 <button onClick={() => setEditingConsolidated(false)}
-                  className="p-2 sm:p-1 text-amber-400 hover:text-amber-600 transition-colors" aria-label="닫기">
+                  className="p-2 sm:p-1 text-warning-400 hover:text-warning-600 transition-colors" aria-label="닫기">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-xs text-amber-700 flex-1">
+                <p className="text-xs text-warning-700 flex-1">
                   취합된 전체 내용을 직접 수정하세요. 수정 후 PPT 다운로드/미리보기에 바로 반영됩니다.
-                  {hasSavedEdit && <span className="ml-1 text-amber-600 font-medium">(저장된 편집)</span>}
+                  {hasSavedEdit && <span className="ml-1 text-warning-600 font-medium">(저장된 편집)</span>}
                 </p>
                 <button onClick={handleSaveConsolidatedEdit} disabled={editSaving}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-white text-amber-700 border-amber-300 hover:bg-amber-100 disabled:opacity-40 whitespace-nowrap">
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-white text-warning-700 border-warning-300 hover:bg-warning-100 disabled:opacity-40 whitespace-nowrap">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                   </svg>
                   {editSaving ? '저장 중...' : '저장'}
                 </button>
-                {editSaveSuccess && <span className="text-xs text-green-600 font-medium whitespace-nowrap">저장됨</span>}
+                {editSaveSuccess && <span className="text-xs text-success-600 font-medium whitespace-nowrap">저장됨</span>}
                 {hasSavedEdit && (
                   <button onClick={handleReconsolidate} disabled={pptLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-white text-red-600 border-red-300 hover:bg-red-50 disabled:opacity-40 whitespace-nowrap">
+                    className="btn-danger-outline btn-sm whitespace-nowrap">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>

@@ -3,11 +3,12 @@ import { TeamHistoryResponse, ConsolidatedReport } from '../types';
 import { getTeamHistory, getConsolidatedReport } from '../services/api';
 import { generateConsolidatedPPT } from '../utils/pptGenerator';
 import { useAuth } from '../contexts/AuthContext';
-import Loading from './ui/Loading';
+import { SkeletonList } from './ui/Skeleton';
+import { useToast } from './ui/Toast';
 
 function getSubmissionBadgeClass(submitted: number, total: number): string {
-  if (submitted === total) return 'bg-green-100 text-green-700';
-  if (submitted > 0) return 'bg-amber-100 text-amber-700';
+  if (submitted === total) return 'bg-success-100 text-success-700';
+  if (submitted > 0) return 'bg-warning-100 text-warning-700';
   return 'bg-neutral-100 text-neutral-400';
 }
 
@@ -17,6 +18,7 @@ interface WeeklyHistoryPanelProps {
 
 export default function WeeklyHistoryPanel({ teamId }: WeeklyHistoryPanelProps) {
   const { user } = useAuth();
+  const toast = useToast();
   const [data, setData] = useState<TeamHistoryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [weeks, setWeeks] = useState(12);
@@ -36,13 +38,13 @@ export default function WeeklyHistoryPanel({ teamId }: WeeklyHistoryPanelProps) 
       const consolidated: ConsolidatedReport = await getConsolidatedReport(teamId, weekDate);
       await generateConsolidatedPPT(consolidated, user?.name);
     } catch {
-      alert('PPT 생성에 실패했습니다.');
+      toast.error('PPT 생성에 실패했습니다.');
     } finally {
       setDownloadingWeek(null);
     }
   };
 
-  if (loading) return <Loading text="히스토리 로딩 중..." />;
+  if (loading) return <SkeletonList label="히스토리 불러오는 중" />;
   if (!data) {
     return (
       <div className="text-center py-8">

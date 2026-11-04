@@ -61,7 +61,7 @@ export default function RegisterPage() {
           )}
 
           {error && (
-            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <div className="text-sm text-danger-600 bg-danger-50 border border-danger-200 rounded-lg px-3 py-2">
               {error}
             </div>
           )}
@@ -120,7 +120,7 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-2.5 bg-ink-800 text-white text-sm font-medium rounded-lg hover:bg-ink-900 disabled:opacity-50 transition-colors"
+            className="btn-primary w-full py-2.5"
           >
             {isLoading ? '가입 중...' : isFirstUser ? '관리자 계정 생성' : '회원가입'}
           </button>

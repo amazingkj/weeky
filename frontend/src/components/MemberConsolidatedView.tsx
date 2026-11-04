@@ -83,11 +83,7 @@ export default function MemberConsolidatedView({ teamId, myName }: MemberConsoli
             return (
               <button key={friday}
                 onClick={() => setReportDate(friday)}
-                className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
-                  isSelected
-                    ? 'bg-ink-800 text-white border-ink-800'
-                    : 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-300'
-                }`}>
+                className={`chip ${isSelected ? 'chip-on' : ''}`}>
                 {label}
               </button>
             );
@@ -96,14 +92,14 @@ export default function MemberConsolidatedView({ teamId, myName }: MemberConsoli
         <div className="flex items-center gap-2 mt-2">
           <span className="text-xs text-neutral-400">{reportDate} (금)</span>
           <button onClick={fetchConsolidated} disabled={loading}
-            className="px-3 py-1.5 text-xs font-medium text-white bg-ink-800 rounded-lg hover:bg-ink-900 disabled:opacity-40 transition-colors">
+            className="btn-primary btn-sm">
             {loading ? '조회 중...' : '취합 결과 보기'}
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+        <div className="p-2 bg-danger-50 border border-danger-200 rounded-lg text-xs text-danger-700">
           {error}
           <button onClick={() => setError(null)} className="ml-2 underline">닫기</button>
         </div>
@@ -116,7 +112,7 @@ export default function MemberConsolidatedView({ teamId, myName }: MemberConsoli
             const me = consolidated.members.find(m => m.user_id === user?.id);
             if (!me?.report) {
               return (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+                <div className="p-3 bg-warning-50 border border-warning-200 rounded-lg text-xs text-warning-700">
                   이번 주 본인 보고서가 제출되지 않아 취합에 포함되지 않았습니다.
                 </div>
               );

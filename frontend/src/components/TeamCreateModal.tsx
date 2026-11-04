@@ -51,7 +51,7 @@ export default function TeamCreateModal({ isOpen, onClose, onCreated }: TeamCrea
         </div>
 
         {error && (
-          <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{error}</div>
+          <div className="mb-3 p-2 bg-danger-50 border border-danger-200 rounded-lg text-xs text-danger-700">{error}</div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -78,11 +78,11 @@ export default function TeamCreateModal({ isOpen, onClose, onCreated }: TeamCrea
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose}
-              className="px-3 py-1.5 text-xs font-medium text-neutral-500 bg-neutral-100 rounded-lg hover:bg-neutral-200 transition-colors">
+              className="btn-subtle btn-sm">
               취소
             </button>
             <button type="submit" disabled={loading}
-              className="px-3 py-1.5 text-xs font-medium text-white bg-ink-800 rounded-lg hover:bg-ink-900 disabled:opacity-40 transition-colors">
+              className="btn-primary btn-sm">
               {loading ? '생성 중...' : '팀 생성'}
             </button>
           </div>

@@ -35,15 +35,6 @@ export interface Template {
   created_at: string;
 }
 
-export function parseTemplateStyle(styleJson: string): TemplateStyle {
-  try {
-    const parsed = JSON.parse(styleJson);
-    return { ...defaultTemplateStyle, ...parsed };
-  } catch {
-    return defaultTemplateStyle;
-  }
-}
-
 export interface Report {
   id?: number;
   team_name: string;

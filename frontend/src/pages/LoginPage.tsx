@@ -42,7 +42,7 @@ export default function LoginPage() {
           <h2 className="text-base font-semibold text-neutral-900">로그인</h2>
 
           {error && (
-            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <div className="text-sm text-danger-600 bg-danger-50 border border-danger-200 rounded-lg px-3 py-2">
               {error}
             </div>
           )}
@@ -74,7 +74,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-2.5 bg-ink-800 text-white text-sm font-medium rounded-lg hover:bg-ink-900 disabled:opacity-50 transition-colors"
+            className="btn-primary w-full py-2.5"
           >
             {isLoading ? '로그인 중...' : '로그인'}
           </button>

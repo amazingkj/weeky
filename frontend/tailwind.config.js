@@ -1,3 +1,5 @@
+import colors from 'tailwindcss/colors'
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -40,6 +42,10 @@ export default {
           800: '#23345D',
           900: '#1D2A49',
         },
+        // 상태 의미 색 — 컴포넌트에서는 red/green/amber 대신 이 이름을 사용
+        danger: colors.red,     // 오류, 삭제 등 되돌릴 수 없는 동작
+        success: colors.green,  // 완료, 연결 성공
+        warning: colors.amber,  // 주의, 미제출
         // 인주색 — 제출완료 도장 전용
         seal: {
           50: '#FCF0ED',

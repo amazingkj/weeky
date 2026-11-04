@@ -3,6 +3,8 @@ import { Team, SiteProject, SiteTask, SiteNextTask } from '../types';
 import { getMyTeams, getMySiteProjects, getMySiteReport, saveSiteReport } from '../services/api';
 import Loading from './ui/Loading';
 import Alert from './ui/Alert';
+import { useConfirm } from './ui/ConfirmDialog';
+import DateCommitInput from './ui/DateCommitInput';
 
 const inputCls = 'w-full px-2 py-1 text-sm border border-neutral-200 rounded focus:outline-none focus:border-neutral-400';
 
@@ -39,7 +41,34 @@ const emptyState = (): SiteReportFormState => ({
   notes: '',
 });
 
-export default function SiteReportForm() {
+// 저장 안 된 변경 비교용 — 대상 주(reportDate)는 선택값이라 제외
+const contentKey = (s: SiteReportFormState) =>
+  JSON.stringify([s.reportDateText, s.thisWeek, s.nextWeek, s.notes]);
+
+// 모든 팀에서 내가 작성자로 등록된 사이트 프로젝트 수집
+async function fetchMySiteTeamProjects(): Promise<TeamWithSiteProjects[]> {
+  const teams = await getMyTeams();
+  const results = await Promise.all(
+    teams.map(async (t) => {
+      try {
+        const ps = await getMySiteProjects(t.id);
+        return { team: t, projects: ps };
+      } catch {
+        return { team: t, projects: [] };
+      }
+    })
+  );
+  return results.filter((r) => r.projects.length > 0);
+}
+
+interface SiteReportFormProps {
+  // 저장 안 된 변경 여부 — App이 탭 전환 시 폼을 유지할지 판단
+  onDirtyChange?: (dirty: boolean) => void;
+  // 현재 보이는 탭인지 (숨김 유지 중이면 false)
+  active?: boolean;
+}
+
+export default function SiteReportForm({ onDirtyChange, active = true }: SiteReportFormProps) {
   const [loading, setLoading] = useState(true);
   const [teamProjects, setTeamProjects] = useState<TeamWithSiteProjects[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
@@ -47,9 +76,30 @@ export default function SiteReportForm() {
   const [state, setState] = useState<SiteReportFormState>(emptyState);
   const [reportLoading, setReportLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  // 보고서 조회 실패 — 화면에 이전 보고서 내용이 남아 있어 저장하면 다른 보고서를 덮어쓰므로 저장 차단
+  const [loadFailed, setLoadFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  // 서버에서 불러오거나 저장한 내용 — 이것과 다르면 저장 안 된 변경
+  const [baseline, setBaseline] = useState<string>(() => contentKey(emptyState()));
+  const stateKey = useMemo(() => contentKey(state), [state]);
+  const isDirty = stateKey !== baseline;
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const confirm = useConfirm();
+  // 팀·프로젝트·대상 주를 바꾸면 해당 보고서로 교체되므로 작성 중인 내용이 있으면 확인
+  const confirmDiscard = async () => !isDirty || confirm({
+    title: '저장하지 않은 내용이 있습니다',
+    message: '다른 보고서로 바꾸면 작성 중인 내용이 사라집니다.',
+    confirmLabel: '바꾸기',
+    danger: true,
+  });
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   useEffect(() => {
     return () => {
@@ -57,24 +107,12 @@ export default function SiteReportForm() {
     };
   }, []);
 
-  // 모든 팀에서 내가 작성자로 등록된 사이트 프로젝트 수집
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const teams = await getMyTeams();
-        const results = await Promise.all(
-          teams.map(async (t) => {
-            try {
-              const ps = await getMySiteProjects(t.id);
-              return { team: t, projects: ps };
-            } catch {
-              return { team: t, projects: [] };
-            }
-          })
-        );
+        const filtered = await fetchMySiteTeamProjects();
         if (cancelled) return;
-        const filtered = results.filter((r) => r.projects.length > 0);
         setTeamProjects(filtered);
         if (filtered.length > 0) {
           setSelectedTeamId(filtered[0].team.id);
@@ -94,27 +132,57 @@ export default function SiteReportForm() {
     return project ? { team: tp.team, project } : null;
   }, [teamProjects, selectedTeamId, selectedProjectId]);
 
+  // 숨김 유지 중 팀 탭에서 사이트 프로젝트 배정이 바뀌었을 수 있어 다시 보이면 목록만 갱신.
+  // 선택은 유지 — 바꾸면 작성 중인 내용이 다른 프로젝트 보고서로 교체됨
+  const wasActiveRef = useRef(active);
+  useEffect(() => {
+    if (active && !wasActiveRef.current) {
+      fetchMySiteTeamProjects().then((list) => {
+        setTeamProjects(list);
+        const stillAssigned = list.some((tp) => tp.team.id === selectedTeamId && tp.projects.some((p) => p.id === selectedProjectId));
+        if (!stillAssigned) {
+          // 저장할 곳이 없어졌으므로 변경 상태를 풀어 계속 붙잡아 두지 않음 (알림 후 내용은 화면에 남김)
+          setError('선택했던 사이트 프로젝트의 작성 권한이 없어져 저장할 수 없습니다. 필요한 내용은 따로 복사해두세요.');
+          setBaseline(contentKey(stateRef.current));
+        }
+      }).catch(() => {});
+    }
+    wasActiveRef.current = active;
+  }, [active, selectedTeamId, selectedProjectId]);
+
+  // 지금 화면에 띄운 (project, date) — 저장 완료 시 그사이 다른 보고서로 바뀌었는지 확인용
+  const loadKey = `${selected?.project.id}|${state.reportDate}`;
+  const loadKeyRef = useRef(loadKey);
+  loadKeyRef.current = loadKey;
+
   // 선택된 (team, project, date)에 대한 기존 보고서 로드
   useEffect(() => {
     if (!selected) return;
+    // 빠르게 바꾸면 늦게 도착한 이전 응답이 현재 내용·기준선을 덮지 않도록
+    let cancelled = false;
     setReportLoading(true);
     getMySiteReport(selected.team.id, selected.project.id, state.reportDate)
       .then((res) => {
-        if (res.exists && res.report) {
-          const r = res.report;
-          setState((s) => ({
-            reportDate: s.reportDate,
-            reportDateText: r.report_date_text || '',
-            thisWeek: r.this_week,
-            nextWeek: r.next_week,
-            notes: r.notes,
-          }));
-        } else {
-          setState((s) => ({ ...emptyState(), reportDate: s.reportDate }));
-        }
+        if (cancelled) return;
+        const r = res.exists ? res.report : undefined;
+        const loaded = r
+          ? { reportDateText: r.report_date_text || '', thisWeek: r.this_week, nextWeek: r.next_week, notes: r.notes }
+          : { reportDateText: '', thisWeek: [], nextWeek: [], notes: '' };
+        setState((s) => ({ ...s, ...loaded }));
+        setBaseline(contentKey({ ...emptyState(), ...loaded }));
+        setLoadFailed(false);
+        // 이전 조회 실패 안내가 남아 저장이 막힌 것처럼 보이지 않도록
+        setError(null);
       })
-      .catch(() => { /* ignore */ })
-      .finally(() => setReportLoading(false));
+      .catch(() => {
+        if (cancelled) return;
+        setLoadFailed(true);
+        setError('보고서를 불러오지 못했습니다. 다른 보고서를 덮어쓰지 않도록 저장을 막았습니다. 다른 주·프로젝트를 고르거나 새로고침해주세요.');
+        // 화면 내용은 선택한 보고서의 것이 아니므로 변경 상태로 붙잡아 두지 않음 (교체 전에 이미 확인받음)
+        setBaseline(contentKey(stateRef.current));
+      })
+      .finally(() => { if (!cancelled) setReportLoading(false); });
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.project.id, state.reportDate]);
 
@@ -130,7 +198,8 @@ export default function SiteReportForm() {
   const removeNextRow = (idx: number) => setState((s) => ({ ...s, nextWeek: s.nextWeek.filter((_, i) => i !== idx) }));
 
   const handleSave = useCallback(async () => {
-    if (!selected) return;
+    if (!selected || loadFailed) return;
+    const savedKey = loadKeyRef.current;
     setSaving(true);
     setError(null);
     setSuccess(null);
@@ -143,6 +212,9 @@ export default function SiteReportForm() {
         next_week: state.nextWeek,
         notes: state.notes,
       });
+      // 저장 요청에 보낸 내용 기준 — 저장 중에 더 입력한 내용은 계속 변경으로 남음.
+      // 그사이 다른 프로젝트/주로 바뀌었으면 그쪽 기준선은 건드리지 않음
+      if (loadKeyRef.current === savedKey) setBaseline(contentKey(state));
       setSuccess('저장되었습니다.');
       if (successTimerRef.current) clearTimeout(successTimerRef.current);
       successTimerRef.current = setTimeout(() => setSuccess(null), 2000);
@@ -151,13 +223,14 @@ export default function SiteReportForm() {
     } finally {
       setSaving(false);
     }
-  }, [selected, state]);
+  }, [selected, state, loadFailed]);
 
   if (loading) {
     return <div className="py-16"><Loading text="사이트 프로젝트 로딩 중..." size="lg" /></div>;
   }
 
-  if (teamProjects.length === 0) {
+  // 작성 중이던 내용이 있으면(숨김 중 배정이 모두 해제된 경우) 안내 화면 대신 내용과 오류를 보여줌
+  if (teamProjects.length === 0 && stateKey === contentKey(emptyState())) {
     return (
       <div className="bg-white p-8 rounded-xl border border-neutral-200 text-center">
         <p className="text-sm text-neutral-500">
@@ -183,8 +256,9 @@ export default function SiteReportForm() {
               <label className="block text-xs font-medium text-neutral-500 mb-1">팀</label>
               <select
                 value={selectedTeamId ?? ''}
-                onChange={(e) => {
+                onChange={async (e) => {
                   const tid = Number(e.target.value);
+                  if (!(await confirmDiscard())) return;
                   setSelectedTeamId(tid);
                   const first = teamProjects.find((x) => x.team.id === tid)?.projects[0];
                   setSelectedProjectId(first?.id ?? null);
@@ -201,7 +275,10 @@ export default function SiteReportForm() {
             <label className="block text-xs font-medium text-neutral-500 mb-1">프로젝트</label>
             <select
               value={selectedProjectId ?? ''}
-              onChange={(e) => setSelectedProjectId(Number(e.target.value))}
+              onChange={async (e) => {
+                const pid = Number(e.target.value);
+                if (await confirmDiscard()) setSelectedProjectId(pid);
+              }}
               className="px-2 py-1.5 text-sm border border-neutral-200 rounded focus:outline-none focus:border-neutral-400"
             >
               {(teamProjects.find((x) => x.team.id === selectedTeamId)?.projects || []).map((p) => (
@@ -211,10 +288,13 @@ export default function SiteReportForm() {
           </div>
           <div>
             <label className="block text-xs font-medium text-neutral-500 mb-1">대상 주(이 날짜가 속한 주)</label>
-            <input
-              type="date"
+            <DateCommitInput
               value={state.reportDate}
-              onChange={(e) => setState((s) => ({ ...s, reportDate: e.target.value }))}
+              onCommit={async (reportDate) => {
+                if (!(await confirmDiscard())) return false;
+                setState((s) => ({ ...s, reportDate }));
+                return true;
+              }}
               className="px-2 py-1.5 text-sm border border-neutral-200 rounded focus:outline-none focus:border-neutral-400"
             />
           </div>
@@ -242,7 +322,7 @@ export default function SiteReportForm() {
       <div className="bg-white rounded-xl border border-neutral-200 p-4 space-y-2">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-neutral-900">금주실적 <span className="text-xs text-neutral-400 font-normal">(5컬럼)</span></h3>
-          <button onClick={addThisRow} className="px-2 py-1 text-xs font-medium text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded">+ 행 추가</button>
+          <button onClick={addThisRow} className="btn-subtle btn-sm">+ 행 추가</button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-xs border border-neutral-200">
@@ -275,7 +355,7 @@ export default function SiteReportForm() {
                   <td className="border border-neutral-200 p-1"><input value={row.due_date} onChange={(e) => updateThisRow(idx, { due_date: e.target.value })} className={inputCls} placeholder="04/30" /></td>
                   <td className="border border-neutral-200 p-1"><input value={row.progress} onChange={(e) => updateThisRow(idx, { progress: e.target.value })} className={inputCls} placeholder="80%" /></td>
                   <td className="border border-neutral-200 p-1 text-center">
-                    <button onClick={() => removeThisRow(idx)} className="text-neutral-400 hover:text-red-500" title="행 삭제" aria-label="행 삭제">×</button>
+                    <button onClick={() => removeThisRow(idx)} className="text-neutral-400 hover:text-danger-500" title="행 삭제" aria-label="행 삭제">×</button>
                   </td>
                 </tr>
               ))}
@@ -288,7 +368,7 @@ export default function SiteReportForm() {
       <div className="bg-white rounded-xl border border-neutral-200 p-4 space-y-2">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-neutral-900">차주계획 <span className="text-xs text-neutral-400 font-normal">(3컬럼)</span></h3>
-          <button onClick={addNextRow} className="px-2 py-1 text-xs font-medium text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded">+ 행 추가</button>
+          <button onClick={addNextRow} className="btn-subtle btn-sm">+ 행 추가</button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-xs border border-neutral-200">
@@ -316,7 +396,7 @@ export default function SiteReportForm() {
                   <td className="border border-neutral-200 p-1"><input value={row.start_date} onChange={(e) => updateNextRow(idx, { start_date: e.target.value })} className={inputCls} placeholder="05/04" /></td>
                   <td className="border border-neutral-200 p-1"><input value={row.due_date} onChange={(e) => updateNextRow(idx, { due_date: e.target.value })} className={inputCls} placeholder="05/08" /></td>
                   <td className="border border-neutral-200 p-1 text-center">
-                    <button onClick={() => removeNextRow(idx)} className="text-neutral-400 hover:text-red-500" title="행 삭제" aria-label="행 삭제">×</button>
+                    <button onClick={() => removeNextRow(idx)} className="text-neutral-400 hover:text-danger-500" title="행 삭제" aria-label="행 삭제">×</button>
                   </td>
                 </tr>
               ))}
@@ -340,8 +420,8 @@ export default function SiteReportForm() {
       <div className="flex flex-wrap items-center justify-end gap-3">
         <button
           onClick={handleSave}
-          disabled={saving || !selected}
-          className="px-4 py-2 text-sm font-medium text-white bg-ink-800 rounded-lg hover:bg-ink-900 disabled:opacity-40 transition-colors"
+          disabled={saving || !selected || reportLoading || loadFailed}
+          className="btn-primary"
         >
           {saving ? '저장 중...' : '저장'}
         </button>

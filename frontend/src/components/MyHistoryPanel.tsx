@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ReportSubmission, SiteReport, Report, SiteProject } from '../types';
 import { getMySubmissions, getMySiteReports, getReport, getReports, getSiteProjects } from '../services/api';
 import Loading from './ui/Loading';
+import { SkeletonList } from './ui/Skeleton';
 
 interface MyHistoryPanelProps {
   teamId: number;
@@ -118,7 +119,7 @@ export default function MyHistoryPanel({ teamId }: MyHistoryPanelProps) {
     }
   };
 
-  if (loading) return <Loading text="내 히스토리 로딩 중..." />;
+  if (loading) return <SkeletonList label="내 히스토리 불러오는 중" />;
 
   const counts = {
     all: clientItems.length,
@@ -152,11 +153,7 @@ export default function MyHistoryPanel({ teamId }: MyHistoryPanelProps) {
             <button
               key={key}
               onClick={() => { setFilter(key); setExpanded(null); }}
-              className={`px-2 py-1 text-[11px] font-medium rounded-md border transition-colors ${
-                filter === key
-                  ? 'bg-ink-800 text-white border-ink-800'
-                  : 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-300'
-              }`}
+              className={`chip ${filter === key ? 'chip-on' : ''}`}
             >
               {label} {counts[key]}
             </button>
@@ -205,7 +202,7 @@ export default function MyHistoryPanel({ teamId }: MyHistoryPanelProps) {
                       )
                     )}
                     {it.kind === 'report' && (
-                      <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-medium shrink-0">
+                      <span className="px-1.5 py-0.5 bg-success-100 text-success-700 rounded text-[10px] font-medium shrink-0">
                         {it.status === 'submitted' ? '제출' : it.status}
                       </span>
                     )}

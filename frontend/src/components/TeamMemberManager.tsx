@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Team, TeamMember, TeamRole, RoleCode, User, TEAM_ROLE_LABELS, ROLE_CODE_LABELS } from '../types';
 import { getTeamMembers, addTeamMember, updateTeamMember, removeTeamMember, getUsers } from '../services/api';
+import { useConfirm } from './ui/ConfirmDialog';
 
 interface TeamMemberManagerProps {
   team: Team;
@@ -10,6 +11,7 @@ const ROLES: TeamRole[] = ['leader', 'group_leader', 'member'];
 const ROLE_CODES: RoleCode[] = ['S', 'D', 'G', 'C', 'B'];
 
 export default function TeamMemberManager({ team }: TeamMemberManagerProps) {
+  const confirm = useConfirm();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +94,7 @@ export default function TeamMemberManager({ team }: TeamMemberManagerProps) {
   };
 
   const handleRemove = async (member: TeamMember) => {
-    if (!confirm(`${member.user_name}님을 팀에서 제거하시겠습니까?`)) return;
+    if (!(await confirm({ title: `${member.user_name}님을 팀에서 제거하시겠습니까?`, confirmLabel: '제거', danger: true }))) return;
     try {
       await removeTeamMember(team.id, member.id);
       await fetchMembers();
@@ -111,7 +113,7 @@ export default function TeamMemberManager({ team }: TeamMemberManagerProps) {
       </div>
 
       {error && (
-        <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{error}
+        <div className="p-2 bg-danger-50 border border-danger-200 rounded-lg text-xs text-danger-700">{error}
           <button onClick={() => setError(null)} className="ml-2 underline">닫기</button>
         </div>
       )}
@@ -143,7 +145,7 @@ export default function TeamMemberManager({ team }: TeamMemberManagerProps) {
           </select>
         </div>
         <button type="submit" disabled={adding}
-          className="px-3 py-1.5 text-xs font-medium text-white bg-ink-800 rounded-lg hover:bg-ink-900 disabled:opacity-40 transition-colors">
+          className="btn-primary btn-sm">
           {adding ? '추가 중...' : '추가'}
         </button>
       </form>
@@ -171,7 +173,7 @@ export default function TeamMemberManager({ team }: TeamMemberManagerProps) {
               {ROLE_CODES.map(rc => <option key={rc} value={rc}>{rc}</option>)}
             </select>
             <button onClick={() => handleRemove(m)}
-              className="[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 p-2 sm:p-1 text-neutral-400 hover:text-red-500 transition-all" title="제거" aria-label="제거">
+              className="[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 p-2 sm:p-1 text-neutral-400 hover:text-danger-500 transition-all" title="제거" aria-label="제거">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>

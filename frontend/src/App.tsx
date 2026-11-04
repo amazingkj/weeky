@@ -1,8 +1,10 @@
-import { useState, useCallback, Suspense, lazy } from 'react';
+import { useState, useCallback, useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import Loading from './components/ui/Loading';
+import { useConfirm } from './components/ui/ConfirmDialog';
+import { clearAllDrafts } from './utils/reportDraft';
 import { getWeekOfMonthLabel, getWeekRangeShort, toLocalYMD } from './utils/date';
 
 const ReportForm = lazy(() => import('./components/ReportForm'));
@@ -78,31 +80,62 @@ function App() {
 
 function AuthenticatedApp() {
   const [activeTab, setActiveTab] = useState<Tab>('report');
+  // 저장 안 된 변경이 있는 작성 폼은 다른 탭으로 가도 언마운트하지 않고 숨겨서 입력을 보존.
+  // 변경이 없으면 기존처럼 언마운트 → 돌아올 때 팀/프로젝트 목록을 새로 불러옴.
+  const [reportDirty, setReportDirty] = useState(false);
+  const [siteDirty, setSiteDirty] = useState(false);
 
   const handleTabChange = useCallback((tab: Tab) => {
     setActiveTab(tab);
   }, []);
 
+  useEffect(() => {
+    if (!reportDirty && !siteDirty) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [reportDirty, siteDirty]);
+
   return (
     <div className="min-h-screen bg-neutral-100">
       <div className="sticky top-0 z-30">
-        <Header />
+        <Header hasUnsavedChanges={reportDirty || siteDirty} />
         <Navigation activeTab={activeTab} onTabChange={handleTabChange} />
       </div>
       {/* 모바일 하단 탭바 높이만큼 pb 확보 */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-28 sm:pb-8">
-        <ErrorBoundary>
-          <Suspense fallback={<LoadingFallback />}>
-            <div role="tabpanel" id={`${activeTab}-panel`} aria-labelledby={`${activeTab}-tab`}>
-              {activeTab === 'report' && <ReportForm onNavigateToConfig={() => setActiveTab('config')} />}
-              {activeTab === 'site' && <SiteReportForm />}
-              {activeTab === 'team' && <TeamPanel />}
-              {activeTab === 'config' && <ConfigWithInvite />}
-            </div>
-          </Suspense>
-        </ErrorBoundary>
+        <Suspense fallback={<LoadingFallback />}>
+          {(activeTab === 'report' || reportDirty) && (
+            <TabPanel id="report" active={activeTab === 'report'}>
+              <ReportForm
+                onNavigateToConfig={() => setActiveTab('config')}
+                onDirtyChange={setReportDirty}
+                active={activeTab === 'report'}
+              />
+            </TabPanel>
+          )}
+          {(activeTab === 'site' || siteDirty) && (
+            <TabPanel id="site" active={activeTab === 'site'}>
+              <SiteReportForm onDirtyChange={setSiteDirty} active={activeTab === 'site'} />
+            </TabPanel>
+          )}
+          {activeTab === 'team' && <TabPanel id="team" active><TeamPanel /></TabPanel>}
+          {activeTab === 'config' && <TabPanel id="config" active><ConfigWithInvite /></TabPanel>}
+        </Suspense>
       </main>
       <MobileTabBar activeTab={activeTab} onTabChange={handleTabChange} />
+    </div>
+  );
+}
+
+function TabPanel({ id, active, children }: { id: Tab; active: boolean; children: React.ReactNode }) {
+  return (
+    <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-tab`} hidden={!active}>
+      {/* 패널별 경계 — 다른 탭에서 에러가 나도 숨김 유지 중인 작성 폼은 언마운트되지 않음 */}
+      <ErrorBoundary>{children}</ErrorBoundary>
     </div>
   );
 }
@@ -126,9 +159,22 @@ function ConfigWithInvite() {
   );
 }
 
-function Header() {
+function Header({ hasUnsavedChanges }: { hasUnsavedChanges: boolean }) {
   const { user, logout } = useAuth();
+  const confirm = useConfirm();
   const today = toLocalYMD();
+
+  const handleLogout = async () => {
+    if (hasUnsavedChanges && !(await confirm({
+      title: '저장하지 않은 내용이 있습니다',
+      message: '로그아웃하면 작성 중인 보고서 내용이 사라집니다.',
+      confirmLabel: '로그아웃',
+      danger: true,
+    }))) return;
+    // 공용 PC에 업무 내용이 남지 않도록 이 사용자의 임시 초안 삭제 (세션 만료 로그아웃은 복원을 위해 남김)
+    if (user) clearAllDrafts(user.id);
+    logout();
+  };
 
   return (
     <header className="border-b border-neutral-200 bg-white/95 backdrop-blur">
@@ -157,7 +203,7 @@ function Header() {
               </span>
             )}
             <button
-              onClick={logout}
+              onClick={handleLogout}
               className="p-2 text-xs text-neutral-400 hover:text-neutral-700 transition-colors"
             >
               로그아웃

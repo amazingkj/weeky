@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { User } from '../types';
 import { adminGetUsers, adminResetPassword, adminSetUserAdmin } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useConfirm } from './ui/ConfirmDialog';
 
 export default function AdminUserManager() {
   const { user: me } = useAuth();
+  const confirm = useConfirm();
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState('');
   const [resetTarget, setResetTarget] = useState<User | null>(null);
@@ -58,7 +60,7 @@ export default function AdminUserManager() {
   const handleToggleAdmin = async (target: User) => {
     const next = !target.is_admin;
     const action = next ? '관리자로 지정' : '관리자 권한 해제';
-    if (!confirm(`${target.name}님을 ${action}하시겠습니까?`)) return;
+    if (!(await confirm({ title: `${target.name}님을 ${action}하시겠습니까?`, confirmLabel: action }))) return;
     setTogglingId(target.id);
     setError('');
     try {
@@ -77,12 +79,12 @@ export default function AdminUserManager() {
       <h3 className="text-sm font-semibold text-neutral-900">사용자 관리</h3>
 
       {error && (
-        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+        <div className="text-sm text-danger-600 bg-danger-50 border border-danger-200 rounded-lg px-3 py-2">
           {error}
         </div>
       )}
       {successMsg && (
-        <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+        <div className="text-sm text-success-700 bg-success-50 border border-success-200 rounded-lg px-3 py-2">
           {successMsg}
         </div>
       )}
@@ -115,17 +117,13 @@ export default function AdminUserManager() {
                   onClick={() => handleToggleAdmin(u)}
                   disabled={togglingId === u.id || u.id === me?.id}
                   title={u.id === me?.id ? '본인의 관리자 권한은 변경할 수 없습니다' : ''}
-                  className={`px-2.5 py-1.5 text-xs border rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                    u.is_admin
-                      ? 'text-red-600 border-red-200 hover:bg-red-50'
-                      : 'text-ink-600 border-ink-100 hover:bg-ink-50'
-                  }`}
+                  className={`btn-sm ${u.is_admin ? 'btn-danger-outline' : 'btn-secondary'}`}
                 >
                   {togglingId === u.id ? '처리 중...' : (u.is_admin ? '관리자 해제' : '관리자 지정')}
                 </button>
                 <button
                   onClick={() => { setResetTarget(u); setNewPassword(''); setError(''); }}
-                  className="px-2.5 py-1.5 text-xs text-neutral-600 hover:text-neutral-900 border border-neutral-300 rounded-lg hover:bg-neutral-50 transition-colors"
+                  className="btn-secondary btn-sm"
                 >
                   비밀번호 초기화
                 </button>
@@ -153,14 +151,14 @@ export default function AdminUserManager() {
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setResetTarget(null)}
-                className="px-3 py-1.5 text-xs text-neutral-600 border border-neutral-300 rounded-lg hover:bg-neutral-50"
+                className="btn-secondary btn-sm"
               >
                 취소
               </button>
               <button
                 onClick={handleReset}
                 disabled={newPassword.length < 6 || isResetting}
-                className="px-3 py-1.5 text-xs text-white bg-ink-700 rounded-lg hover:bg-ink-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary btn-sm"
               >
                 {isResetting ? '처리 중...' : '초기화'}
               </button>

@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { SiteProject, TeamMember } from '../types';
 import { getSiteProjects, createSiteProject, updateSiteProject, deleteSiteProject, getTeamMembers } from '../services/api';
-import Loading from './ui/Loading';
+import { SkeletonList } from './ui/Skeleton';
+import { useConfirm } from './ui/ConfirmDialog';
+import { useToast } from './ui/Toast';
 
 interface Props {
   teamId: number;
@@ -16,6 +18,8 @@ interface ProjectDraft {
 const emptyDraft = (): ProjectDraft => ({ project_name: '', client_name: '', author_ids: [] });
 
 export default function SiteProjectsManager({ teamId }: Props) {
+  const confirm = useConfirm();
+  const toast = useToast();
   const [projects, setProjects] = useState<SiteProject[]>([]);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,7 +50,7 @@ export default function SiteProjectsManager({ teamId }: Props) {
       setDraft(emptyDraft());
       reload();
     } catch (e: any) {
-      alert(e?.message || '생성 실패');
+      toast.error(e?.message || '생성 실패');
     }
   };
 
@@ -62,17 +66,22 @@ export default function SiteProjectsManager({ teamId }: Props) {
       setEditing(null);
       reload();
     } catch (e: any) {
-      alert(e?.message || '수정 실패');
+      toast.error(e?.message || '수정 실패');
     }
   };
 
   const handleDelete = async (pid: number) => {
-    if (!confirm('이 사이트 프로젝트를 삭제하시겠습니까? 관련 보고서도 함께 삭제됩니다.')) return;
+    if (!(await confirm({
+      title: '이 사이트 프로젝트를 삭제하시겠습니까?',
+      message: '관련 보고서도 함께 삭제됩니다.',
+      confirmLabel: '삭제',
+      danger: true,
+    }))) return;
     try {
       await deleteSiteProject(teamId, pid);
       reload();
     } catch (e: any) {
-      alert(e?.message || '삭제 실패');
+      toast.error(e?.message || '삭제 실패');
     }
   };
 
@@ -96,7 +105,7 @@ export default function SiteProjectsManager({ teamId }: Props) {
     });
   };
 
-  if (loading) return <Loading text="사이트 프로젝트 로딩 중..." />;
+  if (loading) return <SkeletonList label="사이트 프로젝트 불러오는 중" />;
 
   return (
     <div className="space-y-5">
@@ -134,7 +143,7 @@ export default function SiteProjectsManager({ teamId }: Props) {
                 <button
                   key={m.user_id}
                   onClick={() => toggleDraftAuthor(m.user_id)}
-                  className={`px-2 py-1 text-xs rounded border ${selected ? 'bg-ink-800 text-white border-ink-800' : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'}`}
+                  className={`chip ${selected ? 'chip-on' : ''}`}
                 >
                   {m.user_name}
                 </button>
@@ -145,7 +154,7 @@ export default function SiteProjectsManager({ teamId }: Props) {
         <button
           onClick={handleCreate}
           disabled={!draft.project_name.trim()}
-          className="px-3 py-1.5 text-xs font-medium text-white bg-ink-800 rounded hover:bg-ink-900 disabled:opacity-40"
+          className="btn-primary btn-sm"
         >
           추가
         </button>
@@ -183,7 +192,7 @@ export default function SiteProjectsManager({ teamId }: Props) {
                           <button
                             key={m.user_id}
                             onClick={() => toggleEditAuthor(m.user_id)}
-                            className={`px-2 py-1 text-xs rounded border ${selected ? 'bg-ink-800 text-white border-ink-800' : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'}`}
+                            className={`chip ${selected ? 'chip-on' : ''}`}
                           >
                             {m.user_name}
                           </button>
@@ -200,7 +209,7 @@ export default function SiteProjectsManager({ teamId }: Props) {
                     활성
                   </label>
                   <div className="flex gap-2">
-                    <button onClick={handleSaveEdit} className="px-3 py-1 text-xs font-medium text-white bg-ink-800 rounded">저장</button>
+                    <button onClick={handleSaveEdit} className="btn-primary btn-sm">저장</button>
                     <button onClick={() => setEditing(null)} className="px-3 py-1 text-xs text-neutral-600 hover:text-neutral-800">취소</button>
                   </div>
                 </div>
@@ -224,7 +233,7 @@ export default function SiteProjectsManager({ teamId }: Props) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
                     </button>
-                    <button onClick={() => handleDelete(p.id)} className="p-2 sm:p-1 text-neutral-400 hover:text-red-500" title="삭제" aria-label="삭제">
+                    <button onClick={() => handleDelete(p.id)} className="p-2 sm:p-1 text-neutral-400 hover:text-danger-500" title="삭제" aria-label="삭제">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>

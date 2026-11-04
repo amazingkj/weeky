@@ -12,6 +12,9 @@ import RulesEditor from './RulesEditor';
 import SiteProjectsManager from './SiteProjectsManager';
 import MemberConsolidatedView from './MemberConsolidatedView';
 import Loading from './ui/Loading';
+import { SkeletonList } from './ui/Skeleton';
+import { useConfirm } from './ui/ConfirmDialog';
+import { useToast } from './ui/Toast';
 import { toLocalYMD } from '../utils/date';
 
 const ROLE_DISPLAY: Record<TeamRole, string> = {
@@ -22,6 +25,8 @@ const ROLE_DISPLAY: Record<TeamRole, string> = {
 
 export default function TeamPanel() {
   const { user } = useAuth();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -87,7 +92,7 @@ export default function TeamPanel() {
       setNewProjectName('');
       setNewProjectClient('');
     } catch (err: any) {
-      alert(err.message || '프로젝트 생성에 실패했습니다.');
+      toast.error(err.message || '프로젝트 생성에 실패했습니다.');
     }
   };
 
@@ -98,17 +103,17 @@ export default function TeamPanel() {
       setTeamProjects(prev => prev.map(x => x.id === p.id ? p : x));
       setEditingProject(null);
     } catch (err: any) {
-      alert(err.message || '프로젝트 수정에 실패했습니다.');
+      toast.error(err.message || '프로젝트 수정에 실패했습니다.');
     }
   };
 
   const handleDeleteProject = async (pid: number) => {
-    if (!selectedTeam || !confirm('이 프로젝트를 삭제하시겠습니까?')) return;
+    if (!selectedTeam || !(await confirm({ title: '이 프로젝트를 삭제하시겠습니까?', confirmLabel: '삭제', danger: true }))) return;
     try {
       await deleteTeamProject(selectedTeam.id, pid);
       setTeamProjects(prev => prev.filter(x => x.id !== pid));
     } catch (err: any) {
-      alert(err.message || '프로젝트 삭제에 실패했습니다.');
+      toast.error(err.message || '프로젝트 삭제에 실패했습니다.');
     }
   };
 
@@ -124,7 +129,7 @@ export default function TeamPanel() {
       await reorderTeamProjects(selectedTeam.id, newList.map(p => p.id));
     } catch (err: any) {
       setTeamProjects(prev);
-      alert(err.message || '순서 변경에 실패했습니다.');
+      toast.error(err.message || '순서 변경에 실패했습니다.');
     }
   };
 
@@ -144,7 +149,7 @@ export default function TeamPanel() {
       setTeams(prev => prev.map(t => t.id === updated.id ? updated : t));
       setEditingTeamName(false);
     } catch (err: any) {
-      alert(err.message || '팀 이름 수정에 실패했습니다.');
+      toast.error(err.message || '팀 이름 수정에 실패했습니다.');
     } finally {
       setTeamNameSaving(false);
     }
@@ -164,7 +169,7 @@ export default function TeamPanel() {
           </svg>
           <p className="text-neutral-500 text-sm mb-4">소속된 팀이 없습니다.</p>
           <button onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 text-sm font-medium text-white bg-ink-800 rounded-lg hover:bg-ink-900 transition-colors">
+            className="btn-primary">
             팀 생성하기
           </button>
         </div>
@@ -181,17 +186,13 @@ export default function TeamPanel() {
           {teams.map(t => (
             <button key={t.id}
               onClick={() => { setSelectedTeam(t); setActiveView('submissions'); }}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                selectedTeam?.id === t.id
-                  ? 'bg-ink-800 text-white border-ink-800'
-                  : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
-              }`}>
+              className={`chip ${selectedTeam?.id === t.id ? 'chip-on' : ''}`}>
               {t.name}
             </button>
           ))}
         </div>
         <button onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors">
+          className="btn-subtle btn-sm gap-1">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
@@ -241,7 +242,7 @@ export default function TeamPanel() {
                   <button
                     onClick={handleTeamNameSave}
                     disabled={!teamNameInput.trim() || teamNameSaving}
-                    className="p-2 sm:p-1 text-green-600 hover:text-green-700 disabled:opacity-40 transition-colors" title="저장" aria-label="저장">
+                    className="p-2 sm:p-1 text-success-600 hover:text-success-700 disabled:opacity-40 transition-colors" title="저장" aria-label="저장">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
@@ -285,16 +286,21 @@ export default function TeamPanel() {
               {(myRole === 'leader' || user?.is_admin) && (
                 <button
                   onClick={async () => {
-                    if (!confirm(`"${selectedTeam.name}" 팀을 삭제하시겠습니까?\n모든 멤버와 제출 데이터가 삭제됩니다.`)) return;
+                    if (!(await confirm({
+                      title: `"${selectedTeam.name}" 팀을 삭제하시겠습니까?`,
+                      message: '모든 멤버와 제출 데이터가 삭제됩니다.',
+                      confirmLabel: '팀 삭제',
+                      danger: true,
+                    }))) return;
                     try {
                       await deleteTeam(selectedTeam.id);
                       setTeams(prev => prev.filter(t => t.id !== selectedTeam.id));
                       setSelectedTeam(teams.length > 1 ? teams.find(t => t.id !== selectedTeam.id) || null : null);
                     } catch (err: any) {
-                      alert(err.message || '팀 삭제에 실패했습니다.');
+                      toast.error(err.message || '팀 삭제에 실패했습니다.');
                     }
                   }}
-                  className="p-2 sm:p-1 text-neutral-400 hover:text-red-500 transition-colors" title="팀 삭제" aria-label="팀 삭제">
+                  className="p-2 sm:p-1 text-neutral-400 hover:text-danger-500 transition-colors" title="팀 삭제" aria-label="팀 삭제">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
@@ -382,7 +388,7 @@ export default function TeamPanel() {
                   <button
                     onClick={handleCreateProject}
                     disabled={!newProjectName.trim()}
-                    className="px-3 py-1.5 text-xs font-medium text-white bg-ink-800 rounded-lg hover:bg-ink-900 disabled:opacity-40 transition-colors"
+                    className="btn-primary btn-sm"
                   >
                     추가
                   </button>
@@ -390,7 +396,7 @@ export default function TeamPanel() {
 
                 {/* Project list */}
                 {projectsLoading ? (
-                  <Loading text="프로젝트 로딩 중..." />
+                  <SkeletonList rows={3} label="프로젝트 불러오는 중" />
                 ) : teamProjects.length === 0 ? (
                   <p className="text-xs text-neutral-400 py-4 text-center">등록된 프로젝트가 없습니다.</p>
                 ) : (
@@ -422,7 +428,7 @@ export default function TeamPanel() {
                             </label>
                             <button
                               onClick={() => handleUpdateProject(editingProject)}
-                              className="p-2 sm:p-1 text-green-600 hover:text-green-700 transition-colors" title="저장" aria-label="저장">
+                              className="p-2 sm:p-1 text-success-600 hover:text-success-700 transition-colors" title="저장" aria-label="저장">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                               </svg>
@@ -472,7 +478,7 @@ export default function TeamPanel() {
                             </button>
                             <button
                               onClick={() => handleDeleteProject(p.id)}
-                              className="p-2 sm:p-1 text-neutral-400 hover:text-red-500 transition-colors" title="삭제" aria-label="삭제">
+                              className="p-2 sm:p-1 text-neutral-400 hover:text-danger-500 transition-colors" title="삭제" aria-label="삭제">
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                               </svg>
@@ -493,14 +499,14 @@ export default function TeamPanel() {
                 {/* My submission status */}
                 <div className="flex items-center gap-3 p-4 rounded-lg border border-neutral-100 bg-neutral-50">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    mySubmissionStatus ? 'bg-green-100' : 'bg-amber-100'
+                    mySubmissionStatus ? 'bg-success-100' : 'bg-warning-100'
                   }`}>
                     {mySubmissionStatus ? (
-                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-5 h-5 text-success-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
                     ) : (
-                      <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-5 h-5 text-warning-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     )}

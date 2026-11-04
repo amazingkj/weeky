@@ -1,13 +1,17 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Report, Task, Team, TeamProject, defaultTemplateStyle } from '../types';
 import { generatePPT } from '../utils/pptGenerator';
 import { getConfig, saveReport, getMyTeams, getReports, getMySubmission, submitReport as apiSubmitReport, unsubmitReport as apiUnsubmitReport, getTeamProjects, autoCreateTeamProject } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { isSameWeek, toLocalYMD } from '../utils/date';
+import { isSameWeek, toLocalYMD, pad2 } from '../utils/date';
 import TaskList from './TaskList';
 import SyncPanel from './SyncPanel';
 import PptPreview from './PptPreview';
 import Alert from './ui/Alert';
+import { useToast } from './ui/Toast';
+import { useConfirm } from './ui/ConfirmDialog';
+import DateCommitInput from './ui/DateCommitInput';
+import { ReportDraft, saveDraft, loadDraft, clearDraft } from '../utils/reportDraft';
 
 const STORAGE_KEYS = {
   authorName: 'jugan_author_name',
@@ -42,10 +46,15 @@ function findPreviousWeekReport(reports: Report[], currentDate: string): Report 
 
 interface ReportFormProps {
   onNavigateToConfig?: () => void;
+  // 저장 안 된 변경 여부 — App이 탭 전환 시 폼을 유지할지 판단
+  onDirtyChange?: (dirty: boolean) => void;
+  // 현재 보이는 탭인지 (숨김 유지 중이면 false)
+  active?: boolean;
 }
 
-export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
+export default function ReportForm({ onNavigateToConfig, onDirtyChange, active = true }: ReportFormProps) {
   const { user } = useAuth();
+  const toast = useToast();
   const [report, setReport] = useState<Report>(() => ({
     team_name: '',
     author_name: getCachedValue(STORAGE_KEYS.authorName) || user?.name || '',
@@ -75,15 +84,99 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
   const [carriedForward, setCarriedForward] = useState(false);
   const [teamProjects, setTeamProjects] = useState<TeamProject[]>([]);
   const successTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const formRef = useRef<HTMLFormElement>(null);
+  // 제출 시 완료예정일 누락 강조 — 모두 채우면 자동 해제
+  const [showMissingDue, setShowMissingDue] = useState(false);
 
-  // Load teams, config, existing reports on mount
+  // 저장 안 된 변경 감지: 서버에서 불러오거나 저장한 내용(기준선)과 현재 report를 비교.
+  // 기준선은 report를 교체하는 곳에서 교체한 값으로 직접 설정한다.
+  // 첫 로드 전에는 마운트 시점 빈 양식이 기준 — 로드 전에 입력하고 탭을 옮겨도 유지됨
+  // (단, 오늘 보고서가 서버에 이미 있으면 로드되면서 그 보고서로 교체된다)
+  const reportKey = useMemo(() => JSON.stringify(report), [report]);
+  const [baseline, setBaseline] = useState(reportKey);
+  const isDirty = reportKey !== baseline;
+  // 비동기 콜백에서 최신 report를 읽기 위한 참조 / 마운트 시점의 빈 양식
+  const reportRef = useRef(report);
+  reportRef.current = report;
+  const initialReportRef = useRef(report);
+  const confirm = useConfirm();
   useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
+
+  // 저장 안 된 내용을 이 브라우저에 초안으로 보관 — 꺼지거나 새로고침돼도 다음에 복원 제안
+  const userId = user?.id;
+  // serverChanged: 초안을 쓰기 시작한 뒤 다른 곳(다른 PC 등)에서 저장돼 서버 내용이 바뀜 → 복원하면 덮어씀
+  const [draftOffer, setDraftOffer] = useState<{ draft: ReportDraft; serverChanged: boolean } | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  // 첫 로드 전 기준선은 임시값이라, 그때 초안을 남기면 다음에 '서버가 바뀌었다'고 잘못 판단함
+  const [initialLoaded, setInitialLoaded] = useState(false);
+  const canDraft = !!userId && initialLoaded;
+  useEffect(() => {
+    if (!canDraft || !isDirty) return;
+    const timer = setTimeout(() => saveDraft(userId!, report, baseline), 1000);
+    return () => clearTimeout(timer);
+  }, [canDraft, userId, isDirty, report, baseline]);
+  // 1초를 기다리지 못하고 사라지는 경우(로그아웃·세션 만료로 언마운트, 탭 닫기)엔 즉시 보관
+  const draftFlushRef = useRef(() => {});
+  draftFlushRef.current = () => { if (canDraft && isDirty) saveDraft(userId!, report, baseline); };
+  useEffect(() => {
+    const flush = () => draftFlushRef.current();
+    window.addEventListener('pagehide', flush);
+    return () => { window.removeEventListener('pagehide', flush); flush(); };
+  }, []);
+  // 편집했다가 저장된 내용과 같아지도록 되돌리면 중간 초안은 정리 (날짜 전환으로 깨끗해진 경우는 제외 — 복원 제안 중일 수 있음)
+  const prevDirtyRef = useRef({ dirty: isDirty, date: report.report_date });
+  useEffect(() => {
+    const prev = prevDirtyRef.current;
+    if (canDraft && prev.dirty && !isDirty && prev.date === report.report_date) clearDraft(userId!, report.report_date);
+    prevDirtyRef.current = { dirty: isDirty, date: report.report_date };
+  }, [canDraft, userId, isDirty, report.report_date]);
+  // 서버에서 불러온 내용과 다른 초안이 있으면 복원 제안, 같으면(이미 저장됨) 정리
+  const offerDraft = useCallback((reportDate: string, loadedKey: string) => {
+    if (!userId) return;
+    const draft = loadDraft(userId, reportDate);
+    if (draft && JSON.stringify(draft.report) !== loadedKey) {
+      setDraftOffer({ draft, serverChanged: draft.baseKey !== undefined && draft.baseKey !== loadedKey });
+    } else {
+      setDraftOffer(null);
+      if (draft) clearDraft(userId, reportDate);
+    }
+  }, [userId]);
+
+  // 누락 항목을 모두 채우면 강조 해제 → 이후 새로 추가하는 빈 항목은 바로 빨갛게 표시하지 않음
+  const hasMissingDue = [...report.this_week, ...report.next_week].some(t => !t.due_date?.trim());
+  useEffect(() => {
+    if (!hasMissingDue) setShowMissingDue(false);
+  }, [hasMissingDue]);
+
+  const loadConfig = useCallback(() => {
     getConfig().then((config) => {
       const hasAny = ['gitlab_token', 'jira_token', 'hiworks_password'].some(
         (key) => config[key] === '***configured***'
       );
       setHasConfiguredServices(hasAny);
     }).catch(() => {});
+  }, []);
+
+  // 변경이 있어 숨김 상태로 유지되다 다시 보이면, 그사이 다른 탭에서 바뀌었을 수 있는 설정·팀 목록을 새로 불러옴
+  const wasActiveRef = useRef(active);
+  useEffect(() => {
+    if (active && !wasActiveRef.current) {
+      loadConfig();
+      getMyTeams().then((teams) => {
+        setMyTeams(teams);
+        // 선택했던 팀이 삭제됐거나 탈퇴했으면 선택 해제 → 다시 고르기 전까지 제출 버튼 숨김
+        setSelectedTeamId(id => (id !== null && !teams.some(t => t.id === id) ? null : id));
+      }).catch(() => {});
+    }
+    wasActiveRef.current = active;
+  }, [active, loadConfig]);
+
+  // Load teams, config, existing reports on mount
+  useEffect(() => {
+    loadConfig();
 
     // Load teams and reports together to avoid race conditions
     Promise.all([
@@ -91,9 +184,12 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
       getReports().catch(() => null),
     ]).then(([teams, reports]) => {
       setMyTeams(teams);
+      setInitialLoaded(true);
       if (reports === null) {
         setReportsLoadFailed(true);
         setError('기존 보고서를 불러오지 못했습니다. 덮어쓰기 방지를 위해 저장이 비활성화됩니다. 새로고침 후 다시 시도해주세요.');
+        setBaseline(JSON.stringify(initialReportRef.current));
+        offerDraft(initialReportRef.current.report_date, JSON.stringify(initialReportRef.current));
         return;
       }
       setExistingReports(reports);
@@ -103,6 +199,8 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
 
       if (existing) {
         setReport(existing);
+        setBaseline(JSON.stringify(existing));
+        offerDraft(today, JSON.stringify(existing));
         // Match team_name to a team
         const matched = teams.find(t => t.name === existing.team_name);
         if (matched) {
@@ -111,24 +209,29 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
           setSelectedTeamId(teams[0].id);
         }
       } else {
-        // 이번 주 보고서 없음 → 이전 주 차주계획 자동 채움
+        // 이번 주 보고서 없음 → 이전 주 차주계획 자동 채움 + 팀명 자동 선택
         const prevReport = findPreviousWeekReport(reports, today);
-        if (prevReport && prevReport.next_week.length > 0) {
-          const carried = prevReport.next_week.map(t => ({ ...t, _carriedForward: true }));
-          setReport(prev => ({ ...prev, this_week: carried }));
-          setCarriedForward(true);
-        }
-        if (teams.length === 1) {
-          setSelectedTeamId(teams[0].id);
-          setReport(prev => ({ ...prev, team_name: teams[0].name }));
-        } else if (teams.length > 1) {
-          // Auto-select first team
-          setSelectedTeamId(teams[0].id);
-          setReport(prev => prev.team_name ? prev : { ...prev, team_name: teams[0].name });
-        }
+        const carried = prevReport && prevReport.next_week.length > 0
+          ? prevReport.next_week.map(t => ({ ...t, _carriedForward: true }))
+          : null;
+        const applyDefaults = (r: Report): Report => {
+          let next = carried ? { ...r, this_week: carried } : r;
+          if (teams.length === 1) next = { ...next, team_name: teams[0].name };
+          else if (teams.length > 1 && !next.team_name) next = { ...next, team_name: teams[0].name };
+          return next;
+        };
+        setReport(prev => applyDefaults(prev));
+        // 기준선은 마운트 시점 빈 양식 기준 — 이월분은 손대기 전까지 변경이 아니고,
+        // 로드 전에 입력한 이름·이슈 등은 변경으로 남는다 (금주실적은 이월분으로 대체됨,
+        // 오늘 보고서가 이미 있으면 위에서 그 보고서로 통째 교체됨)
+        const loadedKey = JSON.stringify(applyDefaults(initialReportRef.current));
+        setBaseline(loadedKey);
+        offerDraft(today, loadedKey);
+        if (carried) setCarriedForward(true);
+        if (teams.length > 0) setSelectedTeamId(teams[0].id);
       }
     });
-  }, []);
+  }, [loadConfig, offerDraft]);
 
   // Fetch team projects when team changes
   useEffect(() => {
@@ -164,45 +267,62 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
     successTimerRef.current = setTimeout(() => setSuccess(null), 3000);
   }, []);
 
+  // 저장 응답 반영 — 저장 요청 이후 더 입력했다면 그 내용은 남기고 id만 반영(변경 있음으로 유지)
+  const applySaved = useCallback((saved: Report, sentKey: string) => {
+    // 응답을 기다리는 동안 다른 날짜로 바꿨으면 지금 화면(다른 보고서)은 건드리지 않음
+    if (reportRef.current.report_date === saved.report_date) {
+      setReport(prev => (JSON.stringify(prev) === sentKey ? saved : { ...prev, id: saved.id }));
+      setBaseline(JSON.stringify(saved));
+    }
+    setLastSavedAt(new Date());
+    // 서버에 저장됐으니 초안은 정리 (저장 중 더 입력했다면 자동 저장이 다시 남김)
+    if (userId) clearDraft(userId, saved.report_date);
+    setDraftOffer(null);
+  }, [userId]);
+
   const updateField = useCallback(<K extends keyof Report>(field: K, value: Report[K]) => {
-    setReport((prev) => {
-      const next = { ...prev, [field]: value };
-      // When date changes, load existing report for that date
-      if (field === 'report_date' && typeof value === 'string') {
-        const existing = existingReports.find(r => r.report_date === value);
-        if (existing) {
-          setCarriedForward(false);
-          return existing;
+    // When date changes, load existing report for that date — 교체된 내용이 새 기준선
+    if (field === 'report_date' && typeof value === 'string') {
+      const existing = existingReports.find(r => r.report_date === value);
+      let next: Report;
+      if (existing) {
+        next = existing;
+        setCarriedForward(false);
+      } else {
+        // Reset to blank for new date but keep team_name and author_name
+        next = {
+          ...reportRef.current,
+          report_date: value,
+          id: undefined,
+          this_week: [] as Task[],
+          next_week: [],
+          issues: '',
+          notes: '',
+          next_issues: '',
+          next_notes: '',
+        };
+        // 이전 주 차주계획 자동 채움
+        const prevReport = findPreviousWeekReport(existingReports, value);
+        if (prevReport && prevReport.next_week.length > 0) {
+          next.this_week = prevReport.next_week.map(t => ({ ...t, _carriedForward: true }));
+          setCarriedForward(true);
         } else {
-          // Reset to blank for new date but keep team_name and author_name
-          const blank = {
-            ...next,
-            id: undefined,
-            this_week: [] as Task[],
-            next_week: [],
-            issues: '',
-            notes: '',
-            next_issues: '',
-            next_notes: '',
-          };
-          // 이전 주 차주계획 자동 채움
-          const prevReport = findPreviousWeekReport(existingReports, value);
-          if (prevReport && prevReport.next_week.length > 0) {
-            blank.this_week = prevReport.next_week.map(t => ({ ...t, _carriedForward: true }));
-            setCarriedForward(true);
-          } else {
-            setCarriedForward(false);
-          }
-          return blank;
+          setCarriedForward(false);
         }
       }
-      return next;
-    });
+      setReport(next);
+      setBaseline(JSON.stringify(next));
+      setShowMissingDue(false);
+      offerDraft(value, JSON.stringify(next));
+      return;
+    }
+
+    setReport((prev) => ({ ...prev, [field]: value }));
 
     if (field === 'author_name' && typeof value === 'string') {
       setCachedValue(STORAGE_KEYS.authorName, value);
     }
-  }, [existingReports]);
+  }, [existingReports, offerDraft]);
 
   const handleAutoCreateProject = useCallback(async (name: string) => {
     if (!selectedTeamId || !name.trim()) return;
@@ -271,7 +391,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
         next_week: report.next_week.map(({ _carriedForward, ...t }) => t),
       };
       const saved = await saveReport(cleanReport);
-      setReport(saved);
+      applySaved(saved, reportKey);
       setCarriedForward(false);
       // Update existing reports cache
       setExistingReports(prev => {
@@ -289,7 +409,37 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
     } finally {
       setIsSaving(false);
     }
-  }, [report, validateReport, showSuccess]);
+  }, [report, reportKey, validateReport, showSuccess, applySaved]);
+
+  // Ctrl/Cmd+S → 보고서 저장 (브라우저의 페이지 저장 대신). 숨겨진 탭에서는 동작하지 않음
+  // handleSave는 입력마다 바뀌므로 ref로 읽어 리스너는 보이는 동안 한 번만 등록
+  const saveShortcutRef = useRef(() => {});
+  saveShortcutRef.current = () => { if (!isSaving && !isSubmitting && !reportsLoadFailed) handleSave(); };
+  useEffect(() => {
+    if (!active) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || (e.code !== 'KeyS' && e.key.toLowerCase() !== 's')) return;
+      e.preventDefault();
+      saveShortcutRef.current();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [active]);
+
+  const restoreDraft = () => {
+    if (!draftOffer) return;
+    setReport(draftOffer.draft.report);
+    setCarriedForward(draftOffer.draft.report.this_week.some(t => t._carriedForward));
+    setDraftOffer(null);
+  };
+
+  const discardDraft = () => {
+    if (!draftOffer) return;
+    const { report: offered, savedAt } = draftOffer.draft;
+    // 배너를 둔 채 입력했다면 같은 자리에 새 초안이 저장돼 있으므로 그건 지우지 않음
+    if (userId && loadDraft(userId, offered.report_date)?.savedAt === savedAt) clearDraft(userId, offered.report_date);
+    setDraftOffer(null);
+  };
 
   const handleSubmitToTeam = useCallback(async () => {
     const validationError = validateReport();
@@ -303,7 +453,14 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
       ...report.next_week.filter(t => !t.due_date?.trim()),
     ];
     if (missingDue.length > 0) {
-      alert('완료예정일이 비어있는 항목이 있습니다.\n모두 작성한 후 제출해주세요.');
+      // 비어 있는 항목을 강조하고 첫 항목으로 이동
+      setShowMissingDue(true);
+      toast.error(`완료예정일이 비어 있는 항목이 ${missingDue.length}건 있습니다. 표시된 항목을 채운 뒤 제출해주세요.`);
+      requestAnimationFrame(() => {
+        const first = formRef.current?.querySelector<HTMLInputElement>('[data-missing-due="true"]');
+        first?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        first?.focus({ preventScroll: true });
+      });
       return;
     }
     if (!selectedTeamId) {
@@ -321,7 +478,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
         next_week: report.next_week.map(({ _carriedForward, ...t }) => t),
       };
       const saved = await saveReport(cleanReport);
-      setReport(saved);
+      applySaved(saved, reportKey);
       // Update existing reports cache
       setExistingReports(prev => {
         const idx = prev.findIndex(r => r.id === saved.id);
@@ -333,14 +490,17 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
         return [...prev, saved];
       });
       await apiSubmitReport(selectedTeamId, saved.id!);
-      setSubmittedTeams(prev => new Map(prev).set(selectedTeamId, saved.id!));
+      // 제출 중 다른 날짜로 바꿨으면 그 날짜의 제출 상태는 조회 effect가 따로 채움
+      if (reportRef.current.report_date === saved.report_date) {
+        setSubmittedTeams(prev => new Map(prev).set(selectedTeamId, saved.id!));
+      }
       showSuccess('보고서가 제출되었습니다!');
     } catch (err: any) {
       setError(err.message || '제출에 실패했습니다.');
     } finally {
       setIsSubmitting(false);
     }
-  }, [report, selectedTeamId, validateReport, showSuccess]);
+  }, [report, reportKey, selectedTeamId, validateReport, showSuccess, applySaved, toast]);
 
   const handleUnsubmit = useCallback(async () => {
     if (!selectedTeamId) return;
@@ -374,6 +534,22 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
         <Alert type="success" onClose={() => setSuccess(null)}>{success}</Alert>
       )}
 
+      {/* 저장 안 된 초안 복원 제안 */}
+      {draftOffer && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-2 bg-warning-50 border border-warning-200 rounded-xl px-4 py-3">
+          <span className="text-sm text-warning-800">
+            저장하지 않은 초안이 있습니다 <span className="text-warning-600">({formatDraftTime(draftOffer.draft.savedAt)} 자동 보관)</span>
+            {draftOffer.serverChanged && (
+              <span className="block text-xs text-warning-700 mt-0.5">그 뒤 다른 곳에서 이 보고서가 저장됐습니다. 복원 후 저장하면 그 내용을 덮어씁니다.</span>
+            )}
+          </span>
+          <div className="flex gap-2">
+            <button type="button" onClick={discardDraft} className="btn-secondary btn-sm">버리기</button>
+            <button type="button" onClick={restoreDraft} className="btn-primary btn-sm">복원</button>
+          </div>
+        </div>
+      )}
+
       {/* Setup Guide Banner */}
       {hasConfiguredServices === false && (
         <div className="flex flex-wrap items-center justify-between gap-2 bg-ink-50 border border-ink-100 rounded-xl px-4 py-3">
@@ -386,7 +562,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
           {onNavigateToConfig && (
             <button
               onClick={onNavigateToConfig}
-              className="shrink-0 px-3 py-1.5 bg-ink-700 text-white text-xs font-medium rounded-lg hover:bg-ink-800 transition-colors"
+              className="shrink-0 btn-primary btn-sm"
             >
               설정으로 이동
             </button>
@@ -398,18 +574,14 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3 text-xs text-neutral-500">
           <span className="font-medium text-neutral-700">금주 업무 <span className="text-neutral-900 font-semibold">{report.this_week.length}</span></span>
-          <span>완료 <span className="text-green-600 font-semibold">{report.this_week.filter(t => t.progress === 100).length}</span></span>
+          <span>완료 <span className="text-success-600 font-semibold">{report.this_week.filter(t => t.progress === 100).length}</span></span>
           <span>진행중 <span className="text-ink-600 font-semibold">{report.this_week.filter(t => t.progress > 0 && t.progress < 100).length}</span></span>
           <span className="font-medium text-neutral-700">차주 계획 <span className="text-neutral-900 font-semibold">{report.next_week.length}</span></span>
         </div>
         <button
           type="button"
           onClick={() => setShowAIPanel((p) => !p)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
-            showAIPanel
-              ? 'bg-ink-800 text-white border-ink-800'
-              : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
-          }`}
+          className={`${showAIPanel ? 'btn-primary' : 'btn-secondary'} btn-sm text-sm`}
         >
           {aiIcon}
           AI 자동 생성
@@ -433,7 +605,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
       )}
 
       {/* Form */}
-      <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
+      <form ref={formRef} className="space-y-5" onSubmit={(e) => e.preventDefault()}>
         {/* Meta Info */}
         <section className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm">
           <SectionHeader title="기본 정보" />
@@ -487,10 +659,21 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
             </div>
             <div>
               <label className="block text-xs font-medium text-neutral-500 mb-1.5">보고일자</label>
-              <input
-                type="date"
+              <DateCommitInput
                 value={report.report_date}
-                onChange={(e) => updateField('report_date', e.target.value)}
+                onCommit={async (value) => {
+                  // 다른 날짜 보고서로 교체되므로 작성 중인 내용이 있으면 확인
+                  if (isDirty && !(await confirm({
+                    title: '저장하지 않은 내용이 있습니다',
+                    message: '보고일자를 바꾸면 작성 중인 내용이 사라집니다.',
+                    confirmLabel: '바꾸기',
+                    danger: true,
+                  }))) return false;
+                  // 버리기로 한 내용이므로 이전 날짜의 임시 초안도 정리
+                  if (isDirty && userId) clearDraft(userId, report.report_date);
+                  updateField('report_date', value);
+                  return true;
+                }}
                 className="input"
               />
             </div>
@@ -529,6 +712,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
                 tasks={report.this_week}
                 onChange={(tasks) => updateField('this_week', tasks)}
                 showProgress={true}
+                highlightMissingDue={showMissingDue}
                 emptyIcon={emptyTaskIcon}
                 projectSuggestions={teamProjects}
                 onAutoCreateProject={handleAutoCreateProject}
@@ -579,6 +763,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
                 tasks={report.next_week}
                 onChange={(tasks) => updateField('next_week', tasks)}
                 showProgress={false}
+                highlightMissingDue={showMissingDue}
                 emptyIcon={emptyPlanIcon}
                 projectSuggestions={teamProjects}
                 onAutoCreateProject={handleAutoCreateProject}
@@ -587,16 +772,19 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
           </div>
         </div>
 
-        {/* Action Buttons — 모바일에서 줄바꿈 허용 */}
-        <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3 pt-2">
+        {/* Action Buttons — 긴 목록에서도 보이도록 하단 고정. 모바일은 하단 탭바(53px) 위에 붙임 */}
+        <div className="sticky bottom-[calc(53px_+_env(safe-area-inset-bottom))] sm:bottom-4 z-20
+                        flex flex-wrap items-center justify-end gap-2 sm:gap-3 px-3 py-2.5 sm:px-4
+                        bg-white/95 backdrop-blur border border-neutral-200 rounded-xl shadow-sm">
+          <SaveStatus dirty={isDirty} lastSavedAt={lastSavedAt} />
           {/* Save */}
           <button
             type="button"
             onClick={handleSave}
+            title="저장 (Ctrl+S)"
+            aria-keyshortcuts="Control+S Meta+S"
             disabled={isSaving || reportsLoadFailed}
-            className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-2
-                       bg-white text-neutral-700 border-neutral-200 hover:border-neutral-400
-                       disabled:opacity-40 disabled:cursor-not-allowed"
+            className="btn-secondary px-2.5 sm:px-4 gap-1.5 sm:gap-2"
           >
             {isSaving ? <>{spinnerIcon} 저장 중...</> : <>{saveIcon} 저장</>}
           </button>
@@ -610,9 +798,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
                   type="button"
                   onClick={handleUnsubmit}
                   disabled={isSubmitting}
-                  className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-1.5
-                             text-red-500 border-red-200 hover:bg-red-50
-                             disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="btn-danger-outline px-2.5 sm:px-4"
                 >
                   {isSubmitting ? <>{spinnerIcon} 취소 중...</> : '제출 취소'}
                 </button>
@@ -622,9 +808,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
                 type="button"
                 onClick={handleSubmitToTeam}
                 disabled={isSubmitting || reportsLoadFailed}
-                className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-2
-                           bg-ink-800 text-white border-ink-800 hover:bg-ink-900
-                           disabled:opacity-40 disabled:cursor-not-allowed"
+                className="btn-primary px-2.5 sm:px-4 gap-1.5 sm:gap-2"
               >
                 {isSubmitting ? <>{spinnerIcon} 제출 중...</> : <>{submitIcon} 제출</>}
               </button>
@@ -635,11 +819,7 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
           <button
             type="button"
             onClick={() => setShowPreview((p) => !p)}
-            className={`px-4 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-2 ${
-              showPreview
-                ? 'bg-neutral-900 text-white border-neutral-900'
-                : 'bg-white text-neutral-700 border-neutral-200 hover:border-neutral-400'
-            }`}
+            className={`${showPreview ? 'btn-primary' : 'btn-secondary'} px-2.5 sm:px-4 gap-1.5 sm:gap-2`}
           >
             {previewIcon}
             미리보기
@@ -650,11 +830,9 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
             type="button"
             onClick={handleDownload}
             disabled={isGenerating}
-            className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-2
-                       bg-white text-neutral-700 border-neutral-200 hover:border-neutral-400
-                       disabled:opacity-40 disabled:cursor-not-allowed"
+            className="btn-secondary px-2.5 sm:px-4 gap-1.5 sm:gap-2"
           >
-            {isGenerating ? <>{spinnerIcon} 생성 중...</> : <>{downloadIcon} PPT 다운로드</>}
+            {isGenerating ? <>{spinnerIcon} 생성 중...</> : <>{downloadIcon}<span>PPT<span className="sr-only sm:not-sr-only"> 다운로드</span></span></>}
           </button>
         </div>
       </form>
@@ -679,6 +857,42 @@ export default function ReportForm({ onNavigateToConfig }: ReportFormProps) {
 }
 
 // Sub-components
+
+function formatDraftTime(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+// 액션바 왼쪽 저장 상태 — 모바일은 버튼 공간이 빠듯해 숨김
+function SaveStatus({ dirty, lastSavedAt }: { dirty: boolean; lastSavedAt: Date | null }) {
+  // 'N분 전'이 갱신되도록 30초마다 다시 그림
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!lastSavedAt) return;
+    const timer = setInterval(() => setTick(t => t + 1), 30_000);
+    return () => clearInterval(timer);
+  }, [lastSavedAt]);
+
+  let text: string | null = null;
+  if (dirty) text = '저장 안 됨';
+  else if (lastSavedAt) {
+    const minutes = Math.floor((Date.now() - lastSavedAt.getTime()) / 60_000);
+    if (minutes < 1) text = '방금 저장됨';
+    else if (minutes < 60) text = `${minutes}분 전 저장됨`;
+    else text = `${pad2(lastSavedAt.getHours())}:${pad2(lastSavedAt.getMinutes())} 저장됨`;
+  }
+
+  return (
+    <span role="status" className="mr-auto hidden sm:flex items-center gap-1.5 text-xs text-neutral-500">
+      {text && (
+        <>
+          <span className={`w-1.5 h-1.5 rounded-full ${dirty ? 'bg-warning-500' : 'bg-success-500'}`} aria-hidden="true" />
+          {text}
+        </>
+      )}
+    </span>
+  );
+}
 
 function SectionHeader({ title, optional }: { title: string; optional?: boolean }) {
   return (
